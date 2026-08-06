@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="varve: a sediment core of session layers, read in sequence.">
+  <g stroke="#4a6741" fill="none" stroke-linecap="round">
+    <rect x="20" y="8" width="26" height="48" rx="3" stroke-width="2"/>
+    <line x1="20" y1="18" x2="46" y2="18" stroke-width="1.6"/>
+    <line x1="20" y1="27" x2="46" y2="27" stroke-width="1.6"/>
+    <line x1="20" y1="33" x2="46" y2="33" stroke-width="1.6"/>
+    <line x1="20" y1="44" x2="46" y2="44" stroke-width="1.6"/>
+    <line x1="12" y1="18" x2="16" y2="18" stroke-width="1.6"/>
+    <line x1="12" y1="33" x2="16" y2="33" stroke-width="1.6"/>
+    <line x1="12" y1="44" x2="16" y2="44" stroke-width="1.6"/>
+  </g>
+  <rect x="21" y="21" width="24" height="3.5" fill="#4a6741"/>
+  <rect x="21" y="47" width="24" height="3.5" fill="#4a6741"/>
+</svg>

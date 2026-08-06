@@ -1,0 +1,6 @@
+# varve project toolchain. Pins match the author's machine baseline; this
+# file makes the repo self-sufficient.
+
+[tools]
+duckdb = "1.5.5"
+just = "1.57.0"

@@ -1,0 +1,4 @@
+{"type":"session","version":3,"id":"pi-session-1","timestamp":"2026-08-01T00:00:00.000Z","cwd":"/home/runner/gitlab.com/testns/testrepo"}
+{"type":"user","id":"e1","parentId":null,"timestamp":"2026-08-01T00:00:00.500Z","message":{"role":"user","content":"please write a hello function"}}
+{"type":"assistant","id":"e2","parentId":"e1","timestamp":"2026-08-01T00:00:01.000Z","message":{"role":"assistant","model":"claude-sonnet-5","provider":"anthropic","content":"Sure thing.","usage":{"input":100,"output":50,"cacheRead":0,"cacheWrite":0,"totalTokens":150},"cost":{"input":0.0002,"output":0.0005,"cacheRead":0,"cacheWrite":0,"total":0.0007},"stopReason":"end_turn"}}
+{"type":"toolResult","id":"e3","parentId":"e2","timestamp":"2026-08-01T00:00:01.500Z","message":{"role":"toolResult","toolCallId":"call-1","toolName":"bash","isError":false,"content":"ok"}}

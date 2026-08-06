@@ -1,0 +1,10 @@
+# Agent worktrees are scratch checkouts, never committed.
+.claude/worktrees/
+
+# Lake data never lives in git (see README). Belt and suspenders:
+lake/
+*.duckdb
+*.duckdb.wal
+*.parquet
+
+.DS_Store

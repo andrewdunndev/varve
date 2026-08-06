@@ -1,0 +1,20 @@
+# Per-token USD prices for cost computation (ADR-0006 denominator).
+# Source: LiteLLM model_prices_and_context_window.json (the same table ccusage
+# prices from). Fetched 2026-07-06. costUSD is absent from every record in the
+# current corpus, so cost is always computed from tokens x these rates.
+# Pricing metadata only -- no transcript data leaves the machine to obtain it.
+# Refresh: re-fetch from
+# https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json
+# opus-4-6 / opus-4-5 added W2 (2026-07-06): Anthropic Opus versions that appear
+# only via the opencode corpus (not in ~/.claude), priced at the Opus-tier rate
+# (identical to 4-7/4-8). This lets opencode's cost:0 defense recompute the true-
+# zero anthropic rows; GitLab-Duo subscription models stay unpriced ($0) by design.
+model,input_cost,output_cost,cache_read_cost,cache_creation_cost,source,fetched
+claude-opus-4-8,0.000005,0.000025,0.0000005,0.00000625,litellm,2026-07-06
+claude-opus-4-7,0.000005,0.000025,0.0000005,0.00000625,litellm,2026-07-06
+claude-opus-4-6,0.000005,0.000025,0.0000005,0.00000625,litellm,2026-07-06
+claude-opus-4-5,0.000005,0.000025,0.0000005,0.00000625,litellm,2026-07-06
+claude-sonnet-5,0.000002,0.00001,0.0000002,0.0000025,litellm,2026-07-06
+claude-sonnet-4-6,0.000003,0.000015,0.0000003,0.00000375,litellm,2026-07-06
+claude-haiku-4-5-20251001,0.000001,0.000005,0.0000001,0.00000125,litellm,2026-07-06
+claude-fable-5,0.00001,0.00005,0.000001,0.0000125,litellm,2026-07-06
