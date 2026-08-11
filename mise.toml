@@ -3,4 +3,4 @@
 
 [tools]
 duckdb = "1.5.5"
-just = "1.57.0"
+just = "1.58.0"
