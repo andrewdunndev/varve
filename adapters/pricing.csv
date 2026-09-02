@@ -9,6 +9,7 @@
 # only via the opencode corpus (not in ~/.claude), priced at the Opus-tier rate
 # (identical to 4-7/4-8). This lets opencode's cost:0 defense recompute the true-
 # zero anthropic rows; GitLab-Duo subscription models stay unpriced ($0) by design.
+# fable-5-1 added 2026-09-02: Anthropic release, pricing identical to fable-5.
 model,input_cost,output_cost,cache_read_cost,cache_creation_cost,source,fetched
 claude-opus-4-8,0.000005,0.000025,0.0000005,0.00000625,litellm,2026-07-06
 claude-opus-4-7,0.000005,0.000025,0.0000005,0.00000625,litellm,2026-07-06
@@ -18,3 +19,4 @@ claude-sonnet-5,0.000002,0.00001,0.0000002,0.0000025,litellm,2026-07-06
 claude-sonnet-4-6,0.000003,0.000015,0.0000003,0.00000375,litellm,2026-07-06
 claude-haiku-4-5-20251001,0.000001,0.000005,0.0000001,0.00000125,litellm,2026-07-06
 claude-fable-5,0.00001,0.00005,0.000001,0.0000125,litellm,2026-07-06
+claude-fable-5-1,0.00001,0.00005,0.000001,0.0000125,litellm,2026-09-02
