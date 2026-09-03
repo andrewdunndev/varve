@@ -1,11 +1,10 @@
 # Declared exceptions to estate standards, read by the estate's
 # conformance checks: a matching FAIL reports as WAIVED, never a
-# silent PASS. Entries need a reason, an owner, and an unexpired date.
+# silent PASS. Entries need a reason and an owner.
 - standard: repository
   assertion: "gitlab:only_allow_merge_if_pipeline_succeeds"
   reason: >-
     Covered by the dunn.dev group-level cascade (group 13121531 sets
     only_allow_merge_if_pipeline_succeeds=true), which outranks the
     project flag; flipping the project copy would be redundant state.
-  expires: "2026-11-01"
   owner: andrew@dunn.dev
