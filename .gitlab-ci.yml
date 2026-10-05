@@ -44,7 +44,7 @@ workflow:
 # "<script>"` invocation works (same shape as dunn.dev/cv's typst-job).
 .mise-job: &mise-job
   image:
-    name: jdxcode/mise:debian@sha256:3daa20e31600afa0b4182736b1d46ba87d47dccb41db55880e657d4290f47574
+    name: jdxcode/mise:debian@sha256:f349d8fe8c0da612d9d0132f83c1d779a72a49ee110248091cbbbd5caea2f0dd
     entrypoint: [""]
   before_script:
     - mise install
