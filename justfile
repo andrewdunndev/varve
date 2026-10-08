@@ -11,6 +11,8 @@ data_home := env_var_or_default("VARVE_DATA", env_var("HOME") + "/.local/share/v
 repo      := justfile_directory()
 lake      := data_home + "/lake"
 state     := data_home + "/state"
+# mine runs in-memory, where DuckDB otherwise claims 80% of RAM.
+mine_memory_limit := env_var_or_default("VARVE_MINE_MEMORY_LIMIT", "4GB")
 manifest  := state + "/manifest.parquet"
 db        := data_home + "/varve.duckdb"
 # W7 adjudication ledger: OPERATOR DATA, never in the repo (public-instrument rule).
@@ -194,6 +196,7 @@ mine:
     # landed: one v1 row lingered in a partition v2 no longer writes).
     rm -rf "{{lake}}/correction_candidates" "{{lake}}/operator_messages" "{{lake}}/correction_events"
     {{duckdb}} :memory: \
+      -c "SET memory_limit='{{mine_memory_limit}}'; SET preserve_insertion_order=false; SET temp_directory='{{state}}/duckdb_tmp';" \
       -c "SET VARIABLE lake='{{lake}}'; SET VARIABLE repo_dir='{{repo}}'; SET VARIABLE adjudications='$adj';" \
       -f "{{repo}}/adapters/corrections.sql" \
       -c "COPY (SELECT * FROM stg_correction_candidates ORDER BY runtime, date, candidate_id) TO '{{lake}}/correction_candidates' (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);" \

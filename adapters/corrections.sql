@@ -131,27 +131,29 @@ CREATE OR REPLACE TABLE _corr_known AS SELECT list(category) AS known FROM _corr
 -- (a block array, or a bare quoted string); opencode stores content as already-aggregated
 -- plain text. The json[] cast MUST bind only to array rows (the planner otherwise hoists
 -- it above a CASE type-guard and errors on string content -- see adapters/claude_code.sql
--- _cc_asst_blocks), so CC array rows are materialized first, then unnested with a
--- positional index so text concatenation (hence first-token matching) is DETERMINISTIC.
+-- _cc_asst_blocks), so CC array rows are materialized first. Blocks are joined with
+-- per-row list functions in array order, so text concatenation (hence first-token
+-- matching) is DETERMINISTIC and streams; a correlated string_agg here does not spill.
 CREATE OR REPLACE TABLE _cc_user_arr AS
 SELECT message_id, session_id, timestamp AS ts, content
 FROM _lk_messages
 WHERE runtime = 'claude-code' AND role = 'user' AND json_type(content) = 'ARRAY';
 
+-- string_agg semantics over a list: NULL elements skipped, NULL when none remain.
+CREATE OR REPLACE MACRO _join_blocks(l) AS
+  CASE WHEN len(list_filter(l, lambda x: x IS NOT NULL)) > 0 THEN array_to_string(l, '\n') END;
+CREATE OR REPLACE MACRO _block_type(j) AS json_extract_string(j, '$.type');
+
 CREATE OR REPLACE TABLE _cc_user_arr_x AS
 SELECT
   message_id, session_id, ts,
-  (SELECT string_agg(json_extract_string(j, '$.text'), '\n' ORDER BY ord)
-     FROM (SELECT unnest(cast(content AS json[])) AS j,
-                  unnest(range(1, len(cast(content AS json[])) + 1)) AS ord) blk
-    WHERE json_extract_string(j, '$.type') = 'text')                    AS raw_txt,
-  exists(SELECT 1 FROM (SELECT unnest(cast(content AS json[])) AS j) blk
-          WHERE json_extract_string(j, '$.type') = 'tool_result')       AS has_tool_result,
-  (SELECT string_agg((j -> 'content')::varchar, '\n' ORDER BY ord)
-     FROM (SELECT unnest(cast(content AS json[])) AS j,
-                  unnest(range(1, len(cast(content AS json[])) + 1)) AS ord) blk
-    WHERE json_extract_string(j, '$.type') = 'tool_result')             AS tool_result_txt
-FROM _cc_user_arr;
+  _join_blocks(list_transform(list_filter(blocks, lambda j: _block_type(j) = 'text'),
+                              lambda j: json_extract_string(j, '$.text')))     AS raw_txt,
+  len(list_filter(blocks, lambda j: _block_type(j) = 'tool_result')) > 0      AS has_tool_result,
+  _join_blocks(list_transform(list_filter(blocks, lambda j: _block_type(j) = 'tool_result'),
+                              lambda j: (j -> 'content')::varchar))           AS tool_result_txt
+FROM (SELECT message_id, session_id, ts, cast(content AS json[]) AS blocks FROM _cc_user_arr);
+DROP TABLE _cc_user_arr;
 
 -- Unified raw user-message text across runtimes + shapes.
 -- pi is DELIBERATELY absent from _um -- and so from every detector and the
@@ -195,6 +197,7 @@ SELECT
     OR raw_txt ILIKE '%<<autonomous-loop%'
   ) AS is_noise
 FROM _um;
+DROP TABLE _um;
 
 -- Assistant text (the corrected DRAFT), same materialize-then-index discipline for CC.
 CREATE OR REPLACE TABLE _cc_asst_arr AS
@@ -204,21 +207,21 @@ WHERE runtime = 'claude-code' AND role = 'assistant' AND json_type(content) = 'A
 
 CREATE OR REPLACE TABLE _asst AS
   SELECT message_id, session_id, ts, 'claude-code' AS runtime,
-    (SELECT string_agg(json_extract_string(j, '$.text'), '\n' ORDER BY ord)
-       FROM (SELECT unnest(cast(content AS json[])) AS j,
-                    unnest(range(1, len(cast(content AS json[])) + 1)) AS ord) blk
-      WHERE json_extract_string(j, '$.type') = 'text') AS atxt
+    _join_blocks(list_transform(list_filter(cast(content AS json[]), lambda j: _block_type(j) = 'text'),
+                                lambda j: json_extract_string(j, '$.text'))) AS atxt
   FROM _cc_asst_arr
   UNION ALL BY NAME
   SELECT message_id, session_id, timestamp AS ts, 'opencode' AS runtime, content AS atxt
   FROM _lk_messages
   WHERE runtime = 'opencode' AND role = 'assistant' AND content IS NOT NULL;
+DROP TABLE _cc_asst_arr;
 
 -- Draft context per user message: nearest PRECEDING assistant message that carries text
 -- (the draft being corrected) + the model that produced the draft (nearest api_call at or
 -- before the correction). ASOF joins pick the closest match on ts within (runtime, session).
 CREATE OR REPLACE TABLE _asst_txt AS
 SELECT * FROM _asst WHERE atxt IS NOT NULL AND length(trim(atxt)) > 0;
+DROP TABLE _asst;
 CREATE OR REPLACE TABLE _api AS
 SELECT session_id, runtime, timestamp AS ts, model FROM _lk_api_calls WHERE model IS NOT NULL;
 
