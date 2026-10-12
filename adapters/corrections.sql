@@ -219,11 +219,15 @@ DROP TABLE _cc_asst_arr;
 -- Draft context per user message: nearest PRECEDING assistant message that carries text
 -- (the draft being corrected) + the model that produced the draft (nearest api_call at or
 -- before the correction). ASOF joins pick the closest match on ts within (runtime, session).
+-- Both right sides are unique on (runtime, session_id, ts) so each ASOF match is unique;
+-- same-ts ties keep the lowest message_id / model.
 CREATE OR REPLACE TABLE _asst_txt AS
-SELECT * FROM _asst WHERE atxt IS NOT NULL AND length(trim(atxt)) > 0;
+SELECT * FROM _asst WHERE atxt IS NOT NULL AND length(trim(atxt)) > 0
+QUALIFY row_number() OVER (PARTITION BY runtime, session_id, ts ORDER BY message_id) = 1;
 DROP TABLE _asst;
 CREATE OR REPLACE TABLE _api AS
-SELECT session_id, runtime, timestamp AS ts, model FROM _lk_api_calls WHERE model IS NOT NULL;
+SELECT session_id, runtime, timestamp AS ts, min(model) AS model
+FROM _lk_api_calls WHERE model IS NOT NULL GROUP BY ALL;
 
 CREATE OR REPLACE TABLE _op_ctx AS
 SELECT
@@ -237,6 +241,16 @@ ASOF LEFT JOIN _asst_txt a
   ON o.runtime = a.runtime AND o.session_id = a.session_id AND o.ts > a.ts
 ASOF LEFT JOIN _api c
   ON o.runtime = c.runtime AND o.session_id = c.session_id AND o.ts >= c.ts;
+
+-- A message recorded in more than one session (the same line uuid in two session files)
+-- belongs to the earliest-started session; the other copies are excluded from both
+-- products so a typed message counts once.
+CREATE OR REPLACE TABLE _copies AS
+SELECT o.runtime, o.session_id, o.message_id
+FROM (SELECT DISTINCT runtime, session_id, message_id FROM _op) o
+JOIN _lk_sessions s ON s.runtime = o.runtime AND s.session_id = o.session_id
+QUALIFY row_number() OVER (PARTITION BY o.runtime, o.message_id
+                           ORDER BY s.started_at NULLS LAST, o.session_id) > 1;
 
 -- token set of a text (lowercased word unigrams), for the D4 jaccard.
 CREATE OR REPLACE MACRO _tok(s) AS
@@ -267,13 +281,13 @@ CREATE OR REPLACE MACRO _tok(s) AS
 --   forward-compatibly (fires iff a rejection-like status ever appears) and yields 0 today.
 CREATE OR REPLACE TABLE _d1 AS
   SELECT
-    x.runtime, x.session_id, x.message_id AS message_uuid, ctx.prior_asst_uuid, x.ts,
+    x.runtime, x.session_id, x.message_id AS message_uuid, x.prior_asst_uuid, x.ts,
     'tool_reject' AS detector, 'v2' AS detector_version,
     json_object('marker', 'tool_use_rejected', 'source', 'tool_result') AS features,
-    ctx.model_id
+    x.model_id
   FROM _cc_user_arr_x cc
-  JOIN _op x           ON x.message_id = cc.message_id
-  LEFT JOIN _op_ctx ctx ON ctx.message_id = cc.message_id
+  JOIN _op_ctx x ON x.runtime = 'claude-code' AND x.session_id = cc.session_id
+                AND x.message_id = cc.message_id
   WHERE cc.tool_result_txt ILIKE '%The user doesn''t want to proceed with this tool use%'
     AND cc.tool_result_txt NOT ILIKE '%The user wants to clarify these questions%'
   UNION ALL BY NAME
@@ -296,7 +310,7 @@ CREATE OR REPLACE TABLE _d1 AS
 CREATE OR REPLACE TABLE _interrupts AS
 SELECT
   ctx.message_id AS interrupt_uuid, ctx.session_id, ctx.runtime, ctx.ts,
-  ctx.prior_asst_uuid,
+  ctx.prior_asst_uuid, ctx.model_id,
   ((NOT ctx.is_noise) AND length(trim(ctx.body)) > 20) AS has_inline_redirect
 FROM _op_ctx ctx
 WHERE ctx.runtime = 'claude-code'
@@ -311,9 +325,8 @@ CREATE OR REPLACE TABLE _d2 AS
     i.runtime, i.session_id, i.interrupt_uuid AS message_uuid, i.prior_asst_uuid, i.ts,
     'interrupt_redirect' AS detector, 'v1' AS detector_version,
     json_object('mode', 'inline') AS features,
-    ctx.model_id
+    i.model_id
   FROM _interrupts i
-  JOIN _op_ctx ctx ON ctx.message_id = i.interrupt_uuid
   WHERE i.has_inline_redirect
   UNION ALL BY NAME
   -- next_message: bare interrupt, redirect is the next operator message on the same draft
@@ -332,7 +345,8 @@ CREATE OR REPLACE TABLE _d2 AS
     AND r.prior_asst_uuid IS NOT DISTINCT FROM i.prior_asst_uuid
   -- consecutive bare interrupts (repeated ESC) fan into ONE redirect; keep the nearest
   -- interrupt so the locus stays one row per (detector, redirect).
-  QUALIFY row_number() OVER (PARTITION BY r.message_id ORDER BY i.ts DESC) = 1;
+  QUALIFY row_number() OVER (PARTITION BY r.runtime, r.session_id, r.message_id
+                             ORDER BY i.ts DESC, i.interrupt_uuid DESC) = 1;
 
 -- D3 -- lexical correction openers. Operator message opening (after an optional leading
 --   interjection) with a versioned correction marker, directly following an assistant draft.
@@ -349,7 +363,8 @@ JOIN _corr_markers mk
          '^(ok|okay|so|well|hmm+|hm|yeah|yep|yes|ah|oh|sorry|hey|right|hi)[^a-z0-9]+', ''),
        mk.pattern)
 WHERE ctx.is_operator AND ctx.prior_asst_uuid IS NOT NULL
-QUALIFY row_number() OVER (PARTITION BY ctx.message_id ORDER BY mk.marker) = 1;
+QUALIFY row_number() OVER (PARTITION BY ctx.runtime, ctx.session_id, ctx.message_id
+                           ORDER BY mk.marker) = 1;
 
 -- D4 -- rewrite detection. Operator message with high token-set overlap against the
 --   preceding assistant draft but not identical (operator restating/rewriting the model).
@@ -408,10 +423,13 @@ SELECT
   s.estate, s.harness, s.campaign,
   s.date                                                                AS date
 FROM d
+ANTI JOIN _copies cp
+  ON cp.runtime = d.runtime AND cp.session_id = d.session_id AND cp.message_id = d.message_uuid
 JOIN _lk_sessions s ON s.runtime = d.runtime AND s.session_id = d.session_id
--- candidate_id is the (detector, locus) primary key; enforce uniqueness deterministically
--- so the rebuild is byte-identical run to run (G-idempotence) regardless of detector fan-in.
-QUALIFY row_number() OVER (PARTITION BY candidate_id ORDER BY features::varchar) = 1;
+-- candidate_id is the (detector, locus) primary key; a total order keeps the surviving
+-- row identical run to run (G-idempotence) regardless of detector fan-in.
+QUALIFY row_number() OVER (PARTITION BY candidate_id
+                           ORDER BY d.features::varchar, d.prior_assistant_uuid, d.ts, d.model_id) = 1;
 
 -- The justfile `mine` recipe COPYs stg_correction_candidates to the lake (literal path;
 -- COPY TO cannot take getvariable) -- a full deterministic rebuild every ingest, ORDER BY
@@ -425,7 +443,8 @@ QUALIFY row_number() OVER (PARTITION BY candidate_id ORDER BY features::varchar)
 -- `flagged` bool: true iff this message's (runtime, session_id, message_uuid) is also a
 -- candidate locus under ANY detector. METADATA ONLY -- no content column. The DISTINCT
 -- subquery collapses detector fan-in (one message can be flagged by more than one
--- detector) so this stays one row per operator message.
+-- detector) and the outer DISTINCT a line recorded twice in one session, so this stays
+-- one row per operator message.
 --
 -- D1 (tool_reject) candidate loci are tool-result-carrier rows by construction
 -- (has_tool_result=true), which `is_operator` excludes by definition -- those loci never
@@ -434,12 +453,14 @@ QUALIFY row_number() OVER (PARTITION BY candidate_id ORDER BY features::varchar)
 -- membership in this table's population either way.
 -- =====================================================================================
 CREATE OR REPLACE TABLE stg_operator_messages AS
-SELECT
+SELECT DISTINCT
   ctx.runtime, ctx.session_id, ctx.message_id AS message_uuid, ctx.ts,
   s.estate, s.harness, s.campaign,
   s.date                                       AS date,
   (fl.message_uuid IS NOT NULL)                AS flagged
 FROM _op_ctx ctx
+ANTI JOIN _copies cp
+  ON cp.runtime = ctx.runtime AND cp.session_id = ctx.session_id AND cp.message_id = ctx.message_id
 JOIN _lk_sessions s ON s.runtime = ctx.runtime AND s.session_id = ctx.session_id
 LEFT JOIN (
   SELECT DISTINCT runtime, session_id, message_uuid FROM stg_correction_candidates

@@ -371,6 +371,15 @@ test:
       echo "      requires at least one row; see justfile _views comment)" >&2
       exit 1
     fi
+    # session-copy.jsonl repeats lines of session.jsonl under a later-starting,
+    # lower-sorting session id; the copy must count once, in the earliest-started session.
+    m="message_uuid = '33333333-3333-3333-3333-333333333333'"
+    owners="$(just sql -noheader -list -c "SELECT (SELECT string_agg(DISTINCT session_id, ',') FROM correction_candidates WHERE $m) || ' ' || (SELECT string_agg(session_id, ',') FROM operator_messages WHERE $m);")"
+    if [ "$owners" != "test-session-1 test-session-1" ]; then
+      echo "FAIL: copied message attributed to '$owners' (candidates operator_messages)," >&2
+      echo "      want test-session-1 once in each" >&2
+      exit 1
+    fi
 
     echo "varve test: executing every queries/*.sql against the fixture" >&2
     fail=0
