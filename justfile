@@ -11,8 +11,10 @@ data_home := env_var_or_default("VARVE_DATA", env_var("HOME") + "/.local/share/v
 repo      := justfile_directory()
 lake      := data_home + "/lake"
 state     := data_home + "/state"
-# mine runs in-memory, where DuckDB otherwise claims 80% of RAM.
+# DuckDB otherwise claims 80% of RAM, every core, and spill up to 90% of free disk.
 mine_memory_limit := env_var_or_default("VARVE_MINE_MEMORY_LIMIT", "4GB")
+duckdb_threads    := env_var_or_default("VARVE_DUCKDB_THREADS", "4")
+duckdb_max_spill  := env_var_or_default("VARVE_DUCKDB_MAX_SPILL", "20GB")
 manifest  := state + "/manifest.parquet"
 db        := data_home + "/varve.duckdb"
 # W7 adjudication ledger: OPERATOR DATA, never in the repo (public-instrument rule).
@@ -150,8 +152,10 @@ _pipeline mode:
     # temp_directory, and insertion order buys nothing here (every COPY is
     # partitioned; readers sort) -- without both, a first backfill over a
     # multi-GB corpus exhausts the memory limit and dies.
+    mkdir -p "{{state}}"; spill="$(mktemp -d "{{state}}/duckdb_tmp.XXXXXX")"
+    trap 'rm -rf "$spill"' EXIT
     {{duckdb}} :memory: \
-      -c "SET preserve_insertion_order=false; SET temp_directory='{{state}}/duckdb_tmp';" \
+      -c "SET preserve_insertion_order=false; SET threads={{duckdb_threads}}; SET max_temp_directory_size='{{duckdb_max_spill}}'; SET temp_directory='$spill';" \
       -c "SET VARIABLE cc_source='{{cc_source}}'; SET VARIABLE pi_source='{{pi_source}}'; SET VARIABLE opencode_db='{{opencode_db}}'; SET VARIABLE repo_dir='{{repo}}'; SET VARIABLE attribution='{{attribution}}'; SET VARIABLE mode='{{mode}}'; SET VARIABLE inventory='$inv'; SET VARIABLE manifest='{{manifest}}';" \
       -f "{{repo}}/sql/prelude.sql" \
       ${adapters[@]+"${adapters[@]}"} \
@@ -195,8 +199,10 @@ mine:
     # change would otherwise survive as stale rows (observed when detector v2
     # landed: one v1 row lingered in a partition v2 no longer writes).
     rm -rf "{{lake}}/correction_candidates" "{{lake}}/operator_messages" "{{lake}}/correction_events"
+    mkdir -p "{{state}}"; spill="$(mktemp -d "{{state}}/duckdb_tmp.XXXXXX")"
+    trap 'rm -rf "$spill"' EXIT
     {{duckdb}} :memory: \
-      -c "SET memory_limit='{{mine_memory_limit}}'; SET preserve_insertion_order=false; SET temp_directory='{{state}}/duckdb_tmp';" \
+      -c "SET memory_limit='{{mine_memory_limit}}'; SET preserve_insertion_order=false; SET threads={{duckdb_threads}}; SET max_temp_directory_size='{{duckdb_max_spill}}'; SET temp_directory='$spill';" \
       -c "SET VARIABLE lake='{{lake}}'; SET VARIABLE repo_dir='{{repo}}'; SET VARIABLE adjudications='$adj';" \
       -f "{{repo}}/adapters/corrections.sql" \
       -c "COPY (SELECT * FROM stg_correction_candidates ORDER BY runtime, date, candidate_id) TO '{{lake}}/correction_candidates' (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);" \
@@ -374,7 +380,7 @@ test:
     # session-copy.jsonl repeats lines of session.jsonl under a later-starting,
     # lower-sorting session id; the copy must count once, in the earliest-started session.
     m="message_uuid = '33333333-3333-3333-3333-333333333333'"
-    owners="$(just sql -noheader -list -c "SELECT (SELECT string_agg(DISTINCT session_id, ',') FROM correction_candidates WHERE $m) || ' ' || (SELECT string_agg(session_id, ',') FROM operator_messages WHERE $m);")"
+    owners="$(just sql -noheader -list -c "SELECT (SELECT string_agg(DISTINCT session_id, ',') FROM correction_candidates WHERE $m) || ' ' || (SELECT string_agg(session_id, ',' ORDER BY session_id) FROM operator_messages WHERE $m);")"
     if [ "$owners" != "test-session-1 test-session-1" ]; then
       echo "FAIL: copied message attributed to '$owners' (candidates operator_messages)," >&2
       echo "      want test-session-1 once in each" >&2
