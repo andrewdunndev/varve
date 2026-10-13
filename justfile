@@ -215,15 +215,15 @@ mine:
     # trips zero detectors (or has no user messages at all) leaves candidates/
     # operator_messages fileless too -- an empty COPY writes no partition files.
     ev="DROP VIEW IF EXISTS correction_events;"
-    if find "{{lake}}/correction_events" -name '*.parquet' 2>/dev/null | grep -q .; then
+    if find "{{lake}}/correction_events" -name '*.parquet' -print -quit 2>/dev/null | grep -q .; then
       ev="CREATE OR REPLACE VIEW correction_events AS SELECT * FROM read_parquet('{{lake}}/correction_events/**/*.parquet', hive_partitioning=true, union_by_name=true);"
     fi
     cands="DROP VIEW IF EXISTS correction_candidates;"
-    if find "{{lake}}/correction_candidates" -name '*.parquet' 2>/dev/null | grep -q .; then
+    if find "{{lake}}/correction_candidates" -name '*.parquet' -print -quit 2>/dev/null | grep -q .; then
       cands="CREATE OR REPLACE VIEW correction_candidates AS SELECT * FROM read_parquet('{{lake}}/correction_candidates/**/*.parquet', hive_partitioning=true, union_by_name=true);"
     fi
     om="DROP VIEW IF EXISTS operator_messages;"
-    if find "{{lake}}/operator_messages" -name '*.parquet' 2>/dev/null | grep -q .; then
+    if find "{{lake}}/operator_messages" -name '*.parquet' -print -quit 2>/dev/null | grep -q .; then
       om="CREATE OR REPLACE VIEW operator_messages AS SELECT * FROM read_parquet('{{lake}}/operator_messages/**/*.parquet', hive_partitioning=true, union_by_name=true);"
     fi
     {{duckdb}} "{{db}}" -c "$cands $om $ev"
