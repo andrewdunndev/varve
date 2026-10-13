@@ -313,6 +313,32 @@ recon:
 recon-pi:
     @{{duckdb}} -readonly "{{db}}" -c "SET VARIABLE lake='{{lake}}'; SET VARIABLE repo='{{repo}}';" -f "{{repo}}/queries/reconcile_pi_cost.sql"
 
+# Year in review: a local-time activity heatmap plus year totals (ADR-0007).
+#   just stats [--year N] [--runtime claude|pi|opencode|all] [--metric prompts|steps|tokens]
+# VARVE_TODAY (YYYY-MM-DD) pins "today" for the current-year cut.
+stats *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    year="$(date +%Y)"; runtime=all; metric=prompts
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --year|--runtime|--metric)
+          [ $# -ge 2 ] || { echo "varve stats: $1 needs a value" >&2; exit 2; }
+          printf -v "${1#--}" '%s' "$2"; shift 2 ;;
+        --year=*|--runtime=*|--metric=*)
+          key="${1%%=*}"; printf -v "${key#--}" '%s' "${1#*=}"; shift ;;
+        *) echo "varve stats: unknown argument $1" >&2; exit 2 ;;
+      esac
+    done
+    [[ "$year" =~ ^[0-9]{4}$ ]] || { echo "varve stats: --year takes a four-digit year" >&2; exit 2; }
+    case "$runtime" in claude|pi|opencode|all) ;; *) echo "varve stats: --runtime takes claude|pi|opencode|all" >&2; exit 2 ;; esac
+    case "$metric" in prompts|steps|tokens) ;; *) echo "varve stats: --metric takes prompts|steps|tokens" >&2; exit 2 ;; esac
+    today="${VARVE_TODAY:-$(date +%F)}"
+    {{duckdb}} -readonly "{{db}}" -noheader -list \
+      -c "SET VARIABLE lake='{{lake}}'; SET VARIABLE year=$year; SET VARIABLE runtime='$runtime'; SET VARIABLE metric='$metric'; SET VARIABLE today=DATE '$today';" \
+      -c ".output /dev/null" -f "{{repo}}/queries/stats_year.sql" \
+      -c ".output" -f "{{repo}}/sql/stats_render.sql"
+
 # Report lake size; tripwire at ~100 GB (PRD D4: keep-everything is cheap
 # at this scale, the watch is the control).
 disk:
@@ -351,6 +377,7 @@ test:
     export VARVE_ATTRIBUTION="{{repo}}/adapters/attribution.example.csv"
     export VARVE_ADJUDICATIONS="$tmp/no_adjudications.jsonl"
     export VARVE_WORKSHEET="$tmp/no_worksheet.jsonl"
+    export TZ=UTC
 
     echo "varve test: seeding synthetic opencode fixture db" >&2
     {{duckdb}} :memory: \
@@ -399,5 +426,23 @@ test:
 
     echo "varve test: just review (adapters/review.sql)" >&2
     just review "$tmp/review.md" > /dev/null
+
+    echo "varve test: just stats (snapshot, year-boundary streak, empty year, runtime filter)" >&2
+    export VARVE_TODAY=2026-10-13
+    if ! just stats --year 2026 | diff -u "{{repo}}/tests/snapshots/stats_2026.txt" - >&2; then
+      echo "FAIL: just stats --year 2026 differs from tests/snapshots/stats_2026.txt" >&2
+      fail=1
+    fi
+    stats_tail() {
+      local want="$1"; shift
+      local got; got="$(just stats "$@" | tail -3)"
+      if [ "$got" != "$want" ]; then
+        echo "FAIL: just stats $* ended with:" >&2; printf '%s\n' "$got" >&2
+        fail=1
+      fi
+    }
+    stats_tail $'1 session · 0 subagents\n2 prompts · 3 steps · 4.7k tokens · $0.00\n100.0% tool success · 2 active days · best streak 2 days' --year 2025
+    stats_tail $'0 sessions · 0 subagents\n0 prompts · 0 steps · 0 tokens · $0.00\nn/a tool success · 0 active days · best streak 0 days' --year 2024
+    stats_tail $'1 session · 0 subagents\n1 prompt · 1 step · 150 tokens · $0.00\n100.0% tool success · 1 active day · best streak 1 day' --year 2026 --runtime pi
 
     exit $fail

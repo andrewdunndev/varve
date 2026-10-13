@@ -157,6 +157,17 @@ output is the markdown under the data home -- `adapters/review.sql` holds zero t
 content, content is dereferenced from the local lake at run time, loci are the `lake:`
 form, and nothing is printed to a terminal. Do not point `out=` off the data home.
 
+## Year in review (`just stats`)
+
+| File | Question | Metric definition (summary) |
+|------|----------|-----------------------------|
+| `stats_year.sql` | What did the year look like? | Per local-time day in the window (Jan 1 to min(Dec 31, `today`)): sessions (top-level transcripts), subagents (CC sidechain roots + opencode child sessions), prompts (`operator_messages` outside sidechains and child sessions; pi `role='user'`), steps (`api_calls` rows), tokens (all four classes), cost (`sum(cost_usd)`), tool results and errors. Active day = at least one prompt; best streak = longest consecutive run inside the window; `level` = quartile of `metric` over active days. Totals row last. Full definitions and per-runtime gaps: ADR-0007. |
+
+`just stats [--year N] [--runtime claude|pi|opencode|all] [--metric prompts|steps|tokens]`
+runs the file into in-memory temp tables and renders them with `sql/stats_render.sql`.
+Plain `just sql -f queries/stats_year.sql` prints the totals row, and `year`,
+`runtime`, `metric` and `today` can be set as variables before the file.
+
 ## Pre-existing (W1/W2, not W5)
 
 `reconcile_ccusage.sql` (per-model totals vs `ccusage`) and `reconcile_pi_cost.sql`

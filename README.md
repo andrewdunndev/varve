@@ -35,7 +35,8 @@ It serves a goal ladder:
 | `adapters/` | Per-runtime transcript normalizers (Claude Code, pi, opencode) |
 | `queries/` | The versioned SQL query library -- the real analytics artifact |
 | `tests/fixtures/` | Synthetic three-runtime corpus CI backfills against (`just test`) |
-| `justfile` | `just backfill` / `just ingest` / `just sql` / `just lint` / `just test` / `just disk` |
+| `tests/snapshots/` | Expected rendered output `just test` diffs against |
+| `justfile` | `just backfill` / `just ingest` / `just sql` / `just stats` / `just lint` / `just test` / `just disk` |
 
 Toolchain: `mise install` provisions the pinned `duckdb` + `just` from
 `mise.toml`; every recipe assumes both are on PATH.

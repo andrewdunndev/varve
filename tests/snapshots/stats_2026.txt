@@ -1,0 +1,16 @@
+varve stats · 2026 so far · all runtimes
+
+activity
+   Jan Feb Mar  Apr May  Jun Jul Aug  Sep Oct
+Mo  ······························░··········
+Tu  ·········································
+We  ········································
+Th ░········································
+Fr ░········································
+Sa ······························█··········
+Su ·········································
+   less ·░▒▓█ more
+
+4 sessions · 1 subagent
+6 prompts · 9 steps · 8.0k tokens · $0.01
+75.0% tool success · 4 active days · best streak 2 days
