@@ -43,7 +43,11 @@ WITH p AS (
 )
 SELECT
   y                                                           AS year,
-  CASE rt WHEN 'claude' THEN 'claude-code' ELSE rt END        AS runtime,
+  CASE rt
+    WHEN 'claude' THEN 'claude-code'
+    WHEN 'agy'    THEN 'antigravity'
+    ELSE rt
+  END                                                         AS runtime,
   metric,
   today,
   make_date(y, 1, 1)                                          AS first_day,
@@ -86,7 +90,7 @@ UNION ALL
 SELECT runtime, stats_local_day(runtime, started_at), unnest(['tool_result', 'tool_error']),
        unnest([1, (decision IS NOT DISTINCT FROM 'error')::int])
 FROM tool_calls
-WHERE runtime = 'pi' OR (runtime = 'opencode' AND decision IN ('completed', 'error'))
+WHERE runtime = 'pi' OR (runtime IN ('opencode', 'antigravity') AND decision IN ('completed', 'error'))
 UNION ALL
 SELECT runtime, min(day), unnest(['tool_result', 'tool_error']), unnest([1, max(is_error)::int])
 FROM (

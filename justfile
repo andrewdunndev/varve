@@ -15,6 +15,11 @@ state     := data_home + "/state"
 mine_memory_limit := env_var_or_default("VARVE_MINE_MEMORY_LIMIT", "4GB")
 duckdb_threads    := env_var_or_default("VARVE_DUCKDB_THREADS", "4")
 duckdb_max_spill  := env_var_or_default("VARVE_DUCKDB_MAX_SPILL", "20GB")
+# read_json reserves a maximum_object_size buffer PER FILE it scans: 100 MB x ~75
+# files exhausted 12 GB on a WSL box. 16 MB clears the longest observed line; a
+# longer line is dropped by ignore_errors, so raise this if file-coverage checks
+# show gaps.
+json_max_object   := env_var_or_default("VARVE_JSON_MAX_OBJECT", "16777216")
 manifest  := state + "/manifest.parquet"
 db        := data_home + "/varve.duckdb"
 # W7 adjudication ledger: OPERATOR DATA, never in the repo (public-instrument rule).
@@ -46,8 +51,13 @@ pi_source   := pi_root + "/**/*.jsonl"
 # opencode: a single SQLite db (WAL). Read via a read-only APFS clone snapshot so
 # the live store is never written or locked (see _pipeline).
 opencode_db := env_var_or_default("VARVE_OPENCODE_DB", env_var("HOME") + "/.local/share/opencode/opencode.db")
+# Google Antigravity: per-conversation JSONL transcripts under
+# brain/<id>/.system_generated/logs/transcript*.jsonl.
+agy_root    := env_var_or_default("VARVE_AGY_ROOT", env_var("HOME") + "/.gemini/antigravity-cli")
+agy_source  := agy_root + "/brain/*/.system_generated/logs/transcript*.jsonl"
 
-duckdb := "mise exec -- duckdb"
+# VARVE_DUCKDB overrides (e.g. a brew duckdb when mise is not installed).
+duckdb := env_var_or_default("VARVE_DUCKDB", "mise exec -- duckdb")
 
 default:
     @just --list
@@ -147,6 +157,13 @@ _pipeline mode:
     else
       echo "varve: skip opencode -- no db at {{opencode_db}}" >&2
     fi
+    # ---- antigravity (brain/<id>/.system_generated/logs/transcript*.jsonl) ----
+    if [ -d "{{agy_root}}/brain" ] && find "{{agy_root}}/brain" -name 'transcript*.jsonl' -type f -print -quit | grep -q .; then
+      find "{{agy_root}}/brain" -name 'transcript*.jsonl' -type f -exec stat "${stat_fmt[@]}" {} + >> "$inv"
+      adapters+=(-f "{{repo}}/adapters/antigravity.sql")
+    else
+      echo "varve: skip antigravity -- no transcripts at {{agy_root}}/brain" >&2
+    fi
     # Derive + write affected partitions + refresh manifest, one DuckDB session.
     # Large-corpus safety: an in-memory session cannot spill without a
     # temp_directory, and insertion order buys nothing here (every COPY is
@@ -156,7 +173,7 @@ _pipeline mode:
     trap 'rm -rf "$spill"' EXIT
     {{duckdb}} :memory: \
       -c "SET preserve_insertion_order=false; SET threads={{duckdb_threads}}; SET max_temp_directory_size='{{duckdb_max_spill}}'; SET temp_directory='$spill';" \
-      -c "SET VARIABLE cc_source='{{cc_source}}'; SET VARIABLE pi_source='{{pi_source}}'; SET VARIABLE opencode_db='{{opencode_db}}'; SET VARIABLE repo_dir='{{repo}}'; SET VARIABLE attribution='{{attribution}}'; SET VARIABLE mode='{{mode}}'; SET VARIABLE inventory='$inv'; SET VARIABLE manifest='{{manifest}}';" \
+      -c "SET VARIABLE cc_source='{{cc_source}}'; SET VARIABLE pi_source='{{pi_source}}'; SET VARIABLE opencode_db='{{opencode_db}}'; SET VARIABLE agy_source='{{agy_source}}'; SET VARIABLE repo_dir='{{repo}}'; SET VARIABLE attribution='{{attribution}}'; SET VARIABLE mode='{{mode}}'; SET VARIABLE json_max_object={{json_max_object}}; SET VARIABLE inventory='$inv'; SET VARIABLE manifest='{{manifest}}';" \
       -f "{{repo}}/sql/prelude.sql" \
       ${adapters[@]+"${adapters[@]}"} \
       -f "{{repo}}/sql/stage.sql" \
@@ -314,7 +331,7 @@ recon-pi:
     @{{duckdb}} -readonly "{{db}}" -c "SET VARIABLE lake='{{lake}}'; SET VARIABLE repo='{{repo}}';" -f "{{repo}}/queries/reconcile_pi_cost.sql"
 
 # Year in review: a local-time activity heatmap plus year totals (ADR-0007).
-#   just stats [--year N] [--runtime claude|pi|opencode|all] [--metric prompts|steps|tokens]
+#   just stats [--year N] [--runtime claude|pi|opencode|antigravity|all] [--metric prompts|steps|tokens]
 # VARVE_TODAY (YYYY-MM-DD) pins "today" for the current-year cut.
 stats *ARGS:
     #!/usr/bin/env bash
@@ -331,7 +348,7 @@ stats *ARGS:
       esac
     done
     [[ "$year" =~ ^[0-9]{4}$ ]] || { echo "varve stats: --year takes a four-digit year" >&2; exit 2; }
-    case "$runtime" in claude|pi|opencode|all) ;; *) echo "varve stats: --runtime takes claude|pi|opencode|all" >&2; exit 2 ;; esac
+    case "$runtime" in claude|pi|opencode|antigravity|agy|all) ;; *) echo "varve stats: --runtime takes claude|pi|opencode|antigravity|all" >&2; exit 2 ;; esac
     case "$metric" in prompts|steps|tokens) ;; *) echo "varve stats: --metric takes prompts|steps|tokens" >&2; exit 2 ;; esac
     today="${VARVE_TODAY:-$(date +%F)}"
     {{duckdb}} -readonly "{{db}}" -noheader -list \
@@ -374,13 +391,15 @@ test:
     export VARVE_CC_ROOT="{{repo}}/tests/fixtures/cc"
     export VARVE_PI_ROOT="{{repo}}/tests/fixtures/pi"
     export VARVE_OPENCODE_DB="$tmp/opencode.db"
+    export VARVE_AGY_ROOT="{{repo}}/tests/fixtures/antigravity"
     export VARVE_ATTRIBUTION="{{repo}}/adapters/attribution.example.csv"
     export VARVE_ADJUDICATIONS="$tmp/no_adjudications.jsonl"
     export VARVE_WORKSHEET="$tmp/no_worksheet.jsonl"
+    export VARVE_DUCKDB="${VARVE_DUCKDB:-mise exec -- duckdb -dark-mode}"
     export TZ=UTC
 
     echo "varve test: seeding synthetic opencode fixture db" >&2
-    {{duckdb}} :memory: \
+    $VARVE_DUCKDB :memory: \
       -c "INSTALL sqlite; LOAD sqlite; ATTACH '$VARVE_OPENCODE_DB' AS oc (TYPE sqlite);" \
       -f "{{repo}}/tests/fixtures/opencode_seed.sql"
 
@@ -389,7 +408,7 @@ test:
 
     echo "varve test: asserting every runtime actually produced rows (a" >&2
     echo "  silently-skipped adapter would otherwise pass unnoticed)" >&2
-    for rt in claude-code pi opencode; do
+    for rt in claude-code pi opencode antigravity; do
       n="$(just sql -noheader -list -c "SELECT count(*) FROM sessions WHERE runtime='$rt';")"
       echo "  $rt: $n session(s)" >&2
       if [ "${n:-0}" -lt 1 ]; then
@@ -402,6 +421,21 @@ test:
       echo "FAIL: correction_candidates is empty -- the fixture no longer trips" >&2
       echo "      a W7 detector (mine's correction_candidates view creation" >&2
       echo "      requires at least one row; see justfile _views comment)" >&2
+      exit 1
+    fi
+    # antigravity: verify exact session attribution, user/assistant message breakdown,
+    # tool call decisions (completed/error/denied), API token totals, and W7 correction
+    # candidates (D1 tool_reject + D3 lexical negation).
+    agy_counts="$(just sql -noheader -list -c "
+      SELECT
+        (SELECT estate || ':' || harness FROM sessions WHERE runtime='antigravity' AND session_id='agy-session-1') || ' ' ||
+        (SELECT count(*) FILTER (WHERE role='user') || ':' || count(*) FILTER (WHERE role='assistant') FROM messages WHERE runtime='antigravity') || ' ' ||
+        (SELECT count(*) FILTER (WHERE decision='completed') || ':' || count(*) FILTER (WHERE decision='error') || ':' || count(*) FILTER (WHERE decision='denied') FROM tool_calls WHERE runtime='antigravity') || ' ' ||
+        (SELECT count(*) || ':' || sum(input + output + cache_read) FROM api_calls WHERE runtime='antigravity') || ' ' ||
+        (SELECT string_agg(detector, ',' ORDER BY detector) FROM correction_candidates WHERE runtime='antigravity');")"
+    if [ "$agy_counts" != "personal:demo-app 2:3 1:1:1 3:6900 lexical,tool_reject" ]; then
+      echo "FAIL: antigravity fixture assertions = '$agy_counts'," >&2
+      echo "      want 'personal:demo-app 2:3 1:1:1 3:6900 lexical,tool_reject'" >&2
       exit 1
     fi
     # session-copy.jsonl repeats lines of session.jsonl under a later-starting,
@@ -444,5 +478,6 @@ test:
     stats_tail $'1 session · 0 subagents\n2 prompts · 3 steps · 4.7k tokens · $0.00\n100.0% tool success · 2 active days · best streak 2 days' --year 2025
     stats_tail $'0 sessions · 0 subagents\n0 prompts · 0 steps · 0 tokens · $0.00\nn/a tool success · 0 active days · best streak 0 days' --year 2024
     stats_tail $'1 session · 0 subagents\n1 prompt · 1 step · 150 tokens · $0.00\n100.0% tool success · 1 active day · best streak 1 day' --year 2026 --runtime pi
+    stats_tail $'1 session · 0 subagents\n2 prompts · 3 steps · 6.9k tokens · $0.00\n50.0% tool success · 1 active day · best streak 1 day' --year 2023 --runtime antigravity
 
     exit $fail
