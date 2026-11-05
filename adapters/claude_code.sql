@@ -36,7 +36,9 @@ SELECT * FROM read_json(
   union_by_name      = true,
   ignore_errors      = true,
   filename           = true,
-  maximum_object_size = 100000000
+  maximum_object_size = getvariable('json_max_object'),
+  -- DuckDB 2.x otherwise collapses a many-keyed corpus into one json MAP column
+  map_inference_threshold = -1
 );
 
 -- ---------------------------------------------------------------------------

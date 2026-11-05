@@ -15,6 +15,11 @@ state     := data_home + "/state"
 mine_memory_limit := env_var_or_default("VARVE_MINE_MEMORY_LIMIT", "4GB")
 duckdb_threads    := env_var_or_default("VARVE_DUCKDB_THREADS", "4")
 duckdb_max_spill  := env_var_or_default("VARVE_DUCKDB_MAX_SPILL", "20GB")
+# read_json reserves a maximum_object_size buffer PER FILE it scans: 100 MB x ~75
+# files exhausted 12 GB on a WSL box. 16 MB clears the longest observed line (CC
+# 165 KB, Copilot events 3.2 MB); a longer line is dropped by ignore_errors, so
+# raise this if file-coverage checks show gaps.
+json_max_object   := env_var_or_default("VARVE_JSON_MAX_OBJECT", "16777216")
 manifest  := state + "/manifest.parquet"
 db        := data_home + "/varve.duckdb"
 # W7 adjudication ledger: OPERATOR DATA, never in the repo (public-instrument rule).
@@ -46,8 +51,16 @@ pi_source   := pi_root + "/**/*.jsonl"
 # opencode: a single SQLite db (WAL). Read via a read-only APFS clone snapshot so
 # the live store is never written or locked (see _pipeline).
 opencode_db := env_var_or_default("VARVE_OPENCODE_DB", env_var("HOME") + "/.local/share/opencode/opencode.db")
+# GitHub Copilot CLI: per-session event streams (session-state/<id>/events.jsonl)
+# plus the session-store.db SQLite (WAL) for per-call usage. The db is read from a
+# snapshot copy, ATTACHed READ_ONLY (same posture as opencode).
+copilot_root   := env_var_or_default("VARVE_COPILOT_ROOT", env_var("HOME") + "/.copilot")
+copilot_events := copilot_root + "/session-state/*/events.jsonl"
+copilot_db     := copilot_root + "/session-store.db"
+copilot_state  := copilot_root + "/session-state"
 
-duckdb := "mise exec -- duckdb"
+# VARVE_DUCKDB overrides (e.g. a brew duckdb when mise is not installed).
+duckdb := env_var_or_default("VARVE_DUCKDB", "mise exec -- duckdb")
 
 default:
     @just --list
@@ -147,6 +160,27 @@ _pipeline mode:
     else
       echo "varve: skip opencode -- no db at {{opencode_db}}" >&2
     fi
+    # ---- copilot (events.jsonl glob + optional session-store.db snapshot) ----
+    cp_snap=""; cp_dbvar=""
+    if compgen -G "{{copilot_events}}" > /dev/null; then
+      find "{{copilot_state}}" -mindepth 2 -type f ! -name '*.lock' ! -name '*.hold' ! -name 'session.db*' -exec stat "${stat_fmt[@]}" {} + >> "$inv"
+      if [ -f "{{copilot_db}}" ]; then
+        stat "${stat_fmt[@]}" "{{copilot_db}}" >> "$inv"
+        cp_dbvar="{{copilot_db}}"
+        cp_snap="$(mktemp -d -t varve_cpsnap.XXXXXX)"
+        for ext in "" -wal -shm; do
+          [ -f "{{copilot_db}}$ext" ] && cp "{{copilot_db}}$ext" "$cp_snap/session-store.db$ext"
+        done
+        adapters+=(-c "INSTALL sqlite; LOAD sqlite; ATTACH '$cp_snap/session-store.db' AS cpdb (TYPE sqlite, READ_ONLY);")
+        echo "varve: copilot read-only snapshot -> $cp_snap" >&2
+      else
+        adapters+=(-f "{{repo}}/adapters/copilot_db_stub.sql")
+        echo "varve: copilot -- no session-store.db, events only" >&2
+      fi
+      adapters+=(-c "SET VARIABLE copilot_db='$cp_dbvar';" -f "{{repo}}/adapters/copilot.sql")
+    else
+      echo "varve: skip copilot -- no events.jsonl under {{copilot_root}}/session-state" >&2
+    fi
     # Derive + write affected partitions + refresh manifest, one DuckDB session.
     # Large-corpus safety: an in-memory session cannot spill without a
     # temp_directory, and insertion order buys nothing here (every COPY is
@@ -156,7 +190,7 @@ _pipeline mode:
     trap 'rm -rf "$spill"' EXIT
     {{duckdb}} :memory: \
       -c "SET preserve_insertion_order=false; SET threads={{duckdb_threads}}; SET max_temp_directory_size='{{duckdb_max_spill}}'; SET temp_directory='$spill';" \
-      -c "SET VARIABLE cc_source='{{cc_source}}'; SET VARIABLE pi_source='{{pi_source}}'; SET VARIABLE opencode_db='{{opencode_db}}'; SET VARIABLE repo_dir='{{repo}}'; SET VARIABLE attribution='{{attribution}}'; SET VARIABLE mode='{{mode}}'; SET VARIABLE inventory='$inv'; SET VARIABLE manifest='{{manifest}}';" \
+      -c "SET VARIABLE cc_source='{{cc_source}}'; SET VARIABLE pi_source='{{pi_source}}'; SET VARIABLE opencode_db='{{opencode_db}}'; SET VARIABLE copilot_events='{{copilot_events}}'; SET VARIABLE copilot_state='{{copilot_state}}'; SET VARIABLE repo_dir='{{repo}}'; SET VARIABLE attribution='{{attribution}}'; SET VARIABLE mode='{{mode}}'; SET VARIABLE json_max_object={{json_max_object}}; SET VARIABLE inventory='$inv'; SET VARIABLE manifest='{{manifest}}';" \
       -f "{{repo}}/sql/prelude.sql" \
       ${adapters[@]+"${adapters[@]}"} \
       -f "{{repo}}/sql/stage.sql" \
@@ -165,15 +199,34 @@ _pipeline mode:
       -c "COPY (SELECT * FROM stg_messages   WHERE date IN (SELECT date FROM _affected)) TO '{{lake}}/messages'   (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);" \
       -c "COPY (SELECT * FROM stg_api_calls  WHERE date IN (SELECT date FROM _affected)) TO '{{lake}}/api_calls'  (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);" \
       -c "COPY (SELECT * FROM stg_tool_calls WHERE date IN (SELECT date FROM _affected)) TO '{{lake}}/tool_calls' (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);" \
+      -c "COPY (SELECT * FROM _cp_events WHERE date IN (SELECT date FROM _affected)) TO '{{lake}}/copilot_events' (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);" \
+      -c "COPY (SELECT * FROM _cp_checkpoints WHERE date IN (SELECT date FROM _affected)) TO '{{lake}}/copilot_checkpoints' (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);" \
+      -c "COPY (SELECT * FROM _cp_session_files WHERE date IN (SELECT date FROM _affected)) TO '{{lake}}/copilot_session_files' (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);" \
+      -c "COPY (SELECT * FROM _cp_session_refs WHERE date IN (SELECT date FROM _affected)) TO '{{lake}}/copilot_session_refs' (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);" \
+      -c "COPY (SELECT * FROM _cp_artifacts WHERE date IN (SELECT date FROM _affected)) TO '{{lake}}/copilot_artifacts' (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);" \
       -c "COPY (SELECT path, size, mtime FROM _inventory) TO '{{manifest}}' (FORMAT parquet, OVERWRITE_OR_IGNORE);"
     rm -f "$inv"
     [ -n "$oc_snap" ] && rm -rf "$oc_snap" || true
+    [ -n "$cp_snap" ] && rm -rf "$cp_snap" || true
     just _views
     just mine
 
 # (Re)create the read-side views in varve.duckdb over the Parquet lake.
 _views:
+    #!/usr/bin/env bash
+    set -euo pipefail
     {{duckdb}} "{{db}}" -c "SET VARIABLE lake='{{lake}}';" -f "{{repo}}/sql/views.sql"
+    # Copilot-only tables: a view per table whose dir holds parquet (CREATE VIEW binds
+    # its glob eagerly, so a lake without copilot data must not define them).
+    v=""
+    for t in copilot_events copilot_checkpoints copilot_session_files copilot_session_refs copilot_artifacts; do
+      if find "{{lake}}/$t" -name '*.parquet' -print -quit 2>/dev/null | grep -q .; then
+        v="$v CREATE OR REPLACE VIEW $t AS SELECT * FROM read_parquet('{{lake}}/$t/**/*.parquet', hive_partitioning=true, union_by_name=true);"
+      else
+        v="$v DROP VIEW IF EXISTS $t;"
+      fi
+    done
+    {{duckdb}} "{{db}}" -c "$v"
 
 # W7 correction mining. Rebuilds correction_candidates (four detectors, precision-first),
 # operator_messages (G-recall-floor denominator: metadata-only, flagged = also a candidate
@@ -374,6 +427,7 @@ test:
     export VARVE_CC_ROOT="{{repo}}/tests/fixtures/cc"
     export VARVE_PI_ROOT="{{repo}}/tests/fixtures/pi"
     export VARVE_OPENCODE_DB="$tmp/opencode.db"
+    export VARVE_COPILOT_ROOT="$tmp/copilot"
     export VARVE_ATTRIBUTION="{{repo}}/adapters/attribution.example.csv"
     export VARVE_ADJUDICATIONS="$tmp/no_adjudications.jsonl"
     export VARVE_WORKSHEET="$tmp/no_worksheet.jsonl"
@@ -384,12 +438,18 @@ test:
       -c "INSTALL sqlite; LOAD sqlite; ATTACH '$VARVE_OPENCODE_DB' AS oc (TYPE sqlite);" \
       -f "{{repo}}/tests/fixtures/opencode_seed.sql"
 
+    echo "varve test: seeding synthetic copilot fixture (events.jsonl + session-store.db)" >&2
+    cp -r "{{repo}}/tests/fixtures/copilot" "$VARVE_COPILOT_ROOT"
+    {{duckdb}} :memory: \
+      -c "INSTALL sqlite; LOAD sqlite; ATTACH '$VARVE_COPILOT_ROOT/session-store.db' AS cpdb (TYPE sqlite);" \
+      -f "{{repo}}/tests/fixtures/copilot_seed.sql"
+
     echo "varve test: full backfill over the synthetic fixture" >&2
     just backfill
 
     echo "varve test: asserting every runtime actually produced rows (a" >&2
     echo "  silently-skipped adapter would otherwise pass unnoticed)" >&2
-    for rt in claude-code pi opencode; do
+    for rt in claude-code pi opencode copilot; do
       n="$(just sql -noheader -list -c "SELECT count(*) FROM sessions WHERE runtime='$rt';")"
       echo "  $rt: $n session(s)" >&2
       if [ "${n:-0}" -lt 1 ]; then
@@ -402,6 +462,13 @@ test:
       echo "FAIL: correction_candidates is empty -- the fixture no longer trips" >&2
       echo "      a W7 detector (mine's correction_candidates view creation" >&2
       echo "      requires at least one row; see justfile _views comment)" >&2
+      exit 1
+    fi
+    # copilot: a denied permission must surface as decision='denied' AND trip D1;
+    # the DB-only session (no events.jsonl) must still reach lexical mining.
+    cp="$(just sql -noheader -list -c "SELECT (SELECT count(*) FROM tool_calls WHERE runtime='copilot' AND decision='denied') || ' ' || (SELECT count(*) FROM correction_candidates WHERE runtime='copilot');")"
+    if [ "$cp" != "1 3" ]; then
+      echo "FAIL: copilot denied/candidates = '$cp', want '1 3'" >&2
       exit 1
     fi
     # session-copy.jsonl repeats lines of session.jsonl under a later-starting,
