@@ -176,7 +176,13 @@ CREATE OR REPLACE TABLE _um AS
   SELECT message_id, session_id, timestamp AS ts, 'opencode' AS runtime,
          content AS raw_txt, false AS has_tool_result, NULL::varchar AS tool_result_txt
   FROM _lk_messages
-  WHERE runtime = 'opencode' AND role = 'user' AND content IS NOT NULL;
+  WHERE runtime = 'opencode' AND role = 'user' AND content IS NOT NULL
+  UNION ALL BY NAME
+  -- vibe: plain-text content from messages.jsonl.
+  SELECT message_id, session_id, timestamp AS ts, 'vibe' AS runtime,
+         content AS raw_txt, false AS has_tool_result, NULL::varchar AS tool_result_txt
+  FROM _lk_messages
+  WHERE runtime = 'vibe' AND role = 'user' AND content IS NOT NULL;
 
 -- Operator body (interrupt marker stripped) + the noise flag (the NOISE EXCLUSION list
 -- documented in the header). `is_operator` = genuine typed operator speech.
@@ -213,7 +219,11 @@ CREATE OR REPLACE TABLE _asst AS
   UNION ALL BY NAME
   SELECT message_id, session_id, timestamp AS ts, 'opencode' AS runtime, content AS atxt
   FROM _lk_messages
-  WHERE runtime = 'opencode' AND role = 'assistant' AND content IS NOT NULL;
+  WHERE runtime = 'opencode' AND role = 'assistant' AND content IS NOT NULL
+  UNION ALL BY NAME
+  SELECT message_id, session_id, timestamp AS ts, 'vibe' AS runtime, content AS atxt
+  FROM _lk_messages
+  WHERE runtime = 'vibe' AND role = 'assistant' AND content IS NOT NULL;
 DROP TABLE _cc_asst_arr;
 
 -- Draft context per user message: nearest PRECEDING assistant message that carries text
@@ -298,7 +308,7 @@ CREATE OR REPLACE TABLE _d1 AS
     json_object('marker', 'decision_' || tc.decision, 'source', 'decision_column') AS features,
     NULL::varchar AS model_id
   FROM _lk_tool_calls tc
-  WHERE tc.runtime = 'opencode'
+  WHERE tc.runtime IN ('opencode', 'vibe')
     AND lower(coalesce(tc.decision, '')) IN ('rejected', 'denied', 'declined', 'reject', 'deny');
 
 -- D2 -- interrupt-then-redirect (Claude Code only; opencode records no interrupt marker).
@@ -496,7 +506,7 @@ SELECT
   j ->> 'note'                                            AS note,
   TRY_CAST(j ->> 'adjudicated_at' AS TIMESTAMP)           AS adjudicated_at
 FROM read_json_objects(getvariable('adjudications'),
-       format = 'newline_delimited', ignore_errors = true) t(j)
+       format = 'newline_delimited', ignore_errors = true, maximum_object_size = 10000000) t(j)
 WHERE (j ->> 'candidate_id') IS NOT NULL;
 
 -- Promote confirmed candidates. channel='mined' + adjudication provenance. The withdrawn

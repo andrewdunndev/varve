@@ -42,11 +42,12 @@
 CREATE OR REPLACE TABLE _pi_raw AS
 SELECT * FROM read_json(
   getvariable('pi_source'),
-  format              = 'newline_delimited',
-  union_by_name       = true,
-  ignore_errors       = true,
-  filename            = true,
-  maximum_object_size = 100000000
+  format                  = 'newline_delimited',
+  union_by_name           = true,
+  ignore_errors           = true,
+  filename                = true,
+  maximum_object_size     = 100000000,
+  map_inference_threshold = -1
 );
 
 -- Header line per file: the only place carrying session id + cwd + version.

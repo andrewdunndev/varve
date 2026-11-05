@@ -32,11 +32,12 @@
 CREATE OR REPLACE TABLE _cc_raw AS
 SELECT * FROM read_json(
   getvariable('cc_source'),
-  format             = 'newline_delimited',
-  union_by_name      = true,
-  ignore_errors      = true,
-  filename           = true,
-  maximum_object_size = 100000000
+  format                  = 'newline_delimited',
+  union_by_name           = true,
+  ignore_errors           = true,
+  filename                = true,
+  maximum_object_size     = 100000000,
+  map_inference_threshold = -1
 );
 
 -- ---------------------------------------------------------------------------
