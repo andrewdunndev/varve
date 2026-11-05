@@ -2,13 +2,15 @@
 --   do agents enter retry loops (repeated calls after failure, including resubmitting
 --   the exact same arguments)?
 -- METRIC:
---   1. MCP server error and permission-denial rates
---   2. Tool-level error profiles (tools with >= 3 calls)
---   3. Retry sequences: sequences of calls to the same tool within a session,
+--   1. MCP server failure and permission-denial rates
+--   2. Tool-level error profiles (tools with >= 3 calls, ranked by failure count)
+--   3. Retry sequences: consecutive calls to the same tool within a session,
 --      tracking recoveries, repeated failures, and identical argument resubmissions
 --      (stuck loop indicator).
 -- CAVEATS: Reads mcp_server / mcp_tool columns (populated by the Copilot adapter;
---   falls back to prefix-parsed tool_name for other runtimes).
+--   falls back to prefix-parsed tool_name for other runtimes). Identifies failures
+--   via runner decision ('error', 'rejected') as well as standard MCP payload flags
+--   (isError = true, success = false).
 -- Usage: just sql -f queries/mcp_tool_retries.sql
 
 CREATE OR REPLACE TEMP VIEW _mcp_calls AS
@@ -16,10 +18,18 @@ SELECT
   runtime,
   session_id,
   started_at,
-  coalesce(mcp_server, regexp_extract(tool_name, '^([^-_]+)[-_]', 1), 'default') AS server,
-  coalesce(mcp_tool, regexp_replace(tool_name, '^[^-_]+[-_]', ''), tool_name)     AS tool,
+  coalesce(nullif(mcp_server, ''), nullif(regexp_extract(tool_name, '^([^-_]+)[-_]', 1), ''), 'core') AS server,
+  coalesce(nullif(mcp_tool, ''), nullif(regexp_replace(tool_name, '^[^-_]+[-_]', ''), ''), tool_name)     AS tool,
   decision,
-  error_code,
+  CASE
+    WHEN decision IN ('error', 'rejected') THEN true
+    WHEN json_valid(result_text) AND (
+      coalesce(try_cast(result_text::json->>'isError' AS boolean), false) = true OR
+      coalesce(try_cast(result_text::json->>'success' AS boolean), true) = false OR
+      coalesce(try_cast(result_text::json->'activation'->>'success' AS boolean), true) = false
+    ) THEN true
+    ELSE false
+  END AS is_error,
   error_message,
   arguments,
   md5(coalesce(arguments, '')) AS args_hash
@@ -30,10 +40,10 @@ WHERE mcp_server IS NOT NULL OR mcp_tool IS NOT NULL OR runtime = 'copilot';
 SELECT
   server,
   count(*)                                                                     AS total_calls,
-  count(*) FILTER (WHERE decision = 'completed')                               AS success_calls,
-  count(*) FILTER (WHERE decision = 'error')                                   AS error_calls,
+  count(*) FILTER (WHERE NOT is_error AND decision <> 'denied')                AS success_calls,
+  count(*) FILTER (WHERE is_error)                                             AS error_calls,
   count(*) FILTER (WHERE decision = 'denied')                                  AS denied_calls,
-  round(100.0 * count(*) FILTER (WHERE decision = 'error') / count(*), 1)      AS error_pct,
+  round(100.0 * count(*) FILTER (WHERE is_error) / count(*), 1)                AS error_pct,
   round(100.0 * count(*) FILTER (WHERE decision = 'denied') / count(*), 1)     AS denial_pct
 FROM _mcp_calls
 GROUP BY ALL
@@ -44,9 +54,9 @@ SELECT
   server,
   tool,
   count(*)                                                                     AS total_calls,
-  count(*) FILTER (WHERE decision = 'error')                                   AS error_calls,
+  count(*) FILTER (WHERE is_error)                                             AS error_calls,
   count(*) FILTER (WHERE decision = 'denied')                                  AS denied_calls,
-  round(100.0 * count(*) FILTER (WHERE decision = 'error') / count(*), 1)      AS error_pct
+  round(100.0 * count(*) FILTER (WHERE is_error) / count(*), 1)                AS error_pct
 FROM _mcp_calls
 GROUP BY ALL
 HAVING count(*) >= 3
@@ -60,13 +70,10 @@ WITH seq AS (
     server,
     tool,
     started_at,
-    decision,
-    error_message,
+    is_error,
     args_hash,
-    lag(decision) OVER w                                                       AS prev_decision,
-    lag(args_hash) OVER w                                                      AS prev_args_hash,
-    lag(error_message) OVER w                                                  AS prev_error,
-    row_number() OVER w                                                        AS seq_no
+    lag(is_error) OVER w                                                       AS prev_error,
+    lag(args_hash) OVER w                                                      AS prev_args_hash
   FROM _mcp_calls
   WINDOW w AS (PARTITION BY session_id, server, tool ORDER BY started_at)
 )
@@ -74,11 +81,11 @@ SELECT
   server,
   tool,
   count(*)                                                                     AS total_retries,
-  count(*) FILTER (WHERE prev_decision = 'error' AND decision = 'completed')   AS recovered,
-  count(*) FILTER (WHERE prev_decision = 'error' AND decision = 'error')       AS repeated_errors,
-  count(*) FILTER (WHERE prev_decision = 'error' AND args_hash = prev_args_hash AND args_hash <> md5('')) AS resubmitted_same_args
+  count(*) FILTER (WHERE prev_error AND NOT is_error)                          AS recovered,
+  count(*) FILTER (WHERE prev_error AND is_error)                              AS repeated_errors,
+  count(*) FILTER (WHERE prev_error AND is_error AND args_hash = prev_args_hash AND args_hash <> md5('')) AS resubmitted_same_args
 FROM seq
-WHERE prev_decision IS NOT NULL
+WHERE prev_error IS NOT NULL
 GROUP BY ALL
 ORDER BY repeated_errors DESC, total_retries DESC
 LIMIT 30;

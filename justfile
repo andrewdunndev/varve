@@ -471,6 +471,33 @@ test:
       echo "FAIL: copilot denied/candidates = '$cp', want '1 3'" >&2
       exit 1
     fi
+    # copilot mcp retries: 2 retry turns on WriteSource -- 1 repeated failure with same
+    # arguments (resubmitted defective), followed by 1 successful recovery.
+    retries="$(just sql -noheader -list -c "
+      WITH calls AS (
+        SELECT session_id, coalesce(nullif(mcp_server, ''), 'core') AS s, coalesce(nullif(mcp_tool, ''), tool_name) AS t,
+               started_at, md5(coalesce(arguments, '')) AS h,
+               CASE
+                 WHEN decision IN ('error', 'rejected') THEN true
+                 WHEN json_valid(result_text) AND (
+                   coalesce(try_cast(result_text::json->>'isError' AS boolean), false) = true OR
+                   coalesce(try_cast(result_text::json->>'success' AS boolean), true) = false OR
+                   coalesce(try_cast(result_text::json->'activation'->>'success' AS boolean), true) = false
+                 ) THEN true
+                 ELSE false
+               END AS err
+        FROM tool_calls WHERE runtime = 'copilot'
+      ),
+      seq AS (
+        SELECT s, t, err, lag(err) OVER w AS prev_err, lag(h) OVER w AS prev_h, h
+        FROM calls WINDOW w AS (PARTITION BY session_id, s, t ORDER BY started_at)
+      )
+      SELECT count(*) FILTER (WHERE prev_err AND err AND h = prev_h) || ' ' || count(*) FILTER (WHERE prev_err AND NOT err)
+      FROM seq WHERE prev_err IS NOT NULL;")"
+    if [ "$retries" != "1 1" ]; then
+      echo "FAIL: copilot mcp retries = '$retries', want '1 1'" >&2
+      exit 1
+    fi
     # session-copy.jsonl repeats lines of session.jsonl under a later-starting,
     # lower-sorting session id; the copy must count once, in the earliest-started session.
     m="message_uuid = '33333333-3333-3333-3333-333333333333'"
