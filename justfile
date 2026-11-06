@@ -51,10 +51,10 @@ pi_source   := pi_root + "/**/*.jsonl"
 # opencode: a single SQLite db (WAL). Read via a read-only APFS clone snapshot so
 # the live store is never written or locked (see _pipeline).
 opencode_db := env_var_or_default("VARVE_OPENCODE_DB", env_var("HOME") + "/.local/share/opencode/opencode.db")
-# Google Antigravity: per-conversation JSONL transcripts under
+# Google Antigravity (CLI / IDE / Desktop): per-conversation JSONL transcripts under
 # brain/<id>/.system_generated/logs/transcript*.jsonl.
-agy_root    := env_var_or_default("VARVE_AGY_ROOT", env_var("HOME") + "/.gemini/antigravity-cli")
-agy_source  := agy_root + "/brain/*/.system_generated/logs/transcript*.jsonl"
+agy_root    := env_var_or_default("VARVE_AGY_ROOT", env_var("HOME") + "/.gemini")
+agy_source  := agy_root + "/**/brain/*/.system_generated/logs/transcript*.jsonl"
 
 # VARVE_DUCKDB overrides (e.g. a brew duckdb when mise is not installed).
 duckdb := env_var_or_default("VARVE_DUCKDB", "mise exec -- duckdb")
@@ -157,12 +157,12 @@ _pipeline mode:
     else
       echo "varve: skip opencode -- no db at {{opencode_db}}" >&2
     fi
-    # ---- antigravity (brain/<id>/.system_generated/logs/transcript*.jsonl) ----
-    if [ -d "{{agy_root}}/brain" ] && find "{{agy_root}}/brain" -name 'transcript*.jsonl' -type f -print -quit | grep -q .; then
-      find "{{agy_root}}/brain" -name 'transcript*.jsonl' -type f -exec stat "${stat_fmt[@]}" {} + >> "$inv"
+    # ---- antigravity (CLI / IDE / Desktop brain/<id>/.system_generated/logs/transcript*.jsonl) ----
+    if [ -d "{{agy_root}}" ] && find "{{agy_root}}" -path '*/brain/*/.system_generated/logs/transcript*.jsonl' -type f -print -quit 2>/dev/null | grep -q .; then
+      find "{{agy_root}}" -path '*/brain/*/.system_generated/logs/transcript*.jsonl' -type f -exec stat "${stat_fmt[@]}" {} + >> "$inv" 2>/dev/null || true
       adapters+=(-f "{{repo}}/adapters/antigravity.sql")
     else
-      echo "varve: skip antigravity -- no transcripts at {{agy_root}}/brain" >&2
+      echo "varve: skip antigravity -- no transcripts at {{agy_root}}" >&2
     fi
     # Derive + write affected partitions + refresh manifest, one DuckDB session.
     # Large-corpus safety: an in-memory session cannot spill without a
