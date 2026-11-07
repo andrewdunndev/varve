@@ -1,10 +1,8 @@
 -- QUESTION: A session that blows past the recycle threshold -- is that a genuine
 --   efficiency problem, or is it coordinating dispatched work (and therefore fine)?
---   The recycle-threshold sweep (the context-economics campaign) found the sub-200K
---   discipline fights real task shapes (the author's median session peak sits well
---   past both candidate thresholds; the recoverable-spend upper bound roughly
---   halves strict->loose, ~$3,100 vs ~$1,450 per $10K of model spend -- measured
---   proportions on a round hypothetical; absolute totals unpublished). Reframe: a high threshold
+--   A recycle-threshold sweep found the sub-200K discipline fights real task shapes
+--   (median session peaks can sit well past both candidate thresholds, and the
+--   recoverable-spend upper bound roughly halves strict->loose). Reframe: a high threshold
 --   (300K) is a REVIEW TRIGGER, not a cap, and only tells you something when paired
 --   with the real lever -- dispatch. This query operationalizes that split as a
 --   standing diagnostic.
@@ -54,11 +52,11 @@
 --     'fat_inline' session may have been the right call for its task (e.g. a single
 --     large read that genuinely had no dispatchable sub-unit).
 -- CAVEATS: PER-CALL context, not the harness UI counter (recycle.sql caveat).
---   Unpriced (Duo $0) calls contribute zero excess by construction. wall_min is
+--   Unpriced (subscription-billed, $0) calls contribute zero excess by construction. wall_min is
 --   elapsed time from message timestamps (session_shape.sql caveat: includes idle
 --   gaps, not active time). Console authoritative on absolute cost. TEMP tables are
 --   in-memory (no lake write; read-only safe).
--- context-economics campaign. Run: just sql -f queries/fat_inline.sql
+-- Recycle-threshold diagnostic. Run: just sql -f queries/fat_inline.sql
 CREATE TEMP TABLE per_call AS
   WITH thr AS (
     SELECT coalesce(try_cast(getvariable('t1') AS BIGINT), 300000) AS t

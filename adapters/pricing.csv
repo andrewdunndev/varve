@@ -8,7 +8,7 @@
 # opus-4-6 / opus-4-5 added W2 (2026-07-06): Anthropic Opus versions that appear
 # only via the opencode corpus (not in ~/.claude), priced at the Opus-tier rate
 # (identical to 4-7/4-8). This lets opencode's cost:0 defense recompute the true-
-# zero anthropic rows; GitLab-Duo subscription models stay unpriced ($0) by design.
+# zero anthropic rows; subscription-billed models (no per-token price) stay unpriced ($0) by design.
 # fable-5-1 added 2026-09-02: Anthropic release, pricing identical to fable-5.
 # opus-5-5 / sonnet-5-5 added 2026-10-02: Anthropic release, first-party rates
 # ($4/$20 and $2/$10 per MTok); cache_creation is the 5-minute write, 1.25x input.

@@ -41,7 +41,7 @@ workflow:
 
 # mise provisions duckdb + just from mise.toml. Entrypoint override clears the
 # image's default `mise shell` ENTRYPOINT so GitLab Runner's `bash -c
-# "<script>"` invocation works (same shape as dunn.dev/cv's typst-job).
+# "<script>"` invocation works.
 .mise-job: &mise-job
   image:
     name: jdxcode/mise:debian@sha256:84bb97455fe918f3b805520f9a7b1fd3060085a4ccc757a3ab17fa2e946df46e

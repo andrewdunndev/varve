@@ -18,8 +18,8 @@
 --   * Repricing assumes EQUAL token counts and EQUAL outcome quality -- it is the
 --     price gap if the cheaper tier did the identical work, NOT a claim the cheaper
 --     tier would succeed. Whether it does is a benchmark question, not this query's.
---   * The W5 finding that cheap tiers (sonnet+haiku) are ~0.7% of spend is the
---     ADOPTION BASELINE this headroom is measured against.
+--   * The current share of spend on cheap tiers (sonnet+haiku), from
+--     model_economics.sql, is the ADOPTION BASELINE this headroom is measured against.
 -- CAVEATS: Tier by model-name prefix (model_economics.sql convention); fable is a
 --   tier of its own (priced ABOVE opus), so (b) is a genuine cheaper-tier reprice.
 --   Claude Code only -- opencode's cost is inline and its dispatch marker is a

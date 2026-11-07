@@ -219,7 +219,7 @@ a lake source).
 5. n-of-1 longitudinal framing with model version as a controlled covariate.
 
 **Honest caveats.** The team extension is the *least* novel part. The G3 saturation
-criterion (RFC-0004 §d) is hypothesized-novel -- the prior-art sweep did not cover that
+criterion (PRD G3) is hypothesized-novel -- the prior-art sweep did not cover that
 exact claim; verify before any external positioning.
 
 **Prior art** (nearest neighbors, none does the above): PRELUDE/CIPHER (Gao et al.,
@@ -250,7 +250,7 @@ distillation (manual, unmeasured -- "Beyond the Prompt", 2025).
 - Related: ADR-0004 (confidentiality: local-only pointers I5, no-identifier rule I4,
   embedding exclusion, LLM-labeling boundary), RFC-0001 (content inline -- the
   decision that makes mining possible; this RFC resolves its open `correction_events`
-  DDL), RFC-0004 §d (G3 post-training instrument).
+  DDL), PRD G3 (post-training instrument).
 - In this repo: `adapters/corrections.sql` (candidates + events adapter),
   `adapters/divergence_taxonomy.csv` (voicing-derived PRIOR; canonical taxonomy is a
   phase-3 output), `queries/corrections_candidates.sql` + `queries/adjudication_sample.sql`.

@@ -1,14 +1,14 @@
-# ADR-NNNN -- <short title of decision>
+# ADR-NNNN: <short title of decision>
 
 - **Status:** proposed | accepted | superseded by ADR-XXXX
 - **Date:** YYYY-MM-DD
-- **Deciders:** operator + session
+- **Deciders:** maintainer
 
 ## Context
 
 The forces at play: the problem, the constraints, the evidence. State facts and
-numbers, not opinions. This section should let a reader who has never seen the
-project understand why a decision was needed.
+numbers, not opinions. A reader who has never seen the project should understand
+why a decision was needed.
 
 ## Decision
 

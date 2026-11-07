@@ -12,13 +12,13 @@
 --     (3) tool-name mix: share of tool_calls by tool_name (NAMES ONLY -- instrument
 --         metadata, not content; case/vocabulary differs by runtime, left verbatim).
 --     (4) model-tier mix: call_share and cost_share by tier (model_economics.sql
---         tiering: opus/fable/sonnet/haiku/duo/other).
+--         tiering: opus/fable/sonnet/haiku/other).
 --     (5) sidechain share (Claude Code only): call and cost share carried by
 --         is_sidechain traffic, per estate.
--- THIS IS THE W6 v2 INPUT. RFC-0003 derives synthetic task shapes from exactly these
---   distributions. v2 GENERATION STAYS GATED on RFC-0003's open questions (abstraction
---   fidelity vs leak risk, audit procedure, sufficient feature set) -- this query only
---   produces the priors; it generates nothing.
+-- THIS IS THE W6 v2 INPUT. Benchmark synthesis would derive synthetic task shapes
+--   from exactly these distributions. v2 GENERATION STAYS GATED on its open questions
+--   (abstraction fidelity vs leak risk, audit procedure, sufficient feature set) --
+--   this query only produces the priors; it generates nothing.
 -- CAVEATS: ZERO content -- no message text, no cwd, no session_id leaves this query;
 --   every row is an aggregate over estate/runtime (+ tool_name or tier). A "turn" =
 --   one operator (user) message; assistant/tool turns are not counted as turns.
@@ -124,7 +124,6 @@ WITH tiered AS (
       WHEN a.model LIKE 'claude-fable%'  THEN 'fable'
       WHEN a.model LIKE 'claude-sonnet%' THEN 'sonnet'
       WHEN a.model LIKE 'claude-haiku%'  THEN 'haiku'
-      WHEN a.model LIKE 'duo-%'          THEN 'duo'
       ELSE 'other' END                                              AS tier
   FROM api_calls a JOIN sessions s USING (session_id)
 )

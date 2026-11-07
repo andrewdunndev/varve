@@ -16,7 +16,7 @@ Definitions below are the metric definitions from each file's header (kept in sy
 | `dispatch_ratio.sql` | Coordinate-by-default adherence: subagent vs main-thread share? | Claude Code ONLY. Dispatch unit = session; subagent = `is_sidechain=true`. `share_X = subagent_X/total_X` for calls/tokens/cost. Weekly trend + FAT-INLINE flag (cost >= threshold, default $20, and zero subagent traffic). opencode/pi excluded -- no real dispatch marker (see below). |
 | `recycle.sql` | Context discipline: do calls run over the 120K/180K redline, and what does it cost? | Effective context/call = `input + cache_read`. Per session: `max_eff_ctx`; `pct_over_t1`/`pct_over_t2` = share of calls above each threshold (defaults 120K/180K); `redline_cost_usd` = sum(cost_usd) of calls above 120K. Per-estate p50/p90/max + redline share. Thresholds parameterized. |
 | `session_shape.sql` | What is a typical session's shape; which are the expensive outliers? | Per session: `n_calls`; `wall_min` = `date_diff('second', min, max)` over messages /60; `cost_usd`. Per (estate, runtime) p50/p90/max of each; top-20-by-cost leaderboard with harness/campaign. |
-| `model_economics.sql` | Cost/session and cache efficiency by model; who runs cheap vs never leaves opus? | Per model: sessions, calls, cost, `cost_per_session`, `avg_cost_per_call`, `cache_hit_ratio`. Per (harness, campaign): `opus_cost_share`, `cheap_call_share` (sonnet/haiku), `duo_call_share`. Tier by model-name prefix. |
+| `model_economics.sql` | Cost/session and cache efficiency by model; who runs cheap vs never leaves opus? | Per model: sessions, calls, cost, `cost_per_session`, `avg_cost_per_call`, `cache_hit_ratio`. Per (harness, campaign): `opus_cost_share`, `cheap_call_share` (sonnet/haiku). Tier by model-name prefix. |
 | `subagent_economics.sql` | For CC, what do sidechains cost vs main thread over time? | CC only. Sidechain = message `is_sidechain=true`. Per week: `main_cost`/`sub_cost`, `sub_cost_share`, `sub_call_share`, tokens by role, `cache_read:input`. ROLLUP totals row. |
 | `corrections_candidates.sql` (W7) | How many correction candidates per detector/day/estate; is the lexical marker list too loose? | count of `correction_candidates` rows per detector x {runtime, day, estate/harness}. Volume-sanity gate: lexical hits as a % of a runtime's user messages, flagged if > 5%. Pre-adjudication (volume, not precision). |
 | `adjudication_sample.sql` (W7) | The stratified sample the operator adjudicates for G-precision. | Up to 50 candidates per detector ("50 or all"), deterministic sample (`ORDER BY md5(candidate_id)`). Emits loci (`lake:` form), model_id, attribution, features, a truncated corrective-message EXCERPT, and a fill-in JSONL skeleton. Fabricates no precision numbers. |
@@ -29,8 +29,8 @@ Definitions below are the metric definitions from each file's header (kept in sy
   variable *before* the file (the `-c` runs before the `-f`), e.g.
   `just sql -c "SET VARIABLE fat_threshold='50'" -f queries/dispatch_ratio.sql`.
 - **Cost.** `cost_usd` is computed from tokens x the pricing seed (`costUSD` is absent
-  from the corpus, RFC-0001); the console is authoritative. GitLab-Duo subscription
-  models (opencode) are genuinely $0 and carry calls/tokens but no cost.
+  from the corpus, RFC-0001); the console is authoritative. Subscription-billed
+  models (opencode; no per-token price) are $0 and carry calls/tokens but no cost.
 - **tokens** where used unqualified = `input+output+cache_read+cache_write` (all four
   classes) and is cache_read-dominated, so cost shares are more load-bearing than
   token shares.
@@ -47,10 +47,10 @@ pairs `dispatch_ratio.sql` with `subagent_economics.sql`.
 
 ## W6 v1 -- counterfactuals + design priors
 
-The G4 counterfactual + design-prior slice (PRD W6 v1). Per RFC-0003 this is plain
+The G4 counterfactual + design-prior slice (PRD goal G4). This is plain
 SQL over `api_calls` -- NOT benchmark synthesis: nothing is generated and no content
 leaves the machine. v2 (generating synthetic task shapes from the design priors)
-stays GATED on RFC-0003's open questions; these files only produce the inputs.
+stays GATED on its open questions; these files only produce the inputs.
 
 | File | Question | Metric definition (summary) |
 |------|----------|-----------------------------|
@@ -63,28 +63,26 @@ per-token rates from `adapters/pricing.csv` the way the adapters do (`read_csv(.
 comment='#')`), resolving the path via `coalesce(getvariable('repo'), '.')` -- so a
 plain `just sql -f queries/<file>.sql` from the repo root resolves it against the
 working directory, and setting `repo` (as `just recon-pi` does) also works. No prices
-are hardcoded; unpriced (Duo $0) models carry no rate and contribute no delta.
+are hardcoded; unpriced (subscription-billed, $0) models carry no rate and contribute no delta.
 
 **Assumption blocks** (each file's header carries the full text; the load-bearing line):
 - `counterfactual_recycle.sql` -- UPPER BOUND: it does not model the re-orientation
   cost of recycling (a fresh session must re-read the dropped context), holds
-  output/cache_write cost fixed, and assumes work quality is unaffected. The
-  context-economics campaign owns turning the bound into a target.
+  output/cache_write cost fixed, and assumes work quality is unaffected. Turning
+  the bound into a target is a separate, benchmark question.
 - `counterfactual_tier.sql` -- HEADROOM, not a claim: repricing assumes equal token
   counts and equal outcome quality; it is the price gap IF the cheaper tier did the
-  identical work, not a claim it would succeed. The W5 finding that cheap tiers are
-  ~0.7% of spend is the adoption baseline.
-- `design_priors.sql` -- the W6 v2 input (RFC-0003); v2 generation stays gated. ZERO
+  identical work, not a claim it would succeed. The current share of spend on cheap
+  tiers (`model_economics.sql`) is the adoption baseline.
+- `design_priors.sql` -- the W6 v2 input (benchmark synthesis); v2 generation stays gated. ZERO
   content: no message text, cwd, or session_id in any output row -- estate/runtime
   (+ tool_name or tier) aggregates only.
 
-## context-economics campaign -- fat-inline diagnostic
+## Recycle-threshold diagnostic -- fat-inline
 
-The recycle-threshold sweep found sub-200K discipline fights real task shapes
-(the author's median session peak sits well past both candidate thresholds;
-the recoverable-spend upper bound roughly halves strict->loose, about $3,100
-vs $1,450 per $10K of model spend -- measured proportions on a round
-hypothetical, absolute totals deliberately unpublished). Reframe: a peak above `t1` is a REVIEW TRIGGER, not a verdict --
+A recycle-threshold sweep found sub-200K discipline fights real task shapes
+(median session peaks can sit well past both candidate thresholds, and the
+recoverable-spend upper bound roughly halves strict->loose). Reframe: a peak above `t1` is a REVIEW TRIGGER, not a verdict --
 it only means something once you check whether the session dispatched.
 `fat_inline.sql` makes that check standing.
 

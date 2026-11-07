@@ -35,9 +35,9 @@
 --
 -- Cost (cost:0 defense, ADR-0006). Assistant data.cost is authoritative when
 -- present and > 0 -> use it. Some rows record cost 0 (the historic opencode
--- discrepancy, and GitLab-Duo subscription models that are genuinely $0). When
+-- discrepancy, and subscription-billed models with no per-token price). When
 -- the inline cost is 0/absent AND the model is in the pricing seed, compute from
--- tokens x seed. When 0/absent AND unpriced (Duo/gpt/gemini not in the seed),
+-- tokens x seed. When 0/absent AND unpriced (subscription/gpt/gemini not in the seed),
 -- keep 0 and flag unpriced_model -- fabricating a per-token cost for a
 -- subscription model would be wrong. (RFC-0001 records this.)
 --

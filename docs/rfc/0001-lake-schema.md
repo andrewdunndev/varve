@@ -156,7 +156,7 @@ marts: deferred (see open questions).
 
 **Reconciliation (resolved gate, ADR-0006).** Per-model token totals by class and
 computed cost reconcile against `ccusage daily --json --mode auto`. Note ccusage v20
-is a multi-agent aggregator (it also reports opencode/codex/gemini/gitlab-duo, and
+is a multi-agent aggregator (it also reports opencode/codex/gemini and other agents, and
 Claude models seen only through other agents), so reconcile model-for-model against
 the Claude Code model ids varve emits. Stated tolerance and measured deltas: see the
 build report and `queries/reconcile_ccusage.sql`.
@@ -177,9 +177,8 @@ adapter at ingest.
 token resolution) and pricing are identical across runtimes, so they moved to
 `sql/prelude.sql` (seeds + `varve_harness()`/`varve_campaign()` macros) loaded once
 before any adapter. The W1 Claude Code adapter was refactored onto the macros; a
-frozen-source A/B proved the refactor byte-identical (65 sessions / 144,232 msgs /
-41,412 api_calls / 46,830 tool_calls / priced totals identical to the cent --
-OLD == NEW).
+frozen-source A/B proved the refactor byte-identical (row counts per table and
+priced totals identical to the cent, OLD == NEW).
 
 **Per-runtime staging, unioned.** Each adapter builds `_<rt>_sessions/_messages/
 _api_calls/_tool_calls` + a `_<rt>_files` map; `sql/stage.sql` stubs any absent
@@ -198,17 +197,16 @@ tool timing anywhere).
 
 **opencode cost:0 defense.** Assistant `cost` is trusted when > 0. When 0/absent:
 compute from the pricing seed if the model is seeded; else keep 0 and flag
-`unpriced_model`. Most cost:0 rows are GitLab-Duo subscription models
-(`duo-chat-*`/`duo-workflow-*`) that are genuinely \$0 -- fabricating a per-token
-cost for them would be wrong, so they stay 0 + unpriced. The seed was extended
-with the opencode-only Anthropic Opus versions (`claude-opus-4-6`/`4-5`, Opus-tier
-rate) so the defense recomputes their 63 true-zero rows -- which resolve to \$0
-because those turns carry zero billable tokens (correct, not under-counted).
-Measured opencode volume: 1,626 sessions / 82,690 messages / 73,717 api_calls /
-89,684 tool_calls; inline-priced calls reconciled (Anthropic/OpenAI/Google), 66,989 unpriced
-calls (Duo subscription + non-seeded providers with inline cost).
+`unpriced_model`. Most cost:0 rows are subscription-billed models with no
+per-token price -- fabricating a per-token cost for them would be wrong, so they
+stay 0 + unpriced. The seed was extended with the opencode-only Anthropic Opus
+versions (`claude-opus-4-6`/`4-5`, Opus-tier rate) so the defense recomputes their
+true-zero rows -- which resolve to \$0 because those turns carry zero billable
+tokens (correct, not under-counted). Inline-priced calls reconciled
+(Anthropic/OpenAI/Google); unpriced calls are subscription-billed models plus
+non-seeded providers with inline cost.
 
-**opencode read is provably non-destructive.** The live SQLite store (WAL, ~2.8 GB)
+**opencode read is provably non-destructive.** The live SQLite store (WAL)
 is never attached directly. The justfile makes an APFS copy-on-write clone
 (`cp -c`, ~5 ms, no extra space) of `opencode.db` (+ `-wal`/`-shm`) and `ATTACH`es
 the clone `READ_ONLY`; the live `opencode.db` is byte-identical (sha256, size,

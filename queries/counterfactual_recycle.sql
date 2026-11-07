@@ -19,14 +19,14 @@
 --   * It does NOT model output-token changes -- output and cache_write cost are held
 --     fixed; only the input+cache_read excess is repriced.
 --   * It assumes work quality is unaffected by running leaner.
---   The context-economics campaign owns turning this bound into an achievable target.
+--   Turning this bound into an achievable target is a separate, benchmark question.
 -- CAVEATS: PER-CALL context, not the harness UI counter (recycle.sql caveat). The
 --   proportional excess allocation is a modeling choice: it prices the dropped tokens
 --   at the call's blended input/cache_read mix, not cache_read-first. Rates come from
 --   the seed (pricing.csv); Claude Code's stored cost_usd IS seed-computed so the
 --   estate is fully consistent, while opencode's cost_usd is its own inline value --
 --   a negligible inline-vs-seed drift rides into opencode's counterfactual. Unpriced
---   (Duo $0) calls contribute zero saving by construction, so redline_calls counts
+--   (subscription-billed, $0) calls contribute zero saving by construction, so redline_calls counts
 --   PRICED calls over threshold only (they are what the saving is drawn from).
 --   Console authoritative on absolute cost. TEMP table is in-memory (read-only safe).
 -- W6 v1. Run: just sql -f queries/counterfactual_recycle.sql

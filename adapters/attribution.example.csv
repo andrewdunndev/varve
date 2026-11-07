@@ -12,7 +12,7 @@
 # Empty campaign -> NULL. Keep the final '*' rule: it is the explicit unknown
 # bucket, and unmatched sessions land there instead of vanishing.
 priority,cwd_glob,estate,harness,campaign,note
-10,/home/me/gitlab.com/acme/*,work,{repo},{worktree},work namespace example
+10,/home/me/gitlab.com/acme/*,work,{repo},{worktree},one forge namespace example
 20,/home/me/gitlab.com/me-personal/*,personal,{repo},{worktree},personal namespace example
 30,/home/me/github.com/*,personal,{repo},{worktree},personal github example
 9999,*,unknown,unknown,,fallback / unmatched cwd
