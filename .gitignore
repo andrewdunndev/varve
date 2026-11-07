@@ -8,3 +8,6 @@ lake/
 *.parquet
 
 .DS_Store
+
+# CI artifact of the test recipe (compare with tests/golden).
+golden-out/

@@ -381,6 +381,30 @@ test:
       echo "      requires at least one row; see justfile _views comment)" >&2
       exit 1
     fi
+    # Every detector must fire on the fixture; a detector that goes dead fails here
+    # instead of silently yielding zero candidates. Each pair is detector|runtime.
+    for pair in tool_reject\|claude-code tool_reject\|opencode interrupt_redirect\|claude-code \
+                lexical\|claude-code lexical\|opencode rewrite\|claude-code; do
+      det="${pair%%|*}"; rt="${pair##*|}"
+      n="$(just sql -noheader -list -c "SELECT count(*) FROM correction_candidates WHERE detector='$det' AND runtime='$rt';")"
+      echo "  $det/$rt: $n candidate(s)" >&2
+      if [ "${n:-0}" -lt 1 ]; then
+        echo "FAIL: detector $det produced no candidate for $rt" >&2
+        exit 1
+      fi
+    done
+    # The AskUserQuestion clarify selection co-carries the rejection literal and must not fire D1.
+    n="$(just sql -noheader -list -c "SELECT count(*) FROM correction_candidates WHERE detector='tool_reject' AND message_uuid='c0000000-0000-0000-0000-000000000019';")"
+    if [ "$n" != "0" ]; then
+      echo "FAIL: the clarify carrier fired tool_reject" >&2
+      exit 1
+    fi
+    # Every noise marker in session-noise.jsonl is excluded: only the one typed message remains.
+    n="$(just sql -noheader -list -c "SELECT count(*) FROM operator_messages WHERE session_id='test-session-noise';")"
+    if [ "$n" != "1" ]; then
+      echo "FAIL: test-session-noise has $n operator message(s), want 1 (a noise rule stopped matching)" >&2
+      exit 1
+    fi
     # session-copy.jsonl repeats lines of session.jsonl under a later-starting,
     # lower-sorting session id; the copy must count once, in the earliest-started session.
     m="message_uuid = '33333333-3333-3333-3333-333333333333'"
@@ -392,17 +416,33 @@ test:
     fi
 
     echo "varve test: executing every queries/*.sql and mining/queries/*.sql against the fixture" >&2
+    # Output of each query, each lake table and the review document is written to
+    # golden-out/ (a CI artifact) and diffed against tests/golden/. Lines are sorted
+    # so a query without ORDER BY cannot flake the comparison.
+    gold="{{repo}}/golden-out"
+    rm -rf "$gold"; mkdir -p "$gold"
     fail=0
     for f in "{{repo}}"/queries/*.sql "{{repo}}"/mining/queries/*.sql; do
       echo "  -- $f" >&2
-      if ! just sql -c "SET VARIABLE repo='{{repo}}';" -f "$f" > /dev/null; then
+      case "$f" in
+        "{{repo}}"/mining/*) name="mining_$(basename "$f" .sql).csv" ;;
+        *) name="query_$(basename "$f" .sql).csv" ;;
+      esac
+      if ! just sql -csv -c "SET VARIABLE repo='{{repo}}';" -f "$f" | LC_ALL=C sort > "$gold/$name"; then
         echo "FAIL: $f did not execute cleanly against DuckDB" >&2
+        fail=1
+      fi
+    done
+    for t in sessions messages api_calls tool_calls correction_candidates operator_messages; do
+      if ! just sql -csv -c "SELECT * FROM $t ORDER BY ALL;" | LC_ALL=C sort > "$gold/table_$t.csv"; then
+        echo "FAIL: could not dump table $t" >&2
         fail=1
       fi
     done
 
     echo "varve test: just review (mining/review.sql)" >&2
     just review "$tmp/review.md" > /dev/null
+    sed -E 's/_Generated [0-9: -]+\./_Generated <ts>./' "$tmp/review.md" > "$gold/review.md"
 
     echo "varve test: just stats (snapshot, year-boundary streak, empty year, runtime filter)" >&2
     export VARVE_TODAY=2026-10-13
@@ -421,5 +461,17 @@ test:
     stats_tail $'1 session · 0 subagents\n2 prompts · 3 steps · 4.7k tokens · $0.00\n100.0% tool success · 2 active days · best streak 2 days' --year 2025
     stats_tail $'0 sessions · 0 subagents\n0 prompts · 0 steps · 0 tokens · $0.00\nn/a tool success · 0 active days · best streak 0 days' --year 2024
     stats_tail $'1 session · 0 subagents\n1 prompt · 1 step · 150 tokens · $0.00\n100.0% tool success · 1 active day · best streak 1 day' --year 2026 --runtime pi
+
+    echo "varve test: golden outputs (tests/golden)" >&2
+    if [ -n "${VARVE_GOLDEN_CAPTURE:-}" ]; then
+      echo "  capture mode: golden-out/ is the artifact, no comparison" >&2
+    elif [ ! -d "{{repo}}/tests/golden" ]; then
+      echo "FAIL: tests/golden is missing; capture golden-out/ from a CI run" >&2
+      fail=1
+    elif ! diff -ru "{{repo}}/tests/golden" "$gold" > "$tmp/golden.diff"; then
+      echo "FAIL: output differs from tests/golden (first 60 lines of the diff):" >&2
+      head -60 "$tmp/golden.diff" >&2
+      fail=1
+    fi
 
     exit $fail
