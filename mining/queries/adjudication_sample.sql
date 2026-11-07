@@ -43,23 +43,16 @@ SELECT
   s.features,
   'lake:' || s.session_id || '/' || s.message_uuid                    AS locus,          -- corrective msg
   'lake:' || s.session_id || '/' || coalesce(s.prior_assistant_uuid, '') AS draft_locus, -- corrected draft
-  -- truncated, whitespace-collapsed excerpt of the corrective message (LAKE-LOCAL ONLY):
-  -- the row's own text, else the text of the tool result it carries.
-  left(regexp_replace(
-    trim(regexp_replace(
-      coalesce(nullif(m.text, ''),
-               regexp_replace(c.result_txt, '^.*?the user said:\s*', ''),
-               m.text),
-      '^\[Request interrupted by user[^\]]*\]', '')),
-    '[[:space:]]+', ' ', 'g'), 240)                                    AS excerpt,
+  -- truncated, whitespace-collapsed excerpt of the corrective message (LAKE-LOCAL ONLY).
+  -- A locus outside operator_context (an opencode denied call) shows that message's own text.
+  left(regexp_replace(coalesce(oc.speech, trim(m.text)), '[[:space:]]+', ' ', 'g'), 240) AS excerpt,
   -- copy-paste, fill verdict + context_judgment (+ optional note = role-level gloss only)
   '{"candidate_id":"' || s.candidate_id
     || '","verdict":"","context_judgment":"","note":""}'               AS adjudication_line
 FROM _sample s
 JOIN messages m
   ON m.runtime = s.runtime AND m.session_id = s.session_id AND m.message_id = s.message_uuid
-LEFT JOIN (SELECT runtime, session_id, result_message_id, string_agg(result_text, chr(10)) AS result_txt
-           FROM tool_calls WHERE runtime = 'claude-code' AND result_message_id IS NOT NULL
-           GROUP BY runtime, session_id, result_message_id) c
-  ON c.runtime = s.runtime AND c.session_id = s.session_id AND c.result_message_id = s.message_uuid
+LEFT JOIN (SELECT runtime, session_id, message_id, min(speech) AS speech
+           FROM operator_context GROUP BY ALL) oc
+  ON oc.runtime = s.runtime AND oc.session_id = s.session_id AND oc.message_id = s.message_uuid
 ORDER BY s.detector, s.candidate_id;

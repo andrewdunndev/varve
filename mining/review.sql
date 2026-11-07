@@ -1,102 +1,75 @@
--- varve adjudication review renderer. Builds the review document
--- from the lake + the model-suggested worksheet, so the operator can adjudicate correction
--- candidates with the full prior draft and full corrective message in front of them
--- (context_judgment is largely un-inferable from a 240-char excerpt).
+-- varve adjudication review renderer. Builds the review document from the
+-- mined tables and the model-suggested worksheet, so the operator can adjudicate
+-- correction candidates with the full prior draft and full corrective message in
+-- front of them (context_judgment is largely un-inferable from a 240-char excerpt).
 --
--- Invoked by the justfile `review` recipe (through bin/duck), which then COPYs
--- stg_review_document to <data_home>/review_round1.md. Same idiom as mining/corrections.sql:
--- lake-local read views over the Parquet, a stg_ table the recipe writes out (COPY targets
--- are literals -- the recipe injects the output path).
+-- Run by `just review` through bin/duck, which then writes review_document out as
+-- markdown. Reads the generated views: messages, correction_candidates,
+-- operator_messages, operator_context, adjudications and adjudication_worksheet.
+--   adjudications           ledger JSONL in the data home. Used only to skip loci
+--                           already adjudicated, so a re-render shrinks as the
+--                           ledger grows.
+--   adjudication_worksheet  advisory JSONL, one object per line: candidate_id,
+--                           suggested_verdict, suggested_context_judgment, rationale,
+--                           suggested_by, suggested_at. Absent means no advisory.
 --
--- Variables (set by the recipe):
---   lake          : <data_home>/lake (read core Parquet + the mining tables)
---   adjudications : path to the JSONL adjudication ledger (operator data, outside the repo;
---                   the recipe guarantees the path EXISTS -- empty temp file when absent).
---                   Used ONLY to SKIP already-adjudicated loci so re-render is idempotent as
---                   the ledger grows.
---   worksheet     : path to the model-suggested worksheet JSONL (advisory; read with
---                   read_json_auto). The recipe guarantees the path EXISTS and is non-empty
---                   (priming a non-matching sentinel row when absent) so the advisory LEFT
---                   JOIN degrades gracefully to "no advisory" -- worksheet absence is non-fatal.
---
--- CONFIDENTIALITY (ADR-0004): this .sql holds ZERO transcript
--- content. Draft/message text is dereferenced from the LOCAL lake at run time and written
--- ONLY under the data home (the review_round1.md the recipe COPYs). Loci are the
--- non-identifying `lake:` form. Nothing here is printed to a terminal or emitted off the
--- data home.
+-- CONFIDENTIALITY (ADR-0004): this .sql holds zero transcript content. Draft and
+-- message text is read from the local lake at run time and written only under the
+-- data home. Loci are the non-identifying `lake:` form. Nothing is printed to a
+-- terminal.
 -- =====================================================================================
 
--- Lake-local read views (the same read_parquet shape bin/duck generates; local to this session).
-CREATE OR REPLACE VIEW _rv_messages AS
-  SELECT * FROM read_parquet(getvariable('lake') || '/messages/**/*.parquet',
-    hive_partitioning = true, union_by_name = true);
-CREATE OR REPLACE VIEW _rv_candidates AS
-  SELECT * FROM read_parquet(getvariable('lake') || '/correction_candidates/**/*.parquet',
-    hive_partitioning = true, union_by_name = true);
-CREATE OR REPLACE VIEW _rv_opmsgs AS
-  SELECT * FROM read_parquet(getvariable('lake') || '/operator_messages/**/*.parquet',
-    hive_partitioning = true, union_by_name = true);
+CREATE VIEW IF NOT EXISTS adjudications AS SELECT NULL::JSON AS j WHERE false;
+CREATE VIEW IF NOT EXISTS adjudication_worksheet AS SELECT NULL::JSON AS j WHERE false;
 
--- Ledger: candidate_ids and message_uuids already adjudicated (any verdict). Read exactly
--- as mining/corrections.sql reads it. Drives the idempotent SKIP -- an adjudicated locus
--- drops out of the next render.
-CREATE OR REPLACE TABLE _rv_ledger AS
+CREATE TEMP TABLE _rv_ledger AS
 SELECT j ->> 'candidate_id' AS candidate_id, j ->> 'message_uuid' AS message_uuid
-FROM read_json_objects(getvariable('adjudications'),
-       format = 'newline_delimited', ignore_errors = true) t(j);
-CREATE OR REPLACE TABLE _rv_ledger_cands AS
+FROM adjudications;
+CREATE TEMP TABLE _rv_ledger_cands AS
   SELECT DISTINCT candidate_id FROM _rv_ledger WHERE candidate_id IS NOT NULL;
-CREATE OR REPLACE TABLE _rv_ledger_msgs AS
+CREATE TEMP TABLE _rv_ledger_msgs AS
   SELECT DISTINCT message_uuid FROM _rv_ledger WHERE message_uuid IS NOT NULL;
 
--- Advisory worksheet (model-suggested labels + role-level rationale). read_json_auto per the
--- brief; the recipe guarantees a readable, non-empty file so schema inference always succeeds.
-CREATE OR REPLACE TABLE _rv_worksheet AS
-  SELECT * FROM read_json_auto(getvariable('worksheet'));
+CREATE TEMP TABLE _rv_worksheet AS
+SELECT j ->> 'candidate_id'                AS candidate_id,
+       j ->> 'suggested_verdict'           AS suggested_verdict,
+       j ->> 'suggested_context_judgment'  AS suggested_context_judgment,
+       j ->> 'rationale'                   AS rationale,
+       j ->> 'suggested_by'                AS suggested_by,
+       j ->> 'suggested_at'                AS suggested_at
+FROM adjudication_worksheet;
 
--- Tool results by carrier row, for a rejected tool call whose corrective "message" is the
--- carrier of the result.
-CREATE OR REPLACE VIEW _rv_tool_calls AS
-  SELECT * FROM read_parquet(getvariable('lake') || '/tool_calls/**/*.parquet',
-    hive_partitioning = true, union_by_name = true);
-CREATE OR REPLACE TABLE _rv_carriers AS
-  SELECT runtime, session_id, result_message_id AS message_id,
-         string_agg(result_text, chr(10)) AS result_txt
-  FROM _rv_tool_calls WHERE runtime = 'claude-code' AND result_message_id IS NOT NULL
-  GROUP BY runtime, session_id, result_message_id;
+-- One speech per message. The adapters join text blocks with a literal backslash-n;
+-- _rv_text shows it as a line break. A locus outside operator_context (an opencode
+-- denied call points at the assistant message) falls back to that message's own text.
+CREATE TEMP TABLE _rv_speech AS
+SELECT runtime, session_id, message_id, min(speech) AS speech
+FROM operator_context GROUP BY ALL;
 
--- Full operator/corrective text, not truncated -- the whole point of the review doc.
--- The row's own text, else the text of the tool result it carries with the harness
--- "the user said:" prefix stripped. Interrupt marker stripped. The adapters join text
--- blocks with a literal backslash-n; shown here as a line break.
-CREATE OR REPLACE MACRO _rv_usertext(txt, carried) AS
-  trim(regexp_replace(
-    replace(coalesce(nullif(txt, ''),
-                     regexp_replace(carried, '^.*?the user said:\s*', ''),
-                     txt), '\n', chr(10)),
-    '^\[Request interrupted by user[^\]]*\]', ''));
+CREATE OR REPLACE TEMP MACRO _rv_text(speech, txt) AS
+  trim(replace(coalesce(speech, txt), '\n', chr(10)));
 
 -- Full assistant-draft text. NULL when there is no prior draft (handled gracefully
--- downstream -- D1 tool-decision loci structurally reference a tool result, not a text draft).
-CREATE OR REPLACE MACRO _rv_assttext(txt) AS replace(txt, '\n', chr(10));
+-- downstream -- tool-decision loci reference a tool result, not a text draft).
+CREATE OR REPLACE TEMP MACRO _rv_assttext(txt) AS replace(txt, '\n', chr(10));
 
 -- -------------------------------------------------------------------------------------
 -- PART 1 -- flagged candidates. One row per candidate NOT yet in the ledger, enriched with
 -- the dereferenced full draft + full corrective message and the model's advisory suggestion.
-CREATE OR REPLACE TABLE _rv_cand AS
+CREATE TEMP TABLE _rv_cand AS
 SELECT
   c.candidate_id, c.detector, c.runtime, c.session_id, c.message_uuid, c.prior_assistant_uuid,
   c.model_id, c.estate, c.harness, c.campaign, c.features,
-  _rv_usertext(cm.text, cc.result_txt)                     AS corrective_txt,
+  _rv_text(sp.speech, cm.text)                             AS corrective_txt,
   _rv_assttext(am.text)                                    AS draft_txt,
   w.suggested_verdict, w.suggested_context_judgment, w.rationale, w.suggested_by, w.suggested_at
-FROM _rv_candidates c
-LEFT JOIN _rv_messages cm
+FROM correction_candidates c
+LEFT JOIN messages cm
   ON cm.runtime = c.runtime AND cm.session_id = c.session_id AND cm.message_id = c.message_uuid
-LEFT JOIN _rv_messages am
+LEFT JOIN messages am
   ON am.runtime = c.runtime AND am.session_id = c.session_id AND am.message_id = c.prior_assistant_uuid
-LEFT JOIN _rv_carriers cc
-  ON cc.runtime = c.runtime AND cc.session_id = c.session_id AND cc.message_id = c.message_uuid
+LEFT JOIN _rv_speech sp
+  ON sp.runtime = c.runtime AND sp.session_id = c.session_id AND sp.message_id = c.message_uuid
 LEFT JOIN _rv_worksheet w
   ON w.candidate_id = c.candidate_id
 WHERE c.candidate_id NOT IN (SELECT candidate_id FROM _rv_ledger_cands);
@@ -106,24 +79,25 @@ WHERE c.candidate_id NOT IN (SELECT candidate_id FROM _rv_ledger_cands);
 -- (ORDER BY md5(message_uuid), matching mining/queries/recall_floor_sample.sql so the floor
 -- denominator is a stable set), with already-adjudicated loci dropped from the render (the
 -- sample IDENTITY stays those 50; we do not backfill, which would shift the denominator).
-CREATE OR REPLACE TABLE _rv_floor AS
+CREATE TEMP TABLE _rv_floor AS
 WITH f50 AS (
-  SELECT * FROM _rv_opmsgs WHERE NOT flagged
+  SELECT * FROM operator_messages WHERE NOT flagged
   ORDER BY md5(message_uuid) LIMIT 50
 )
 SELECT
   f.runtime, f.session_id, f.message_uuid, f.estate, f.harness, f.campaign,
-  _rv_usertext(m.text, NULL)                            AS operator_txt
+  _rv_text(sp.speech, NULL)                             AS operator_txt
 FROM f50 f
-LEFT JOIN _rv_messages m
-  ON m.runtime = f.runtime AND m.session_id = f.session_id AND m.message_id = f.message_uuid
+LEFT JOIN _rv_speech sp
+  ON sp.runtime = f.runtime AND sp.session_id = f.session_id AND sp.message_id = f.message_uuid
 WHERE f.message_uuid NOT IN (SELECT message_uuid FROM _rv_ledger_msgs);
+
 
 -- =====================================================================================
 -- Assemble the document: one row per block, ordered by (part, ord2, ord3). The recipe COPYs
 -- `md` out with QUOTE '' so embedded newlines/commas survive verbatim.
 -- =====================================================================================
-CREATE OR REPLACE TABLE stg_review_document AS
+CREATE OR REPLACE TABLE review_document AS
 -- part 0: document header + Part-1 banner (counts computed from the assembled tables)
 SELECT 0 AS part, '' AS ord2, '' AS ord3,
   '# varve -- correction adjudication review (round 1)' || chr(10) || chr(10)

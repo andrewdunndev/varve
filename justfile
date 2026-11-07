@@ -11,10 +11,6 @@ data_home := env_var_or_default("VARVE_DATA", env_var("HOME") + "/.local/share/v
 repo      := justfile_directory()
 lake      := env_var_or_default("VARVE_LAKE", data_home + "/lake")
 state     := data_home + "/state"
-# Adjudication ledger and worksheet: operator data in the data home, never in the
-# repo. A missing file is a missing ledger; `mine` and `review` handle absence.
-adjudications := data_home + "/adjudications.jsonl"
-worksheet     := data_home + "/adjudication_worksheet.jsonl"
 
 default:
     @just --list
@@ -40,73 +36,30 @@ check:
 forget id:
     {{repo}}/bin/duck locked {{repo}}/bin/forget "$1"
 
-# Correction mining. Rebuilds correction_candidates (four detectors, precision-first),
-# operator_messages (recall-floor denominator: metadata-only, flagged = also a candidate
-# locus) and promotes adjudicated candidates into correction_events, all purely from the
-# lake, so the rebuild is deterministic. `build` calls this after the swap. The
-# adjudication ledger is operator data in the data home; when absent, an empty temp file
-# is substituted so the read never errors and zero events promote. Ends by running the
-# checks, so the ledger is tested against the fresh candidates. COPY targets are
-# literals here (COPY TO cannot take getvariable).
+# Run the mines in the data home's mining/ in filename order, then the checks.
+# Each mine saves one table under the lake. A failing mine keeps its last good
+# file and the rest still run. No mining/ files, no mining. `build` calls this
+# after the swap.
 mine:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if [ ! -d "{{lake}}/messages" ]; then
-      echo "varve: skip mine -- no core tables at {{lake}}" >&2; exit 0
-    fi
-    adj="{{adjudications}}"
-    tmp=""
-    if [ ! -f "$adj" ]; then tmp="$(mktemp -t varve_adj.XXXXXX)"; adj="$tmp"; fi
-    # Full-rebuild semantics need a clean target: these three are pure derivations
-    # of the lake, and OVERWRITE_OR_IGNORE only replaces partitions the new run
-    # writes -- a (runtime, date) partition that becomes EMPTY after a detector
-    # change would otherwise survive as stale rows.
-    rm -rf "{{lake}}/correction_candidates" "{{lake}}/operator_messages" "{{lake}}/correction_events"
-    {{repo}}/bin/duck mine \
-      -c "SET VARIABLE lake='{{lake}}'; SET VARIABLE repo_dir='{{repo}}'; SET VARIABLE adjudications='$adj';" \
-      -f "{{repo}}/mining/corrections.sql" \
-      -c "COPY (SELECT * FROM stg_correction_candidates ORDER BY runtime, date, candidate_id) TO '{{lake}}/correction_candidates' (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);" \
-      -c "COPY (SELECT * FROM stg_operator_messages ORDER BY runtime, date, message_uuid) TO '{{lake}}/operator_messages' (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);" \
-      -c "COPY (SELECT * FROM stg_correction_events ORDER BY channel, date, event_id) TO '{{lake}}/correction_events' (FORMAT parquet, PARTITION_BY (channel, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);"
-    [ -n "$tmp" ] && rm -f "$tmp" || true
-    {{repo}}/bin/check
+    {{repo}}/bin/duck locked {{repo}}/bin/mine
 
 # Adjudication review document. Renders the review sitting to
-# <data_home>/review_round1.md (override with `out=`): one section per flagged correction
-# candidate carrying the FULL prior draft + FULL corrective message + the model's advisory
-# suggestion from the worksheet (context_judgment is largely un-inferable
-# from a 240-char excerpt, so the review dereferences the full loci), then the recall-floor
-# sample (unflagged operator messages) as a second part. Candidates/loci already in the
-# adjudications ledger are SKIPPED, so the doc shrinks as the operator works through it
-# (idempotent re-render). CONFIDENTIALITY: the ONLY output is the markdown under the data
-# home; mining/review.sql holds zero transcript content, loci are the `lake:` form, and
-# nothing is printed to a terminal. The worksheet is advisory operator data outside the repo
-# (see `worksheet`); absence is non-fatal (a non-matching sentinel primes read_json_auto).
-# The adjudication ledger is handled like `mine` (empty temp file when absent). COPY target
-# is a literal here (COPY TO cannot take getvariable), matching how `mine` writes.
+# <data_home>/review_round1.md (override with `out=`): one section per flagged
+# correction candidate with the full prior draft, the full corrective message and
+# the advisory suggestion from adjudication_worksheet.jsonl, then the recall-floor
+# sample of unflagged operator messages. Loci already in adjudications.jsonl are
+# skipped, so the document shrinks as the operator works through it. The only
+# output is the markdown under the data home; nothing is printed.
 review out=(data_home + "/review_round1.md"):
     #!/usr/bin/env bash
     set -euo pipefail
-    if [ ! -d "{{lake}}/correction_candidates" ]; then
+    if [ -z "$(find "{{lake}}/correction_candidates" -name '*.parquet' -print -quit 2>/dev/null)" ]; then
       echo "varve: skip review -- no correction_candidates at {{lake}} (run just mine first)" >&2; exit 0
-    fi
-    adj="{{adjudications}}"; adjtmp=""
-    if [ ! -f "$adj" ]; then adjtmp="$(mktemp -t varve_adj.XXXXXX)"; adj="$adjtmp"; fi
-    ws="{{worksheet}}"; wstmp=""
-    if [ ! -s "$ws" ]; then
-      # Absent/empty worksheet: prime read_json_auto with a non-matching sentinel row so the
-      # advisory LEFT JOIN yields nothing (worksheet absence is non-fatal).
-      wstmp="$(mktemp -t varve_ws.XXXXXX)"
-      printf '%s\n' '{"candidate_id":"__no_worksheet__","detector":"","suggested_verdict":"","suggested_context_judgment":"","rationale":"","suggested_by":"","model_id":"","suggested_at":""}' > "$wstmp"
-      ws="$wstmp"
     fi
     mkdir -p "$(dirname "{{out}}")"
     {{repo}}/bin/duck review \
-      -c "SET VARIABLE lake='{{lake}}'; SET VARIABLE adjudications='$adj'; SET VARIABLE worksheet='$ws';" \
       -f "{{repo}}/mining/review.sql" \
-      -c "COPY (SELECT md FROM stg_review_document ORDER BY part, ord2, ord3) TO '{{out}}' (FORMAT csv, HEADER false, QUOTE '', ESCAPE '', DELIMITER E'\t');"
-    [ -n "$adjtmp" ] && rm -f "$adjtmp" || true
-    [ -n "$wstmp" ] && rm -f "$wstmp" || true
+      -c "COPY (SELECT md FROM review_document ORDER BY part, ord2, ord3) TO '{{out}}' (FORMAT csv, HEADER false, QUOTE '', ESCAPE '', DELIMITER E'\t');"
     echo "varve: wrote review -> {{out}}" >&2
 
 # Intervention timeline for "does baking a correction into a rule stop it recurring",
@@ -164,8 +117,11 @@ stats *ARGS:
     case "$runtime" in claude|pi|opencode|all) ;; *) echo "varve stats: --runtime takes claude|pi|opencode|all" >&2; exit 2 ;; esac
     case "$metric" in prompts|steps|tokens) ;; *) echo "varve stats: --metric takes prompts|steps|tokens" >&2; exit 2 ;; esac
     today="${VARVE_TODAY:-$(date +%F)}"
+    if [ -z "$(find "{{lake}}/operator_messages" -name '*.parquet' -print -quit 2>/dev/null)" ]; then
+      echo "varve stats: no operator_messages at {{lake}}; run just mine (prompt counts come from it)" >&2; exit 2
+    fi
     {{repo}}/bin/duck stats -noheader -list \
-      -c "SET VARIABLE lake='{{lake}}'; SET VARIABLE year=$year; SET VARIABLE runtime='$runtime'; SET VARIABLE metric='$metric'; SET VARIABLE today=DATE '$today';" \
+      -c "SET VARIABLE year=$year; SET VARIABLE runtime='$runtime'; SET VARIABLE metric='$metric'; SET VARIABLE today=DATE '$today';" \
       -c ".output /dev/null" -f "{{repo}}/mining/queries/stats_year.sql" \
       -c ".output" -f "{{repo}}/mining/stats_render.sql"
 
@@ -211,18 +167,19 @@ test:
     unset VARVE_LAKE VARVE_PUBLISHED VARVE_LOCK_PID
     lake="$VARVE_DATA/lake"
 
-    mkdir -p "$VARVE_DATA/checks" "$VARVE_MIRROR"
+    mkdir -p "$VARVE_DATA/checks" "$VARVE_DATA/mining" "$VARVE_MIRROR"
     cp -R "{{repo}}/tests/fixtures/mirror/." "$VARVE_MIRROR/"
     mkdir -p "$VARVE_MIRROR/opencode"
     echo "varve test: seeding synthetic opencode fixture db" >&2
     {{repo}}/bin/duck seed \
       -c "INSTALL sqlite; LOAD sqlite; ATTACH '$VARVE_MIRROR/opencode/opencode.db' AS oc (TYPE sqlite);" \
       -f "{{repo}}/tests/fixtures/opencode_seed.sql"
-    for f in "{{repo}}"/adapters/*.example.toml; do
+    for f in "{{repo}}"/adapters/*.example.toml "{{repo}}"/mining/*.example.toml; do
       cp "$f" "$VARVE_DATA/$(basename "$f" .example.toml).toml"
     done
     cp "{{repo}}/tests/fixtures/runtimes.toml" "$VARVE_DATA/runtimes.toml"
     cp "{{repo}}"/tests/checks/build/*.sql "$VARVE_DATA/checks/"
+    cp "{{repo}}"/mining/[0-9]*.sql "$VARVE_DATA/mining/"
 
     echo "varve test: build over the synthetic mirror" >&2
     just build

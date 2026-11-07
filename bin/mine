@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Run each mine in the data home's mining/, in filename order, then the checks.
+# Run it as: bin/duck locked bin/mine
+#
+# A mine is a SQL file named NN-<table>[.<part>].sql that leaves its rows in a
+# table called mine_out. They are saved to <lake>/<table>/<part>.parquet, part
+# being "part" when the name has none. A failing mine keeps its last good file
+# and the others still run. Exit 1 when a mine or a check failed. No mining/
+# files, no mining.
+set -euo pipefail
+
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+data="${VARVE_DATA:-$HOME/.local/share/varve}"
+lake="${VARVE_LAKE:-$data/lake}"
+qs() { printf '%s' "$1" | sed "s/'/''/g"; }
+
+if [ -z "$(find "$data/mining" -maxdepth 1 -name '*.sql' -print -quit 2>/dev/null)" ]; then
+  echo "varve: mine: no mining/*.sql in $data, nothing to mine" >&2
+  exit 0
+fi
+if [ ! -d "$lake/messages" ]; then
+  echo "varve: mine: no core tables at $lake, run just build first" >&2
+  exit 0
+fi
+
+failed=""
+for f in "$data"/mining/*.sql; do
+  [ -f "$f" ] || continue
+  stem="$(basename "$f" .sql)"
+  name="${stem#[0-9]*-}"
+  table="${name%%.*}"
+  part="${name#*.}"
+  if [ "$part" = "$name" ]; then part=part; fi
+  mkdir -p "$lake/$table"
+  tmp="$lake/$table/.$part.tmp"
+  rc=0
+  "$repo/bin/duck" "mine $stem" \
+    -c "SET VARIABLE mine_file='$(qs "$f")';" -f "$f" \
+    -c "COPY (SELECT * FROM mine_out) TO '$(qs "$tmp")' (FORMAT parquet, COMPRESSION zstd);" \
+    > /dev/null || rc=$?
+  if [ "$rc" -eq 0 ]; then
+    mv "$tmp" "$lake/$table/$part.parquet"
+  else
+    rm -f "$tmp"
+    rmdir "$lake/$table" 2>/dev/null || true
+    echo "varve: mine $stem failed, keeping its last good file" >&2
+    failed="$failed $stem"
+  fi
+done
+
+rc=0
+"$repo/bin/check" || rc=$?
+if [ -n "$failed" ]; then
+  echo "varve: mine: failed:$failed" >&2
+  exit 1
+fi
+exit "$rc"

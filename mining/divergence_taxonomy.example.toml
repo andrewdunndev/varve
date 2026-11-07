@@ -1,0 +1,44 @@
+# Copy to <data home>/divergence_taxonomy.toml and edit. A prior for soft
+# validation of correction_events.category: a label outside this list sets
+# unknown_category, it never fails a mine. The controlled vocabulary comes from
+# adjudicated events, not from this file.
+#   category      label used in correction_events.category
+#   origin        which register the rule serves: style or cross
+#   direction     excess, deficit, misdirection or n_a
+#   description   what the divergence is
+#   example_rule  the standing rule the label was recovered from
+
+[[row]]
+category = "verbosity"
+origin = "style"
+direction = "excess"
+description = "length beyond the point"
+example_rule = "Direct and concise"
+
+[[row]]
+category = "hedging"
+origin = "style"
+direction = "excess"
+description = "softened uncertainty instead of a plain statement"
+example_rule = "State uncertainty explicitly"
+
+[[row]]
+category = "structure"
+origin = "style"
+direction = "misdirection"
+description = "answer not led with"
+example_rule = "Lead with the answer"
+
+[[row]]
+category = "sourcing"
+origin = "style"
+direction = "deficit"
+description = "uncited claim"
+example_rule = "Reference everything"
+
+[[row]]
+category = "other"
+origin = "cross"
+direction = "n_a"
+description = "escape hatch; requires a note"
+example_rule = "n_a"

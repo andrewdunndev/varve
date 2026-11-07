@@ -41,13 +41,12 @@ SELECT
   s.ts,
   'lake:' || s.session_id || '/' || s.message_uuid                    AS locus,
   -- truncated, whitespace-collapsed excerpt of the operator message (LAKE-LOCAL ONLY).
-  left(regexp_replace(
-    trim(regexp_replace(m.text, '^\[Request interrupted by user[^\]]*\]', '')),
-    '[[:space:]]+', ' ', 'g'), 240)                                   AS excerpt,
+  left(regexp_replace(m.speech, '[[:space:]]+', ' ', 'g'), 240)       AS excerpt,
   -- copy-paste, fill verdict + context_judgment (+ optional note = role-level gloss only)
   '{"message_uuid":"' || s.message_uuid
     || '","selection":"sampled","verdict":"","context_judgment":"","note":""}' AS adjudication_line
 FROM _floor_sample s
-JOIN messages m
+JOIN (SELECT runtime, session_id, message_id, min(speech) AS speech
+      FROM operator_context GROUP BY ALL) m
   ON m.runtime = s.runtime AND m.session_id = s.session_id AND m.message_id = s.message_uuid
 ORDER BY md5(s.message_uuid);

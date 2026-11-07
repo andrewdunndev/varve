@@ -1,0 +1,186 @@
+# Copy to <data home>/patterns.toml and tune. The mines read it through the
+# patterns view. Rows are [[row]] with kind, name, pattern.
+#
+#   noise             ILIKE pattern with explicit % wildcards: injected text that
+#                     no operator typed
+#   marker            regex tried at the start of an operator message; name labels
+#                     the hit in features
+#   interjection      word or regex fragment stripped before a marker is tried
+#   interrupt_prefix  regex for the interrupt marker that opens a message
+#   reject            ILIKE pattern for a tool result that records a refusal
+#   reject_exclude    ILIKE pattern: a result that also matches is not a refusal
+
+[[row]]
+kind = "noise"
+name = "system_reminder"
+pattern = "%<system-reminder>%"
+
+[[row]]
+kind = "noise"
+name = "command_name"
+pattern = "%<command-name>%"
+
+[[row]]
+kind = "noise"
+name = "command_message"
+pattern = "%<command-message>%"
+
+[[row]]
+kind = "noise"
+name = "command_args"
+pattern = "%<command-args>%"
+
+[[row]]
+kind = "noise"
+name = "local_command_stdout"
+pattern = "%<local-command-stdout>%"
+
+[[row]]
+kind = "noise"
+name = "local_command_caveat"
+pattern = "%<local-command-caveat>%"
+
+[[row]]
+kind = "noise"
+name = "caveat"
+pattern = "Caveat: The messages below were generated%"
+
+[[row]]
+kind = "noise"
+name = "task_notification"
+pattern = "%<task-notification>%"
+
+[[row]]
+kind = "noise"
+name = "prompt_submit_hook"
+pattern = "%<user-prompt-submit-hook>%"
+
+[[row]]
+kind = "noise"
+name = "compaction_summary"
+pattern = "%This session is being continued%"
+
+[[row]]
+kind = "noise"
+name = "skill_body"
+pattern = "Base directory for this skill:%"
+
+[[row]]
+kind = "noise"
+name = "system_notification"
+pattern = "%[SYSTEM NOTIFICATION - NOT USER INPUT]%"
+
+[[row]]
+kind = "noise"
+name = "coordinator_message"
+pattern = "The coordinator sent a message while you were working:%"
+
+[[row]]
+kind = "noise"
+name = "loop_control"
+pattern = "%<<autonomous-loop%"
+
+[[row]]
+kind = "interrupt_prefix"
+name = "interrupt"
+pattern = '^\[Request interrupted by user[^\]]*\]'
+
+[[row]]
+kind = "reject"
+name = "tool_use_rejected"
+pattern = "%The user doesn't want to proceed with this tool use%"
+
+[[row]]
+kind = "reject_exclude"
+name = "clarify"
+pattern = "%The user wants to clarify these questions%"
+
+[[row]]
+kind = "marker"
+name = "negation"
+pattern = '^(no|nope|nah)([^a-z0-9]|$)'
+
+[[row]]
+kind = "marker"
+name = "stop"
+pattern = '^stop([^a-z0-9]|$)'
+
+[[row]]
+kind = "marker"
+name = "wait"
+pattern = '^wait\b'
+
+[[row]]
+kind = "interjection"
+name = "ok"
+pattern = "ok"
+
+[[row]]
+kind = "interjection"
+name = "okay"
+pattern = "okay"
+
+[[row]]
+kind = "interjection"
+name = "so"
+pattern = "so"
+
+[[row]]
+kind = "interjection"
+name = "well"
+pattern = "well"
+
+[[row]]
+kind = "interjection"
+name = "hmm"
+pattern = "hmm+"
+
+[[row]]
+kind = "interjection"
+name = "hm"
+pattern = "hm"
+
+[[row]]
+kind = "interjection"
+name = "yeah"
+pattern = "yeah"
+
+[[row]]
+kind = "interjection"
+name = "yep"
+pattern = "yep"
+
+[[row]]
+kind = "interjection"
+name = "yes"
+pattern = "yes"
+
+[[row]]
+kind = "interjection"
+name = "ah"
+pattern = "ah"
+
+[[row]]
+kind = "interjection"
+name = "oh"
+pattern = "oh"
+
+[[row]]
+kind = "interjection"
+name = "sorry"
+pattern = "sorry"
+
+[[row]]
+kind = "interjection"
+name = "hey"
+pattern = "hey"
+
+[[row]]
+kind = "interjection"
+name = "right"
+pattern = "right"
+
+[[row]]
+kind = "interjection"
+name = "hi"
+pattern = "hi"
