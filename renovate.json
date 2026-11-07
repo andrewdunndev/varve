@@ -1,0 +1,5 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "//": "Parked 2026-11-07: varve is maintained occasionally; pins in mise.toml move only when the author chooses. Updates wait for approval on the dependency dashboard.",
+  "dependencyDashboardApproval": true
+}
