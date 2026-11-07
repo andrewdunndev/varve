@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 812" width="720" height="812" role="img" aria-labelledby="bld-t bld-d">
+  <title id="bld-t">One build, in order: a failed runtime keeps its published partitions, a failed check leaves lake/ untouched</title>
+  <desc id="bld-d">A sequence between bin/build, bin/duck (one process per runtime), the adapter, lake.new, bin/check, lake/ and bin/mine. A build first restores lake/ from lake.old if lake/ is missing. Runtime A runs its adapter and writes four tables into lake.new. Runtime B's adapter fails with exit 2, its output is removed from lake.new, and its published partitions are copied back from lake/. A cap hit (exit 1) abandons the build. bin/check reads lake.new against the published lake; a failing check removes lake.new and leaves lake/ untouched. A passing check renames lake to lake.old and lake.new to lake, then bin/mine runs and saves its tables into lake/.</desc>
+  <style>
+    svg { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .box { fill: #f4f4f4; stroke: #c4c4c4; stroke-width: 1; }
+    .acc { fill: #4a6741; stroke: #4a6741; }
+    .frm { fill: none; stroke: #b4b4b4; stroke-width: 1; stroke-dasharray: 5 4; }
+    .life { stroke: #c4c4c4; stroke-width: 1; stroke-dasharray: 3 4; }
+    .nm { font-size: 13px; font-weight: 600; fill: #0a0a0a; }
+    .sub { font-size: 11px; fill: #606060; }
+    .lbl { font-size: 11px; fill: #404040; }
+    .elb { font-size: 11px; fill: #b3412f; }
+    .ln { fill: none; stroke: #404040; stroke-width: 1.5; }
+    .rt { fill: none; stroke: #404040; stroke-width: 1.5; stroke-dasharray: 5 3; }
+    .err { fill: none; stroke: #b3412f; stroke-width: 1.5; stroke-dasharray: 5 3; }
+    .errs { fill: none; stroke: #b3412f; stroke-width: 1.5; }
+    .ah { fill: #404040; }
+    .eh { fill: #b3412f; }
+    .tag { font-size: 12px; font-weight: 600; fill: #4a6741; }
+    @media (prefers-color-scheme: dark) {
+      .box { fill: #242426; stroke: #48484a; }
+      .acc { fill: #6aaa58; stroke: #6aaa58; }
+      .frm { stroke: #636366; }
+      .life { stroke: #48484a; }
+      .nm { fill: #f2f2f7; }
+      .sub { fill: #a0a0a6; }
+      .lbl { fill: #aeaeb2; }
+      .elb { fill: #ff9a86; }
+      .ln, .rt { stroke: #aeaeb2; }
+      .err, .errs { stroke: #ff9a86; }
+      .ah { fill: #aeaeb2; }
+      .eh { fill: #ff9a86; }
+      .tag { fill: #6aaa58; }
+    }
+  </style>
+  <defs>
+    <marker id="bld-ar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto"><path class="ah" d="M0,0 L10,4 L0,8 Z"/></marker>
+    <marker id="bld-er" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto"><path class="eh" d="M0,0 L10,4 L0,8 Z"/></marker>
+  </defs>
+
+  <!-- lifelines -->
+  <path class="life" d="M60,60 V784 M160,60 V784 M260,60 V784 M360,60 V784 M460,60 V784 M560,60 V784 M660,60 V784"/>
+
+  <!-- frames -->
+  <rect class="frm" x="24" y="124" width="684" height="124" rx="6"/>
+  <text class="tag" x="34" y="141">runtime A: adapter succeeds</text>
+  <rect class="frm" x="24" y="256" width="684" height="150" rx="6"/>
+  <text class="tag" x="34" y="273">runtime B: adapter fails</text>
+  <rect class="frm" x="24" y="556" width="684" height="80" rx="6"/>
+  <text class="tag" x="34" y="573">check fails</text>
+  <rect class="frm" x="24" y="646" width="684" height="130" rx="6"/>
+  <text class="tag" x="34" y="663">check passes: swap, then mines</text>
+
+  <!-- notes -->
+  <rect class="box" x="24" y="72" width="276" height="40" rx="4"/>
+  <text class="sub" x="34" y="89">start: lake/ missing and lake.old present:</text>
+  <text class="sub" x="34" y="104">mv lake.old lake, then drop lake.old</text>
+  <rect class="box" x="440" y="140" width="258" height="40" rx="4"/>
+  <text class="sub" x="450" y="157">a cap trips in any runtime (exit 1):</text>
+  <text class="sub" x="450" y="172">rm lake.new, stop, lake/ untouched</text>
+  <rect class="box" x="440" y="288" width="258" height="56" rx="4"/>
+  <text class="sub" x="450" y="305">B keeps its published partitions.</text>
+  <text class="sub" x="450" y="320">So does a runtime with an empty mirror,</text>
+  <text class="sub" x="450" y="335">unless all its sessions are forgotten.</text>
+  <rect class="box" x="24" y="420" width="276" height="40" rx="4"/>
+  <text class="sub" x="34" y="437">unbuilt runtimes and every non-core</text>
+  <text class="sub" x="34" y="452">folder (mined tables) are copied back</text>
+  <rect class="box" x="480" y="580" width="218" height="40" rx="4"/>
+  <text class="sub" x="490" y="597">lake/ untouched, build stops,</text>
+  <text class="sub" x="490" y="612">exit 1</text>
+
+  <!-- messages: runtime A -->
+  <path class="ln" d="M60,168 H160" marker-end="url(#bld-ar)"/>
+  <text class="lbl" x="110" y="162" text-anchor="middle">spawn A</text>
+  <path class="ln" d="M160,192 H260" marker-end="url(#bld-ar)"/>
+  <text class="lbl" x="210" y="186" text-anchor="middle">reads mirror/A</text>
+  <path class="ln" d="M260,216 H360" marker-end="url(#bld-ar)"/>
+  <text class="lbl" x="310" y="210" text-anchor="middle">writes 4 tables</text>
+  <path class="rt" d="M160,238 H60" marker-end="url(#bld-ar)"/>
+  <text class="lbl" x="110" y="232" text-anchor="middle">exit 0</text>
+
+  <!-- messages: runtime B -->
+  <path class="ln" d="M60,298 H160" marker-end="url(#bld-ar)"/>
+  <text class="lbl" x="110" y="292" text-anchor="middle">spawn B</text>
+  <path class="ln" d="M160,322 H260" marker-end="url(#bld-ar)"/>
+  <text class="lbl" x="210" y="316" text-anchor="middle">reads mirror/B</text>
+  <path class="err" d="M260,346 H160" marker-end="url(#bld-er)"/>
+  <text class="elb" x="210" y="340" text-anchor="middle">SQL error</text>
+  <path class="err" d="M160,370 H60" marker-end="url(#bld-er)"/>
+  <text class="elb" x="110" y="364" text-anchor="middle">exit 2</text>
+  <path class="ln" d="M60,394 H360" marker-end="url(#bld-ar)"/>
+  <text class="lbl" x="310" y="388" text-anchor="middle">drop B's output</text>
+
+  <!-- copy back -->
+  <path class="ln" d="M560,440 H360" marker-end="url(#bld-ar)"/>
+  <text class="lbl" x="510" y="434" text-anchor="middle">copy B back</text>
+
+  <!-- check -->
+  <path class="ln" d="M60,490 H460" marker-end="url(#bld-ar)"/>
+  <text class="lbl" x="406" y="484" text-anchor="middle">VARVE_PUBLISHED</text>
+  <path class="ln" d="M460,514 H360" marker-end="url(#bld-ar)"/>
+  <text class="lbl" x="410" y="508" text-anchor="middle">reads new</text>
+  <path class="ln" d="M460,538 H560" marker-end="url(#bld-ar)"/>
+  <text class="lbl" x="510" y="532" text-anchor="middle">published_*</text>
+
+  <!-- check fails -->
+  <path class="errs" d="M460,596 H60" marker-end="url(#bld-er)"/>
+  <text class="elb" x="110" y="590" text-anchor="middle">exit 1</text>
+  <path class="ln" d="M60,620 H360" marker-end="url(#bld-ar)"/>
+  <text class="lbl" x="310" y="614" text-anchor="middle">rm lake.new</text>
+
+  <!-- check passes -->
+  <path class="ln" d="M60,690 H560" marker-end="url(#bld-ar)"/>
+  <text class="lbl" x="510" y="684" text-anchor="middle">lake to lake.old</text>
+  <path class="ln" d="M360,714 H560" marker-end="url(#bld-ar)"/>
+  <text class="lbl" x="510" y="708" text-anchor="middle">lake.new to lake</text>
+  <path class="ln" d="M60,738 H660" marker-end="url(#bld-ar)"/>
+  <text class="lbl" x="610" y="732" text-anchor="middle">just mine</text>
+  <path class="ln" d="M660,762 H560" marker-end="url(#bld-ar)"/>
+  <text class="lbl" x="610" y="756" text-anchor="middle">saves tables</text>
+
+  <!-- headers -->
+  <rect class="box" x="14" y="16" width="92" height="44" rx="6"/>
+  <text class="nm" x="60" y="43" text-anchor="middle">bin/build</text>
+  <rect class="box" x="114" y="16" width="92" height="44" rx="6"/>
+  <text class="nm" x="160" y="35" text-anchor="middle">bin/duck</text>
+  <text class="sub" x="160" y="51" text-anchor="middle">per runtime</text>
+  <rect class="box" x="214" y="16" width="92" height="44" rx="6"/>
+  <text class="nm" x="260" y="43" text-anchor="middle">adapter</text>
+  <rect class="box" x="314" y="16" width="92" height="44" rx="6"/>
+  <text class="nm" x="360" y="43" text-anchor="middle">lake.new</text>
+  <rect class="box" x="414" y="16" width="92" height="44" rx="6"/>
+  <text class="nm" x="460" y="43" text-anchor="middle">bin/check</text>
+  <rect class="box" x="514" y="16" width="92" height="44" rx="6"/>
+  <text class="nm" x="560" y="43" text-anchor="middle">lake/</text>
+  <rect class="box" x="614" y="16" width="92" height="44" rx="6"/>
+  <text class="nm" x="660" y="43" text-anchor="middle">bin/mine</text>
+
+  <text class="sub" x="24" y="800">Exit 1 when a runtime or a mine failed, after the rest are swapped in.</text>
+</svg>
