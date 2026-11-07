@@ -59,7 +59,7 @@ take_lock() {
 if [ "$mode" = locked ]; then
   [ $# -gt 0 ] || die "usage: bin/duck locked CMD [args...]"
   take_lock
-  VARVE_LOCK_PID=$$
+  if [ "$owned" = 1 ]; then VARVE_LOCK_PID=$$; fi
   export VARVE_LOCK_PID
   rc=0
   "$@" || rc=$?
