@@ -166,5 +166,5 @@
   <text class="sub" x="594" y="620" text-anchor="middle">the build tests run over</text>
   <text class="lbl" x="24" y="664">The adapter and the row can stay in your data home with no change to the repo.</text>
   <text class="lbl" x="24" y="682">checks/runtime_rows.sql fails a runtime whose mirror yields no sessions.</text>
-  <text class="lbl" x="24" y="700">The fixture also needs a row in tests/fixtures/runtimes.toml; none has been added this way yet.</text>
+  <text class="lbl" x="24" y="700">The fixture also needs a row in tests/fixtures/runtimes.toml.</text>
 </svg>

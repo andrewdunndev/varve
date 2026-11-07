@@ -44,7 +44,7 @@ Three primitives: files, SQL files, one runner (`bin/duck`). Everything extensib
 | mine | the tables | a saved table |
 | query | the tables | printed output |
 
-![Each SQL file kind, what it reads and writes, when it runs and where it is looked up; a new runtime is a row, an adapter and a fixture.](docs/img/files.svg)
+![Each SQL file kind, what it reads and writes, when it runs and where it is looked up; a new runtime is a row and an adapter in the data home; a contributed one also adds a fixture.](docs/img/files.svg)
 
 A new runtime is a row in `runtimes.toml` and an adapter, both in the data home.
 

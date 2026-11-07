@@ -16,7 +16,7 @@ test-session-2023,c0000000-0000-0000-0000-000000000015,msg_t_7,req-t-7,2023-06-0
 test-session-2023,c0000000-0000-0000-0000-000000000018,msg_t_8,req-t-8,2023-06-01 00:00:18,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-01,claude-code
 test-session-2023,c0000000-0000-0000-0000-000000000020,msg_t_9,req-t-9,2023-06-01 00:00:20,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-01,claude-code
 test-session-2023,c0000000-0000-0000-0000-000000000022,msg_t_10,req-t-10,2023-06-01 00:00:22,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-01,claude-code
-test-session-noise,n0000000-0000-0000-0000-000000000002,msg_n_1,req-n-1,2023-06-02 00:00:02,claude-unlisted-1,anthropic,100,50,0,0,0.0,true,2023-06-02,claude-code
+test-session-noise,n0000000-0000-0000-0000-000000000002,msg_n_1,req-n-1,2023-06-02 00:00:02,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-02,claude-code
 test-session-ny,a0000000-0000-0000-0000-000000000002,msg_ny_1,req-ny-1,2025-12-30 12:00:05,claude-sonnet-5,anthropic,200,40,1000,300,0.00175,false,2025-12-30,claude-code
 test-session-ny,a0000000-0000-0000-0000-000000000004,msg_ny_2,req-ny-2,2025-12-30 12:00:07,claude-sonnet-5,anthropic,20,10,1500,0,0.00044,false,2025-12-30,claude-code
 test-session-ny,a0000000-0000-0000-0000-000000000006,msg_ny_3,req-ny-3,2025-12-31 12:00:05,claude-sonnet-5,anthropic,20,10,1600,0,0.00046,false,2025-12-30,claude-code

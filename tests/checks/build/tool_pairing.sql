@@ -1,6 +1,6 @@
 -- tool_calls pairs each Claude Code result with its tool_use, gives every other
--- result block a row of its own, and maps outcome, arguments, result text and
--- the MCP name parts. Fixture ids are test-session-2023 lines and calls.
+-- result block a row of its own, and maps outcome, arguments and result text.
+-- Fixture ids are test-session-2023 lines and calls.
 CREATE VIEW IF NOT EXISTS tool_calls AS SELECT NULL::VARCHAR AS tool_use_id WHERE false;
 WITH t AS (SELECT * FROM tool_calls),
 carrier AS (SELECT 'c0000000-0000-0000-0000-000000000025' AS id),
