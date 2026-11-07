@@ -17,16 +17,16 @@ duckdb_threads    := env_var_or_default("VARVE_DUCKDB_THREADS", "4")
 duckdb_max_spill  := env_var_or_default("VARVE_DUCKDB_MAX_SPILL", "20GB")
 manifest  := state + "/manifest.parquet"
 db        := data_home + "/varve.duckdb"
-# W7 adjudication ledger: OPERATOR DATA, never in the repo (public-instrument rule).
+# Adjudication ledger: operator data, never in the repo.
 # Defaults to the data home (survives a lake rebuild -- backfill clears lake/ only);
 # VARVE_ADJUDICATIONS overrides. `mine` handles an absent file gracefully.
 adjudications := env_var_or_default("VARVE_ADJUDICATIONS", data_home + "/adjudications.jsonl")
-# W7 adjudication worksheet: OPERATOR DATA (model-suggested labels + role-level rationale),
-# never in the repo (public-instrument rule). Defaults to the data home; VARVE_WORKSHEET
+# Adjudication worksheet: operator data (model-suggested labels and rationale),
+# never in the repo. Defaults to the data home; VARVE_WORKSHEET
 # overrides. Advisory input to `just review`; absence is non-fatal.
 worksheet := env_var_or_default("VARVE_WORKSHEET", data_home + "/adjudication_worksheet.jsonl")
 # Attribution rules: OPERATOR DATA (the cwd globs name real namespaces), never in
-# the repo (public-instrument rule). Defaults to the data home; VARVE_ATTRIBUTION
+# the repo. Defaults to the data home; VARVE_ATTRIBUTION
 # overrides. Required: _pipeline fails loudly when absent (silent generic rules
 # would mis-attribute every session) -- bootstrap by copying
 # adapters/attribution.example.csv there and editing.
@@ -90,15 +90,8 @@ _pipeline mode:
     # spanning every present runtime. The manifest is refreshed from this, so one
     # manifest covers all runtimes.
     #
-    # `stat` is not portable: BSD (macOS) wants `-f '%N|%z|%m'`; GNU (Linux, the
-    # CI runner) has no `-f FORMAT` at all -- `-f` there means "filesystem status"
-    # instead, so the BSD invocation fails hard on Linux. Detect the flavor once
-    # via `stat --version` (GNU understands it and exits 0; BSD errors on the
-    # unknown long option) and pick the matching format string. Both formats are
-    # semantically identical -- name, size in bytes (st_size), mtime as decimal
-    # seconds since epoch -- so the manifest's (path, size, mtime) high-water mark
-    # means exactly the same thing on either platform; this is a syntax fix, not
-    # a behavior change.
+    # BSD stat wants -f FORMAT; GNU treats -f as filesystem status. `stat --version`
+    # succeeds only on GNU. Both formats yield name|size|mtime-epoch.
     if stat --version >/dev/null 2>&1; then
       stat_fmt=(--format='%n|%s|%Y')
     else
@@ -175,8 +168,8 @@ _pipeline mode:
 _views:
     {{duckdb}} "{{db}}" -c "SET VARIABLE lake='{{lake}}';" -f "{{repo}}/sql/views.sql"
 
-# W7 correction mining. Rebuilds correction_candidates (four detectors, precision-first),
-# operator_messages (G-recall-floor denominator: metadata-only, flagged = also a candidate
+# Correction mining. Rebuilds correction_candidates (four detectors, precision-first),
+# operator_messages (recall-floor denominator: metadata-only, flagged = also a candidate
 # locus) and promotes adjudicated candidates into correction_events -- all PURELY from the
 # lake, so the rebuild is deterministic (byte-identical on an unchanged lake; no manifest
 # interaction). _pipeline calls this AFTER the core tables + views are written; ingest/
@@ -196,8 +189,7 @@ mine:
     # Full-rebuild semantics need a clean target: these three are pure derivations
     # of the lake, and OVERWRITE_OR_IGNORE only replaces partitions the new run
     # writes -- a (runtime, date) partition that becomes EMPTY after a detector
-    # change would otherwise survive as stale rows (observed when detector v2
-    # landed: one v1 row lingered in a partition v2 no longer writes).
+    # change would otherwise survive as stale rows.
     rm -rf "{{lake}}/correction_candidates" "{{lake}}/operator_messages" "{{lake}}/correction_events"
     mkdir -p "{{state}}"; spill="$(mktemp -d "{{state}}/duckdb_tmp.XXXXXX")"
     trap 'rm -rf "$spill"' EXIT
@@ -209,7 +201,7 @@ mine:
       -c "COPY (SELECT * FROM stg_operator_messages ORDER BY runtime, date, message_uuid) TO '{{lake}}/operator_messages' (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);" \
       -c "COPY (SELECT * FROM stg_correction_events ORDER BY channel, date, event_id) TO '{{lake}}/correction_events' (FORMAT parquet, PARTITION_BY (channel, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);"
     [ -n "$tmp" ] && rm -f "$tmp" || true
-    # (Re)create the read-side W7 views over the just-written tables. CREATE VIEW binds its
+    # (Re)create the read-side views over the just-written tables. CREATE VIEW binds its
     # glob eagerly, so EVERY table gets a view only once its dir holds parquet:
     # correction_events is empty until the first adjudication round, and a corpus that
     # trips zero detectors (or has no user messages at all) leaves candidates/
@@ -228,10 +220,10 @@ mine:
     fi
     {{duckdb}} "{{db}}" -c "$cands $om $ev"
 
-# W7 adjudication REVIEW document (RFC-0002). Renders the operator's review sitting to
+# Adjudication review document. Renders the review sitting to
 # <data_home>/review_round1.md (override with `out=`): one section per flagged correction
 # candidate carrying the FULL prior draft + FULL corrective message + the model's advisory
-# suggestion from the worksheet (round-0 finding: context_judgment is largely un-inferable
+# suggestion from the worksheet (context_judgment is largely un-inferable
 # from a 240-char excerpt, so the review dereferences the full loci), then the recall-floor
 # sample (unflagged operator messages) as a second part. Candidates/loci already in the
 # adjudications ledger are SKIPPED, so the doc shrinks as the operator works through it
@@ -252,7 +244,7 @@ review out=(data_home + "/review_round1.md"):
     ws="{{worksheet}}"; wstmp=""
     if [ ! -s "$ws" ]; then
       # Absent/empty worksheet: prime read_json_auto with a non-matching sentinel row so the
-      # advisory LEFT JOIN yields nothing (worksheet absence is non-fatal per RFC-0002 review).
+      # advisory LEFT JOIN yields nothing (worksheet absence is non-fatal).
       wstmp="$(mktemp -t varve_ws.XXXXXX)"
       printf '%s\n' '{"candidate_id":"__no_worksheet__","detector":"","suggested_verdict":"","suggested_context_judgment":"","rationale":"","suggested_by":"","model_id":"","suggested_at":""}' > "$wstmp"
       ws="$wstmp"
@@ -266,10 +258,10 @@ review out=(data_home + "/review_round1.md"):
     [ -n "$wstmp" ] && rm -f "$wstmp" || true
     echo "varve: wrote review -> {{out}}" >&2
 
-# W7 durability-test input (RFC-0002): the intervention timeline for "does baking a
-# correction into a rule stop it recurring" -- recovered from a RULEBOOK's own git
+# Intervention timeline for "does baking a correction into a rule stop it recurring",
+# recovered from a rulebook's own git
 # history, no new capture surface. GENERIC: rulebook_dir is any git repo the operator
-# points this at (their voicing/rules directory, e.g.); nothing here names a real path.
+# points this at ; nothing here names a real path.
 # Read-only -- shells `git log`, never writes to rulebook_dir; safe against a dirty
 # working tree. Idempotent -- full rewrite of interventions.csv every run.
 # Writes <data_home>/state/interventions.csv:
@@ -337,9 +329,7 @@ disk:
 # recipe body and evaluates the top-level variable assignments, so a broken
 # interpolation or a malformed recipe declaration fails here (verified: an
 # unclosed `{{` and a stray `:` both fail `--evaluate` with a parser error).
-# Deliberately NOT `just --fmt --check`: this file's aligned `:=` blocks are a
-# readability choice, and fmt's canonical reformatting would flatten them --
-# that is a style opinion, not a defect, so it stays off the merge gate.
+# Not `just --fmt --check`: it would flatten the aligned `:=` blocks.
 # mise.toml resolving is validated for free: every CI job's `mise install`
 # fails outright on an unresolvable duckdb/just pin before any recipe runs.
 lint:
@@ -388,7 +378,7 @@ test:
     cand="$(just sql -noheader -list -c "SELECT count(*) FROM correction_candidates;")"
     if [ "${cand:-0}" -lt 1 ]; then
       echo "FAIL: correction_candidates is empty -- the fixture no longer trips" >&2
-      echo "      a W7 detector (mine's correction_candidates view creation" >&2
+      echo "      a mining detector (mine's correction_candidates view creation" >&2
       echo "      requires at least one row; see justfile _views comment)" >&2
       exit 1
     fi

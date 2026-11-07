@@ -1,31 +1,8 @@
-# .gitlab-ci.yml -- merge-gate pipeline that actually validates the repo
-#
-# Replaces the loud no_ci_see_deviations_yaml placeholder (main@625de0a):
-# that job asserted nothing about this repo, only that a merge-gate deviation
-# was on file. varve is SQL + a justfile, not a language stack any dunn.dev/
-# pipeline catalog component targets (go/rust/node/container), so this hand-
-# rolls two jobs that call the justfile's own `lint`/`test` recipes -- CI
-# duplicates none of their logic, so `just test` still runs identically on the
-# operator's machine.
-#
-# `lint`  -- just --evaluate (a broken interpolation or malformed recipe fails
-#            the parse; deliberately not `just --fmt --check`, whose canonical
-#            reformat would flatten this file's intentional `:=` alignment --
-#            a style opinion, not a defect).
-# `test`  -- the real assertion. mise install resolves the pinned duckdb/just
-#            (mise.toml validated for free -- a bad pin fails before any
-#            recipe runs), then `just test` runs the full backfill/mine
-#            pipeline against a synthetic three-runtime fixture
-#            (tests/fixtures/) in an isolated VARVE_DATA, so every statement in
-#            adapters/, sql/ and mining/ executes for real against DuckDB
-#            (the actual engine -- not a generic SQL linter that would
-#            disagree with its dialect), then executes every file in
-#            queries/ and mining/queries/ plus `just review` against the result. See the
-#            justfile `test` recipe for the full rationale.
-#
-# Runner: untagged GitLab SaaS shared runner (dunn.dev/pipeline README v2.2.0+
-# posture -- the previous self-hosted-runner constraint is opt-in only for
-# demonstrably heavy jobs; this one just downloads duckdb/just and runs SQL).
+# Merge gate. Both jobs call the justfile recipes, so CI and a local run match.
+# lint: just --evaluate.
+# test: just test runs the pipeline on the synthetic fixture under an isolated
+#       VARVE_DATA and executes every SQL file against DuckDB.
+# Runs on the untagged shared runner. The jobs only fetch duckdb and just.
 
 default:
   interruptible: true
