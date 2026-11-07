@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 740" width="720" height="740" role="img" aria-labelledby="syn-t syn-d">
+  <title id="syn-t">A copy only ever grows, except the replace set, which is swapped as a unit</title>
+  <desc id="syn-d">The per-file decision in bin/sync, top to bottom: config entries must be relative without parent references; find lists only regular files matching the include list, so symlinks are never copied; names in the replace list are skipped here; a forgotten session is skipped; a source shorter than the mirror copy is skipped and counted; an equal size and whole-second mtime is already current; otherwise the file is copied to a temp name, dropped if the temp came out shorter than the copy, and renamed into place. After the include pass the replace list is walked: each entry is checked for symlinks, staged together under temp names, and checked unchanged from before the first copy to after the last with three tries, all or none up to there; then the journal copies are cleared, also when the source dropped the journal, and each temp is renamed into place. No engine runs.</desc>
+  <style>
+    svg { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .box { fill: #f4f4f4; stroke: #c4c4c4; stroke-width: 1; }
+    .acc { fill: #4a6741; stroke: #4a6741; }
+    .out { fill: none; stroke: #b4b4b4; stroke-width: 1; stroke-dasharray: 5 4; }
+    .zone { fill: none; stroke: #4a6741; stroke-width: 1.5; stroke-dasharray: 6 4; }
+    .nm { font-size: 13px; font-weight: 600; fill: #0a0a0a; }
+    .sub { font-size: 11px; fill: #606060; }
+    .lbl { font-size: 11px; fill: #404040; }
+    .anm { font-size: 13px; font-weight: 600; fill: #ffffff; }
+    .asub { font-size: 11px; fill: #ffffff; }
+    .ln { fill: none; stroke: #404040; stroke-width: 1.5; }
+    .ah { fill: #404040; }
+    .zl { font-size: 12px; font-weight: 600; fill: #4a6741; }
+    .pg { fill: #ffffff; }
+    @media (prefers-color-scheme: dark) {
+      .pg { fill: #1c1c1e; }
+      .box { fill: #242426; stroke: #48484a; }
+      .acc { fill: #6aaa58; stroke: #6aaa58; }
+      .out { stroke: #636366; }
+      .zone { stroke: #6aaa58; }
+      .nm { fill: #f2f2f7; }
+      .sub { fill: #a0a0a6; }
+      .lbl { fill: #aeaeb2; }
+      .anm { fill: #1c1c1e; }
+      .asub { fill: #1c1c1e; }
+      .ln { stroke: #aeaeb2; }
+      .ah { fill: #aeaeb2; }
+      .zl { fill: #6aaa58; }
+    }
+  </style>
+  <rect class="pg" width="720" height="740"/>
+  <defs><marker id="syn-ar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto"><path class="ah" d="M0,0 L10,4 L0,8 Z"/></marker></defs>
+
+  <!-- zone for the replace set -->
+  <rect class="zone" x="390" y="62" width="316" height="650" rx="8"/>
+  <text class="zl" x="402" y="80">replace set: database and journal, one unit</text>
+
+  <!-- left spine arrows -->
+  <path class="ln" d="M125,64 V96" marker-end="url(#syn-ar)"/>
+  <path class="ln" d="M125,140 V172" marker-end="url(#syn-ar)"/>
+  <path class="ln" d="M125,216 V248" marker-end="url(#syn-ar)"/>
+  <path class="ln" d="M125,292 V324" marker-end="url(#syn-ar)"/>
+  <path class="ln" d="M125,368 V400" marker-end="url(#syn-ar)"/>
+  <path class="ln" d="M125,444 V476" marker-end="url(#syn-ar)"/>
+  <path class="ln" d="M125,520 V552" marker-end="url(#syn-ar)"/>
+  <!-- exits -->
+  <path class="ln" d="M230,42 H378 V118 H410" marker-end="url(#syn-ar)"/>
+  <path class="ln" d="M230,194 H270" marker-end="url(#syn-ar)"/>
+  <path class="ln" d="M230,270 H270" marker-end="url(#syn-ar)"/>
+  <path class="ln" d="M230,346 H270" marker-end="url(#syn-ar)"/>
+  <path class="ln" d="M230,498 H270" marker-end="url(#syn-ar)"/>
+  <!-- left labels -->
+  <text class="lbl" x="133" y="84">valid</text>
+  <text class="lbl" x="133" y="160">other files</text>
+  <text class="lbl" x="133" y="236">no</text>
+  <text class="lbl" x="133" y="312">no</text>
+  <text class="lbl" x="133" y="388">differs</text>
+  <text class="lbl" x="133" y="464">copied</text>
+  <text class="lbl" x="133" y="540">no</text>
+  <text class="lbl" x="304" y="36" text-anchor="middle">then the replace list</text>
+  <text class="lbl" x="250" y="188" text-anchor="middle">yes</text>
+  <text class="lbl" x="250" y="264" text-anchor="middle">yes</text>
+  <text class="lbl" x="250" y="340" text-anchor="middle">yes</text>
+  <text class="lbl" x="250" y="492" text-anchor="middle">yes</text>
+
+  <!-- left nodes -->
+  <rect class="box" x="20" y="20" width="210" height="44" rx="6"/>
+  <text class="nm" x="125" y="39" text-anchor="middle">config entries</text>
+  <text class="sub" x="125" y="55" text-anchor="middle">relative, no .., else exit 2</text>
+  <rect class="box" x="20" y="96" width="210" height="44" rx="6"/>
+  <text class="nm" x="125" y="115" text-anchor="middle">find -type f -name</text>
+  <text class="sub" x="125" y="131" text-anchor="middle">include list; symlinks not listed</text>
+  <rect class="box" x="20" y="172" width="210" height="44" rx="6"/>
+  <text class="nm" x="125" y="191" text-anchor="middle">session forgotten?</text>
+  <text class="sub" x="125" y="207" text-anchor="middle">id in the path: never copied</text>
+  <rect class="box" x="20" y="248" width="210" height="44" rx="6"/>
+  <text class="nm" x="125" y="267" text-anchor="middle">source shorter than copy?</text>
+  <text class="sub" x="125" y="283" text-anchor="middle">an eroded source never shrinks it</text>
+  <rect class="box" x="20" y="324" width="210" height="44" rx="6"/>
+  <text class="nm" x="125" y="343" text-anchor="middle">same size and mtime?</text>
+  <text class="sub" x="125" y="359" text-anchor="middle">whole seconds</text>
+  <rect class="box" x="20" y="400" width="210" height="44" rx="6"/>
+  <text class="nm" x="125" y="419" text-anchor="middle">cp -p to name.tmp.PID</text>
+  <text class="sub" x="125" y="435" text-anchor="middle">beside the copy, same folder</text>
+  <rect class="box" x="20" y="476" width="210" height="44" rx="6"/>
+  <text class="nm" x="125" y="495" text-anchor="middle">temp shorter than copy?</text>
+  <text class="sub" x="125" y="511" text-anchor="middle">source rewritten mid-copy</text>
+  <rect class="acc" x="20" y="552" width="210" height="44" rx="6"/>
+  <text class="anm" x="125" y="571" text-anchor="middle">mv temp over copy</text>
+  <text class="asub" x="125" y="587" text-anchor="middle">rename: never a partial file</text>
+
+  <!-- outcomes -->
+  <rect class="out" x="270" y="172" width="100" height="44" rx="6"/>
+  <text class="nm" x="320" y="191" text-anchor="middle">skip</text>
+  <text class="sub" x="320" y="207" text-anchor="middle">not counted</text>
+  <rect class="out" x="270" y="248" width="100" height="44" rx="6"/>
+  <text class="nm" x="320" y="267" text-anchor="middle">skip</text>
+  <text class="sub" x="320" y="283" text-anchor="middle">counted shorter</text>
+  <rect class="out" x="270" y="324" width="100" height="44" rx="6"/>
+  <text class="nm" x="320" y="343" text-anchor="middle">skip</text>
+  <text class="sub" x="320" y="359" text-anchor="middle">already current</text>
+  <rect class="out" x="270" y="476" width="100" height="44" rx="6"/>
+  <text class="nm" x="320" y="495" text-anchor="middle">drop temp</text>
+  <text class="sub" x="320" y="511" text-anchor="middle">counted shorter</text>
+
+  <!-- replace set arrows -->
+  <path class="ln" d="M548,142 V172" marker-end="url(#syn-ar)"/>
+  <path class="ln" d="M548,218 V248" marker-end="url(#syn-ar)"/>
+  <path class="ln" d="M548,294 V324" marker-end="url(#syn-ar)"/>
+  <path class="ln" d="M548,370 V400" marker-end="url(#syn-ar)"/>
+  <path class="ln" d="M548,462 V492" marker-end="url(#syn-ar)"/>
+  <path class="ln" d="M548,538 V568" marker-end="url(#syn-ar)"/>
+  <text class="lbl" x="556" y="162">safe</text>
+  <text class="lbl" x="556" y="238">present</text>
+  <text class="lbl" x="556" y="314">changed</text>
+  <text class="lbl" x="556" y="390">staged</text>
+  <text class="lbl" x="556" y="482">stable</text>
+  <text class="lbl" x="556" y="558">cleared</text>
+
+  <!-- replace set nodes -->
+  <rect class="box" x="406" y="96" width="284" height="46" rx="6"/>
+  <text class="nm" x="548" y="115" text-anchor="middle">entry a symlink or outside root?</text>
+  <text class="sub" x="548" y="131" text-anchor="middle">skipped with a warning</text>
+  <rect class="box" x="406" y="172" width="284" height="46" rx="6"/>
+  <text class="nm" x="548" y="191" text-anchor="middle">database present?</text>
+  <text class="sub" x="548" y="207" text-anchor="middle">first listed member; absent: mirror untouched</text>
+  <rect class="box" x="406" y="248" width="284" height="46" rx="6"/>
+  <text class="nm" x="548" y="267" text-anchor="middle">any member changed?</text>
+  <text class="sub" x="548" y="283" text-anchor="middle">size or ns mtime differs from the mirror's</text>
+  <rect class="box" x="406" y="324" width="284" height="46" rx="6"/>
+  <text class="nm" x="548" y="343" text-anchor="middle">stage every member</text>
+  <text class="sub" x="548" y="359" text-anchor="middle">cp -p each to name.tmp.PID, none renamed yet</text>
+  <rect class="box" x="406" y="400" width="284" height="62" rx="6"/>
+  <text class="nm" x="548" y="419" text-anchor="middle">unchanged since before?</text>
+  <text class="sub" x="548" y="435" text-anchor="middle">ns stat before first copy equals after last</text>
+  <text class="sub" x="548" y="451" text-anchor="middle">all or none: 3 tries, else old set stays</text>
+  <rect class="box" x="406" y="492" width="284" height="46" rx="6"/>
+  <text class="nm" x="548" y="511" text-anchor="middle">clear the journal copies</text>
+  <text class="sub" x="548" y="527" text-anchor="middle">no stale journal; also one the source dropped</text>
+  <rect class="acc" x="406" y="568" width="284" height="46" rx="6"/>
+  <text class="anm" x="548" y="587" text-anchor="middle">rename each temp into place</text>
+  <text class="asub" x="548" y="603" text-anchor="middle">staged and checked first</text>
+
+  <text class="sub" x="20" y="640">No engine runs. Temp copies stranded by a killed run</text>
+  <text class="sub" x="20" y="656">are deleted at the start, under the sync lock.</text>
+</svg>

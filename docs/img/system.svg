@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 640" width="720" height="640" role="img" aria-labelledby="sys-t sys-d">
+  <title id="sys-t">The whole path, with the data home drawn apart from the repo</title>
+  <desc id="sys-d">Runtime stores are copied by bin/sync, limited to the include list in runtimes.toml, into the mirror in the data home. bin/sync never opens the engine. Inside the bin/duck boundary, bin/build reads the mirror into lake.new, bin/check grades lake.new against the published lake, a rename swaps lake.new in and keeps the old lake as lake.old, then bin/mine runs. Queries read the lake. The repo holds code only; the mirror, the config files and the mined data live in the data home.</desc>
+  <style>
+    svg { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .box { fill: #f4f4f4; stroke: #c4c4c4; stroke-width: 1; }
+    .acc { fill: #4a6741; stroke: #4a6741; }
+    .zone { fill: none; stroke: #4a6741; stroke-width: 1.5; stroke-dasharray: 6 4; }
+    .zrep { fill: none; stroke: #909090; stroke-width: 1.5; }
+    .nm { font-size: 13px; font-weight: 600; fill: #0a0a0a; }
+    .sub { font-size: 11px; fill: #606060; }
+    .lbl { font-size: 11px; fill: #404040; }
+    .anm { font-size: 13px; font-weight: 600; fill: #ffffff; }
+    .asub { font-size: 11px; fill: #ffffff; }
+    .ln { fill: none; stroke: #404040; stroke-width: 1.5; }
+    .ah { fill: #404040; }
+    .zl { font-size: 12px; font-weight: 600; fill: #4a6741; }
+    .zg { font-size: 12px; font-weight: 600; fill: #606060; }
+    .pg { fill: #ffffff; }
+    @media (prefers-color-scheme: dark) {
+      .pg { fill: #1c1c1e; }
+      .box { fill: #242426; stroke: #48484a; }
+      .acc { fill: #6aaa58; stroke: #6aaa58; }
+      .zone { stroke: #6aaa58; }
+      .zrep { stroke: #8e8e93; }
+      .nm { fill: #f2f2f7; }
+      .sub { fill: #a0a0a6; }
+      .lbl { fill: #aeaeb2; }
+      .anm { fill: #1c1c1e; }
+      .asub { fill: #1c1c1e; }
+      .ln { stroke: #aeaeb2; }
+      .ah { fill: #aeaeb2; }
+      .zl { fill: #6aaa58; }
+      .zg { fill: #a0a0a6; }
+    }
+  </style>
+  <rect class="pg" width="720" height="640"/>
+  <defs><marker id="sys-ar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto"><path class="ah" d="M0,0 L10,4 L0,8 Z"/></marker></defs>
+
+  <!-- zones -->
+  <rect class="zrep" x="12" y="84" width="696" height="148" rx="8"/>
+  <text class="zg" x="24" y="224">repo: code only, holds no data</text>
+  <rect class="zone" x="196" y="96" width="498" height="104" rx="8"/>
+  <text class="zl" x="208" y="114">bin/duck boundary: every SQL run is capped</text>
+  <rect class="zone" x="12" y="290" width="696" height="212" rx="8"/>
+  <text class="zl" x="24" y="494">data home (VARVE_DATA), never committed</text>
+
+  <!-- arrows -->
+  <path class="ln" d="M85,64 V132" marker-end="url(#sys-ar)"/>
+  <path class="ln" d="M85,180 V330" marker-end="url(#sys-ar)"/>
+  <path class="ln" d="M240,180 V330" marker-end="url(#sys-ar)"/>
+  <path class="ln" d="M420,180 V262 H300 V330" marker-end="url(#sys-ar)"/>
+  <path class="ln" d="M625,180 V270 H455 V330" marker-end="url(#sys-ar)"/>
+  <path class="ln" d="M140,355 H210" marker-end="url(#sys-ar)"/>
+  <path class="ln" d="M320,355 H390" marker-end="url(#sys-ar)"/>
+  <path class="ln" d="M500,355 H570" marker-end="url(#sys-ar)"/>
+  <path class="ln" d="M445,380 V528" marker-end="url(#sys-ar)"/>
+
+  <!-- arrow labels -->
+  <text class="lbl" x="95" y="86" dx="2" dy="-4">include list only</text>
+  <text class="lbl" x="95" y="262">copy</text>
+  <text class="lbl" x="250" y="312">writes</text>
+  <text class="lbl" x="360" y="256" text-anchor="middle">grades</text>
+  <text class="lbl" x="540" y="264" text-anchor="middle">after the swap</text>
+  <text class="lbl" x="175" y="347" text-anchor="middle">read</text>
+  <text class="lbl" x="355" y="347" text-anchor="middle">rename</text>
+  <text class="lbl" x="535" y="347" text-anchor="middle">kept</text>
+  <text class="lbl" x="455" y="470">just sql</text>
+
+  <!-- nodes: stores and repo -->
+  <rect class="box" x="30" y="20" width="110" height="44" rx="6"/>
+  <text class="nm" x="85" y="40" text-anchor="middle">runtime stores</text>
+  <text class="sub" x="85" y="55" text-anchor="middle">read only</text>
+  <rect class="box" x="30" y="132" width="110" height="48" rx="6"/>
+  <text class="nm" x="85" y="152" text-anchor="middle">bin/sync</text>
+  <text class="sub" x="85" y="168" text-anchor="middle">no engine, cp only</text>
+  <rect class="box" x="210" y="132" width="110" height="48" rx="6"/>
+  <text class="nm" x="265" y="152" text-anchor="middle">bin/build</text>
+  <text class="sub" x="265" y="168" text-anchor="middle">adapter per runtime</text>
+  <rect class="box" x="390" y="132" width="110" height="48" rx="6"/>
+  <text class="nm" x="445" y="152" text-anchor="middle">bin/check</text>
+  <text class="sub" x="445" y="168" text-anchor="middle">new vs published</text>
+  <rect class="box" x="570" y="132" width="110" height="48" rx="6"/>
+  <text class="nm" x="625" y="152" text-anchor="middle">bin/mine</text>
+  <text class="sub" x="625" y="168" text-anchor="middle">mining/*.sql</text>
+
+  <!-- nodes: data home -->
+  <rect class="acc" x="30" y="330" width="110" height="50" rx="6"/>
+  <text class="anm" x="85" y="351" text-anchor="middle">mirror/</text>
+  <text class="asub" x="85" y="368" text-anchor="middle">not rebuildable</text>
+  <rect class="box" x="210" y="330" width="110" height="50" rx="6"/>
+  <text class="nm" x="265" y="351" text-anchor="middle">lake.new</text>
+  <text class="sub" x="265" y="368" text-anchor="middle">parquet, built</text>
+  <rect class="box" x="390" y="330" width="110" height="50" rx="6"/>
+  <text class="nm" x="445" y="351" text-anchor="middle">lake/</text>
+  <text class="sub" x="445" y="368" text-anchor="middle">published</text>
+  <rect class="box" x="570" y="330" width="110" height="50" rx="6"/>
+  <text class="nm" x="625" y="351" text-anchor="middle">lake.old</text>
+  <text class="sub" x="625" y="368" text-anchor="middle">until next build</text>
+  <rect class="acc" x="30" y="410" width="290" height="56" rx="6"/>
+  <text class="anm" x="175" y="432" text-anchor="middle">runtimes, attribution, pricing,</text>
+  <text class="anm" x="175" y="450" text-anchor="middle">forgotten (.toml)</text>
+  <rect class="acc" x="570" y="410" width="110" height="56" rx="6"/>
+  <text class="anm" x="625" y="432" text-anchor="middle">mining/</text>
+  <text class="asub" x="625" y="450" text-anchor="middle">+ ledger .jsonl</text>
+
+  <!-- queries -->
+  <rect class="box" x="390" y="528" width="110" height="48" rx="6"/>
+  <text class="nm" x="445" y="548" text-anchor="middle">queries/</text>
+  <text class="sub" x="445" y="564" text-anchor="middle">printed output</text>
+
+  <text class="sub" x="24" y="610">Scripts in the repo read and write the data home. Nothing in the data home is committed.</text>
+  <text class="sub" x="24" y="626">Filled boxes cannot be rebuilt; lake.new, lake/ and lake.old can.</text>
+</svg>

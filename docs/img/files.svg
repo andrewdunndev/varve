@@ -1,0 +1,170 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 732" width="720" height="732" role="img" aria-labelledby="fil-t fil-d">
+  <title id="fil-t">Four kinds of SQL file, what each reads and writes, and a new runtime as three files</title>
+  <desc id="fil-d">Adapters read the mirror and write the four tables into lake.new, once per runtime in each build, looked up in the data home before the repo. Checks read lake.new and the published lake and write failure rows, repo first then data home. Mines read the published lake after the swap, run from the data home only in filename order, and each saves one table keyed on source ids. Queries read the lake and print. The adjudication ledger is operator data in the data home that checks/ledger_orphans.sql watches: a candidate or message id no longer in the lake is a failure. A new runtime is one runtimes.toml row, one adapter and one fixture.</desc>
+  <style>
+    svg { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .box { fill: #f4f4f4; stroke: #c4c4c4; stroke-width: 1; }
+    .acc { fill: #4a6741; stroke: #4a6741; }
+    .zone { fill: none; stroke: #4a6741; stroke-width: 1.5; stroke-dasharray: 6 4; }
+    .nm { font-size: 13px; font-weight: 600; fill: #0a0a0a; }
+    .sub { font-size: 11px; fill: #606060; }
+    .lbl { font-size: 11px; fill: #404040; }
+    .hd { font-size: 12px; font-weight: 600; fill: #606060; }
+    .anm { font-size: 13px; font-weight: 600; fill: #ffffff; }
+    .asub { font-size: 11px; fill: #ffffff; }
+    .pl { font-size: 18px; font-weight: 600; fill: #606060; }
+    .ln { fill: none; stroke: #404040; stroke-width: 1.5; }
+    .ah { fill: #404040; }
+    .zl { font-size: 12px; font-weight: 600; fill: #4a6741; }
+    .pg { fill: #ffffff; }
+    @media (prefers-color-scheme: dark) {
+      .pg { fill: #1c1c1e; }
+      .box { fill: #242426; stroke: #48484a; }
+      .acc { fill: #6aaa58; stroke: #6aaa58; }
+      .zone { stroke: #6aaa58; }
+      .nm { fill: #f2f2f7; }
+      .sub { fill: #a0a0a6; }
+      .lbl { fill: #aeaeb2; }
+      .hd { fill: #a0a0a6; }
+      .anm { fill: #1c1c1e; }
+      .asub { fill: #1c1c1e; }
+      .pl { fill: #a0a0a6; }
+      .ln { stroke: #aeaeb2; }
+      .ah { fill: #aeaeb2; }
+      .zl { fill: #6aaa58; }
+    }
+  </style>
+  <rect class="pg" width="720" height="732"/>
+  <defs><marker id="fil-ar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto"><path class="ah" d="M0,0 L10,4 L0,8 Z"/></marker></defs>
+
+  <text class="hd" x="110" y="20" text-anchor="middle">reads</text>
+  <text class="hd" x="330" y="20" text-anchor="middle">file kind, when, looked up</text>
+  <text class="hd" x="580" y="20" text-anchor="middle">writes</text>
+
+  <!-- arrows and labels, rows at y 32, 126, 220, 314, 408 (mid +38) -->
+  <path class="ln" d="M200,70 H240" marker-end="url(#fil-ar)"/>
+  <path class="ln" d="M420,70 H460" marker-end="url(#fil-ar)"/>
+  <path class="ln" d="M200,164 H240" marker-end="url(#fil-ar)"/>
+  <path class="ln" d="M420,164 H460" marker-end="url(#fil-ar)"/>
+  <path class="ln" d="M200,258 H240" marker-end="url(#fil-ar)"/>
+  <path class="ln" d="M420,258 H460" marker-end="url(#fil-ar)"/>
+  <path class="ln" d="M200,352 H240" marker-end="url(#fil-ar)"/>
+  <path class="ln" d="M420,352 H460" marker-end="url(#fil-ar)"/>
+  <path class="ln" d="M200,446 H240" marker-end="url(#fil-ar)"/>
+  <path class="ln" d="M420,446 H460" marker-end="url(#fil-ar)"/>
+  <text class="lbl" x="220" y="64" text-anchor="middle">reads</text>
+  <text class="lbl" x="440" y="64" text-anchor="middle">writes</text>
+  <text class="lbl" x="220" y="158" text-anchor="middle">reads</text>
+  <text class="lbl" x="440" y="158" text-anchor="middle">writes</text>
+  <text class="lbl" x="220" y="252" text-anchor="middle">reads</text>
+  <text class="lbl" x="440" y="252" text-anchor="middle">writes</text>
+  <text class="lbl" x="220" y="346" text-anchor="middle">reads</text>
+  <text class="lbl" x="440" y="346" text-anchor="middle">prints</text>
+  <text class="lbl" x="220" y="440" text-anchor="middle">reads</text>
+  <text class="lbl" x="440" y="440" text-anchor="middle">writes</text>
+
+  <!-- row 1: adapter -->
+  <rect class="box" x="20" y="32" width="180" height="76" rx="6"/>
+  <text class="nm" x="110" y="52" text-anchor="middle">mirror/&lt;runtime&gt;</text>
+  <text class="sub" x="110" y="70" text-anchor="middle">plus sql/prelude.sql and the</text>
+  <text class="sub" x="110" y="85" text-anchor="middle">attribution, pricing and</text>
+  <text class="sub" x="110" y="100" text-anchor="middle">forgotten views</text>
+  <rect class="box" x="240" y="32" width="180" height="76" rx="6"/>
+  <text class="nm" x="330" y="52" text-anchor="middle">adapters/&lt;name&gt;.sql</text>
+  <text class="sub" x="330" y="73" text-anchor="middle">bin/build, once per runtime</text>
+  <text class="sub" x="330" y="90" text-anchor="middle">data home first, then repo</text>
+  <rect class="box" x="460" y="32" width="240" height="76" rx="6"/>
+  <text class="nm" x="580" y="52" text-anchor="middle">the four tables</text>
+  <text class="sub" x="580" y="70" text-anchor="middle">sessions, messages, api_calls,</text>
+  <text class="sub" x="580" y="85" text-anchor="middle">tool_calls as parquet in lake.new;</text>
+  <text class="sub" x="580" y="100" text-anchor="middle">forgotten sessions dropped</text>
+
+  <!-- row 2: check -->
+  <rect class="box" x="20" y="126" width="180" height="76" rx="6"/>
+  <text class="nm" x="110" y="146" text-anchor="middle">lake.new, lake</text>
+  <text class="sub" x="110" y="164" text-anchor="middle">published_*: the lake being</text>
+  <text class="sub" x="110" y="179" text-anchor="middle">replaced, and the record view</text>
+  <text class="sub" x="110" y="194" text-anchor="middle">(sql/record.sql)</text>
+  <rect class="box" x="240" y="126" width="180" height="76" rx="6"/>
+  <text class="nm" x="330" y="146" text-anchor="middle">checks/*.sql</text>
+  <text class="sub" x="330" y="167" text-anchor="middle">before the swap, and after</text>
+  <text class="sub" x="330" y="182" text-anchor="middle">the mines; repo first, then</text>
+  <text class="sub" x="330" y="197" text-anchor="middle">data home, all of them run</text>
+  <rect class="box" x="460" y="126" width="240" height="76" rx="6"/>
+  <text class="nm" x="580" y="146" text-anchor="middle">failure rows</text>
+  <text class="sub" x="580" y="160" text-anchor="middle">before the swap a row stops</text>
+  <text class="sub" x="580" y="172" text-anchor="middle">the build, lake/ untouched;</text>
+  <text class="sub" x="580" y="184" text-anchor="middle">after the mines a row</text>
+  <text class="sub" x="580" y="196" text-anchor="middle">fails the run</text>
+
+  <!-- row 3: mine -->
+  <rect class="box" x="20" y="220" width="180" height="76" rx="6"/>
+  <text class="nm" x="110" y="240" text-anchor="middle">the published lake</text>
+  <text class="sub" x="110" y="258" text-anchor="middle">all tables, and the data</text>
+  <text class="sub" x="110" y="273" text-anchor="middle">home .toml and .jsonl</text>
+  <text class="sub" x="110" y="288" text-anchor="middle">as views</text>
+  <rect class="box" x="240" y="220" width="180" height="76" rx="6"/>
+  <text class="nm" x="330" y="240" text-anchor="middle">mining/NN-table.sql</text>
+  <text class="sub" x="330" y="261" text-anchor="middle">after the swap, filename</text>
+  <text class="sub" x="330" y="276" text-anchor="middle">order; data home only,</text>
+  <text class="sub" x="330" y="291" text-anchor="middle">a failure keeps last good</text>
+  <rect class="box" x="460" y="220" width="240" height="76" rx="6"/>
+  <text class="nm" x="580" y="240" text-anchor="middle">one table, mine_out</text>
+  <text class="sub" x="580" y="258" text-anchor="middle">lake/&lt;table&gt;/&lt;part&gt;.parquet</text>
+  <text class="sub" x="580" y="273" text-anchor="middle">keyed on source ids, so a</text>
+  <text class="sub" x="580" y="288" text-anchor="middle">rebuild keeps it joined</text>
+
+  <!-- row 4: query -->
+  <rect class="box" x="20" y="314" width="180" height="76" rx="6"/>
+  <text class="nm" x="110" y="341" text-anchor="middle">the lake</text>
+  <text class="sub" x="110" y="361" text-anchor="middle">one view per folder</text>
+  <text class="sub" x="110" y="376" text-anchor="middle">that holds parquet</text>
+  <rect class="box" x="240" y="314" width="180" height="76" rx="6"/>
+  <text class="nm" x="330" y="334" text-anchor="middle">queries/*.sql</text>
+  <text class="sub" x="330" y="355" text-anchor="middle">on demand: just sql</text>
+  <text class="sub" x="330" y="370" text-anchor="middle">run by path, nothing</text>
+  <text class="sub" x="330" y="385" text-anchor="middle">registered</text>
+  <rect class="box" x="460" y="314" width="240" height="76" rx="6"/>
+  <text class="nm" x="580" y="341" text-anchor="middle">printed output</text>
+  <text class="sub" x="580" y="361" text-anchor="middle">nothing is saved</text>
+  <text class="sub" x="580" y="376" text-anchor="middle">to the lake</text>
+
+  <!-- row 5: ledger -->
+  <rect class="acc" x="20" y="408" width="180" height="76" rx="6"/>
+  <text class="anm" x="110" y="428" text-anchor="middle">adjudications.jsonl</text>
+  <text class="asub" x="110" y="448" text-anchor="middle">operator data in the data</text>
+  <text class="asub" x="110" y="463" text-anchor="middle">home, never rebuilt</text>
+  <rect class="box" x="240" y="408" width="180" height="76" rx="6"/>
+  <text class="nm" x="330" y="428" text-anchor="middle">ledger_orphans.sql</text>
+  <text class="sub" x="330" y="449" text-anchor="middle">a check, so it runs on</text>
+  <text class="sub" x="330" y="464" text-anchor="middle">every build and every mine</text>
+  <rect class="box" x="460" y="408" width="240" height="76" rx="6"/>
+  <text class="nm" x="580" y="428" text-anchor="middle">an orphan is a failure</text>
+  <text class="sub" x="580" y="446" text-anchor="middle">a candidate or message id the</text>
+  <text class="sub" x="580" y="461" text-anchor="middle">lake no longer holds: restore</text>
+  <text class="sub" x="580" y="476" text-anchor="middle">the mirror files or fix the ledger</text>
+
+  <!-- new runtime -->
+  <rect class="zone" x="12" y="516" width="696" height="206" rx="8"/>
+  <text class="zl" x="24" y="536">a new runtime is three files</text>
+  <rect class="box" x="24" y="550" width="204" height="84" rx="6"/>
+  <text class="nm" x="126" y="571" text-anchor="middle">runtimes.toml row</text>
+  <text class="sub" x="126" y="590" text-anchor="middle">name, adapter, source,</text>
+  <text class="sub" x="126" y="605" text-anchor="middle">include, optional replace</text>
+  <text class="sub" x="126" y="620" text-anchor="middle">data home</text>
+  <text class="pl" x="242" y="598" text-anchor="middle">+</text>
+  <rect class="box" x="258" y="550" width="204" height="84" rx="6"/>
+  <text class="nm" x="360" y="571" text-anchor="middle">adapters/&lt;name&gt;.sql</text>
+  <text class="sub" x="360" y="590" text-anchor="middle">fills the four tables</text>
+  <text class="sub" x="360" y="605" text-anchor="middle">from the mirror folder</text>
+  <text class="sub" x="360" y="620" text-anchor="middle">data home or repo</text>
+  <text class="pl" x="476" y="598" text-anchor="middle">+</text>
+  <rect class="box" x="492" y="550" width="204" height="84" rx="6"/>
+  <text class="nm" x="594" y="571" text-anchor="middle">a fixture</text>
+  <text class="sub" x="594" y="590" text-anchor="middle">tests/fixtures/mirror/&lt;name&gt;/</text>
+  <text class="sub" x="594" y="605" text-anchor="middle">synthetic sessions that</text>
+  <text class="sub" x="594" y="620" text-anchor="middle">the build tests run over</text>
+  <text class="lbl" x="24" y="664">The adapter and the row can stay in your data home with no change to the repo.</text>
+  <text class="lbl" x="24" y="682">checks/runtime_rows.sql fails a runtime whose mirror yields no sessions.</text>
+  <text class="lbl" x="24" y="700">The fixture also needs a row in tests/fixtures/runtimes.toml; none has been added this way yet.</text>
+</svg>
