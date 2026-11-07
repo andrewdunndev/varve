@@ -3,7 +3,8 @@
 # lint: justfile parses, scripts parse, no engine name outside bin/duck.
 # test: just test runs the pipeline on the synthetic fixture under an isolated
 #       VARVE_DATA and executes every SQL file against the engine.
-# Runs on the untagged shared runner. The jobs only fetch the pinned tools.
+# Runs on the untagged shared runner. The jobs fetch the pinned tools; test also
+# installs the sqlite3 command, the writer for its real-WAL case.
 
 default:
   interruptible: true
@@ -38,6 +39,7 @@ test:
   <<: *mise-job
   stage: test
   script:
+    - command -v sqlite3 >/dev/null || { apt-get update -qq && apt-get install -y -qq sqlite3; }
     - just test
   artifacts:
     when: always

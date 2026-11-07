@@ -394,4 +394,46 @@ test:
     fi
     mv "$tmp/opencode-mirror" "$VARVE_MIRROR/opencode"
 
+    # A real SQLite WAL, as the opencode adapter reads it: rows held only in the -wal of a live store reach the mirror and read back through sqlite_scan, a clean close drops the -wal from the mirror, and reading never changes the mirror's database or -wal.
+    echo "varve test: opencode store through a real WAL" >&2
+    if ! command -v sqlite3 >/dev/null 2>&1; then
+      echo "FAIL: the WAL test needs the sqlite3 command" >&2; fail=1
+    else
+      w="$tmp/wal"; mkdir -p "$w/data" "$w/src"
+      printf '%s\n' '[[row]]' 'name = "oc"' 'adapter = "opencode.sql"' "source = \"$w/src\"" \
+        'include = ["store.db", "store.db-wal"]' 'replace = ["store.db", "store.db-wal"]' > "$w/data/runtimes.toml"
+      wal_sync() { VARVE_DATA="$w/data" VARVE_MIRROR="$w/mirror" {{repo}}/bin/sync 2>/dev/null; }
+      wal_rows() {
+        {{repo}}/bin/duck walrows -noheader -list \
+          -c "INSTALL sqlite; LOAD sqlite;" \
+          -c "SELECT string_agg(id, ',' ORDER BY id) FROM sqlite_scan('$w/mirror/oc/store.db', 'item');"
+      }
+      wal_sums() { cksum "$w/mirror/oc/store.db" "$w/mirror/oc/store.db-wal" 2>/dev/null || true; }
+      {
+        printf '%s\n' 'PRAGMA journal_mode=WAL;' 'CREATE TABLE item(id TEXT);' "INSERT INTO item VALUES ('main-1');" \
+          'PRAGMA wal_checkpoint(TRUNCATE);' 'PRAGMA wal_autocheckpoint=0;' "INSERT INTO item VALUES ('wal-1'), ('wal-2');"
+        n=0; while [ ! -e "$w/release" ] && [ "$n" -lt 600 ]; do sleep 0.2; n=$((n + 1)); done
+      } | sqlite3 "$w/src/store.db" > /dev/null &
+      holder=$!
+      n=0; while [ ! -s "$w/src/store.db-wal" ] && [ "$n" -lt 100 ]; do sleep 0.1; n=$((n + 1)); done
+      wal_sync
+      if [ ! -s "$w/mirror/oc/store.db-wal" ]; then
+        echo "FAIL: the live store's -wal did not reach the mirror" >&2; fail=1
+      fi
+      sums0="$(wal_sums)"
+      got="$(wal_rows)"
+      if [ "$got" != "main-1,wal-1,wal-2" ]; then echo "FAIL: rows held only in the -wal did not read back, got: $got" >&2; fail=1; fi
+      if [ "$(wal_sums)" != "$sums0" ]; then echo "FAIL: reading the live copy changed the mirror's database or -wal" >&2; fail=1; fi
+      echo "  mirror after read: $(ls "$w/mirror/oc" | tr '\n' ' ')" >&2
+
+      touch "$w/release"; wait "$holder" || true
+      if [ -e "$w/src/store.db-wal" ]; then echo "FAIL: a clean close left the source -wal in place" >&2; fail=1; fi
+      wal_sync
+      if [ -e "$w/mirror/oc/store.db-wal" ]; then echo "FAIL: the mirror kept a -wal the source no longer has" >&2; fail=1; fi
+      sums0="$(wal_sums)"
+      got="$(wal_rows)"
+      if [ "$got" != "main-1,wal-1,wal-2" ]; then echo "FAIL: rows did not read back after a clean close, got: $got" >&2; fail=1; fi
+      if [ "$(wal_sums)" != "$sums0" ]; then echo "FAIL: reading the closed copy changed the mirror's database" >&2; fail=1; fi
+    fi
+
     exit $fail
