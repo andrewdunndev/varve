@@ -69,7 +69,7 @@ Toolchain: `mise install` provisions the pinned `duckdb` + `just` from
 `mise.toml`; every recipe assumes both are on PATH.
 
 Lake data never lives in this repo. It lands at `~/.local/share/varve/lake/`
-(Parquet partitions) and `~/.local/share/varve/varve.duckdb` (rebuildable
+(Parquet partitions). Until ADR-0008 lands it also writes `~/.local/share/varve/varve.duckdb` (rebuildable
 views/marts).
 
 ## Status

@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 300" width="860" height="300" role="img" aria-labelledby="rt-t">
-  <title id="rt-t">A new runtime adds an adapter file, a fixture directory, and one runtimes row. All three can stay in your data home with no PR. The shared files are not touched.</title>
+  <title id="rt-t">A new runtime adds an adapter file, a fixture directory, and one runtimes row. The adapter and the runtimes row can stay in your data home with no PR. The shared files are not touched.</title>
     <style>
     svg { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
     .box { fill: #f4f4f4; stroke: #c4c4c4; stroke-width: 1; }
@@ -60,5 +60,5 @@
   <text class="gnm" x="720" y="200" text-anchor="middle">queries/</text>
   <rect class="dim" x="600" y="236" width="240" height="44" rx="6"/>
   <text class="gnm" x="720" y="264" text-anchor="middle">other adapters</text>
-  <text class="lbl" x="400" y="284" text-anchor="middle">All three can stay in your data home, no PR</text>
+  <text class="lbl" x="400" y="284" text-anchor="middle">Adapter and runtimes row can stay in your data home, no PR</text>
 </svg>

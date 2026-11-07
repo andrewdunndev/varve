@@ -26,7 +26,7 @@ Three primitives: files, SQL files, one runner (`bin/duck`). Everything extensib
 - The repo holds mechanisms and examples. The data home holds anything tuned to one user.
 - A runtime is one adapter, one fixture, one row in `runtimes.csv`. The data home holds `runtimes.csv`; the repo ships `runtimes.example.csv`. No row, no run.
 - Adapters resolve from the data home first, then the repo. A contributor runs an adapter with no PR.
-- Checks are `checks/*.sql`, replacing `sql/check.sql`. Each must return no rows, and each row names the next action. Users add their own. A check reports orphaned ledger rows.
+- Checks are `checks/*.sql`, replacing the single check file. Each must return no rows, and each row names the next action. Users add their own. A check reports orphaned ledger rows.
 - `just mine` runs each `.sql` in the data home's `mining/` through `bin/duck`. No file, no mining. The repo's `mining/` holds one example detector per file and `patterns.example.csv`.
 - Mines run after the swap. One failing mine does not stop the others or block publishing.
 - A mine's version is the hash of its file. Mines read the four tables, never raw formats, and key on source ids so adjudications survive.
