@@ -292,6 +292,34 @@ test:
     n="$(just sql -noheader -list -c "SELECT count(*) FROM sessions WHERE session_id = 'test-session-noise';")"
     if [ "$n" != "0" ]; then echo "FAIL: the forgotten session is still in the lake" >&2; fail=1; fi
 
+    # A mine's version is the hash of its file, and an empty result still saves a table.
+    lex="$VARVE_DATA/mining/22-correction_candidates.lexical.sql"
+    bad_versions="$(just sql -noheader -list -c "SELECT count(*) FROM correction_candidates WHERE detector = 'lexical' AND detector_version <> (SELECT md5(content) FROM read_text('$lex'));")"
+    all_lexical="$(just sql -noheader -list -c "SELECT count(*) FROM correction_candidates WHERE detector = 'lexical';")"
+    if [ "$bad_versions" != "0" ] || [ "$all_lexical" = "0" ]; then
+      echo "FAIL: detector_version is not the hash of the mine file ($bad_versions of $all_lexical differ)" >&2; fail=1
+    fi
+    empty="$(just sql -noheader -list -c "SELECT count(*) FROM correction_events;" 2>&1 || true)"
+    if [ "$empty" != "0" ]; then echo "FAIL: an empty mine did not save a readable table: $empty" >&2; fail=1; fi
+
+    # A failing mine keeps its last good file; the mines after it still run.
+    cp "$lex" "$tmp/lexical.sql"
+    echo "SELECT * FROM no_such_table;" > "$lex"
+    lex_before="$(sums "$lake/correction_candidates" | grep lexical)"
+    rm -f "$lake/operator_messages/part.parquet"
+    rc=0; just mine 2>"$tmp/mine.err" || rc=$?
+    if [ "$rc" -ne 1 ] || ! grep -q 'mine 22-correction_candidates.lexical failed' "$tmp/mine.err"; then
+      echo "FAIL: a failing mine should exit 1 and name itself, got exit $rc" >&2; tail -5 "$tmp/mine.err" >&2; fail=1
+    fi
+    if [ "$(sums "$lake/correction_candidates" | grep lexical)" != "$lex_before" ]; then
+      echo "FAIL: the failing mine's last good file changed" >&2; fail=1
+    fi
+    if [ ! -f "$lake/operator_messages/part.parquet" ]; then
+      echo "FAIL: the mines after the failing one did not run" >&2; fail=1
+    fi
+    cp "$tmp/lexical.sql" "$lex"
+    if ! just mine 2>"$tmp/mine.err"; then echo "FAIL: just mine did not pass once the mine was restored" >&2; tail -5 "$tmp/mine.err" >&2; fail=1; fi
+
     # The record checks have teeth: a retired column and a value outside a closed set fail.
     bad="$tmp/badlake"
     mkdir -p "$bad/messages" "$bad/tool_calls"

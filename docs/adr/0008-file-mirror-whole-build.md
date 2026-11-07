@@ -1,6 +1,6 @@
 # ADR-0008: File mirror and whole build
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-11-06
 - **Deciders:** maintainer
 
@@ -41,6 +41,7 @@
 - Rows deleted inside a SQLite source are not protected. `check` reports the loss.
 - Parquet footers are read on every query once no database holds the views. The cost is unmeasured.
 - The live SQLite copy in the mirror needs a lab check before the snapshot goes.
+- SQLite files are exempt from never-shorter: a stale database and journal pair corrupts, so they are replaced together or not at all.
 
 **Neutral**
 - Whole-build time is unmeasured. If a capped build is too slow, build goes incremental by (runtime, month).

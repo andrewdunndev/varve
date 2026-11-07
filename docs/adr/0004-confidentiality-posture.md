@@ -1,6 +1,7 @@
 # ADR-0004: Confidentiality posture (local-only, zero listeners, zero egress)
 
 - **Status:** accepted
+- **Amended by:** ADR-0008 (I2 wording: the mirror holds transcripts too)
 - **Date:** 2026-07-06
 - **Deciders:** maintainer
 

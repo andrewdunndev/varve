@@ -1,6 +1,6 @@
 # ADR-0009: SQL files and the record contract
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-11-06
 - **Deciders:** maintainer
 

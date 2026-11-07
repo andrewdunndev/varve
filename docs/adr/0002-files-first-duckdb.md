@@ -1,6 +1,7 @@
 # ADR-0002: Files are the lake, engines are disposable (Parquet + DuckDB in v1)
 
 - **Status:** accepted
+- **Amended by:** ADR-0008 (canonical is the mirror plus the repo; Parquet is derived)
 - **Date:** 2026-07-06
 - **Deciders:** maintainer
 

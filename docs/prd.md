@@ -15,11 +15,11 @@ Build a local session-record lake, not a dashboard, and make the lake files, not
 
 | # | Decision | Choice | Why |
 |---|----------|--------|-----|
-| D1 | Center of gravity | **Session-record lake first, observability second** | Mine transcripts, do not just watch metrics. Runtime-agnostic; enables historical backfill; a runtime with no telemetry still gets full coverage. *(ADR-0001)* |
+| D1 | Center of gravity | **Session-record lake first, observability second** | Mine transcripts, do not just watch metrics. Runtime-agnostic; enables history from day one; a runtime with no telemetry still gets full coverage. *(ADR-0001)* |
 | D2 | Engine | **Parquet lake + DuckDB (v1); files canonical, engines disposable.** ClickStack deferred to a team/always-on stage | A single user's history is 3-4 orders of magnitude below ClickHouse's design point; DuckDB aggregates it in seconds. Parquet ports to ClickHouse natively when a server is needed. *(ADR-0002)* |
 | D3 | Runtime | **No container runtime in v1; mise-pinned binaries.** Apple `container` deferred until a server-shaped component exists | Prove the concept before adding runtime overhead. A single-binary DuckDB has no container, LaunchAgent, volume or vmnet surface to manage. *(ADR-0002)* |
 | D4 | Retention | **Keep everything.** No TTL cull, no hard cap. Disk tripwire at ~100 GB | The historic record is the asset. zstd-compressed Parquet makes keep-everything cheap at this scale. *(ADR-0003)* |
-| D5 | Attribution | **Ingest-time cwd→estate/campaign mapping is primary**; launch-time env injection secondary | The transcript mapping is deterministic, retroactive and works for backfill, so no launcher feature is a blocker. *(ADR-0005)* |
+| D5 | Attribution | **Build-time cwd→estate/campaign mapping is primary**; launch-time env injection secondary | The transcript mapping is deterministic, retroactive and works on history, so no launcher feature is a blocker. *(ADR-0005)* |
 | D6 | Team side quest | **Private-first, abstract later** | Prove the signal on one user; the team deliverable is a role-level method write-up plus reference config, extracted after it works. Abstraction ladder: n-of-1 → team conventions → post-training decision instrument (G3). |
 | D7 | Content posture | **Content enters the lake only via transcript ingest, local-only.** No listener at all in v1 | Nothing is bound, so there is no ingest surface to secure. Content is exactly what already sits in `~/.claude`; the lake makes it queryable without changing its exposure. *(ADR-0004)* |
 | D8 | Deployment | **Local for this scope**; the lake must later port to a server | Portability is a constraint on config, not a deliverable here. Parquet + SQL port unchanged; the engine swaps to ClickHouse at that stage. *(ADR-0002)* |
@@ -35,13 +35,13 @@ Build a local session-record lake, not a dashboard, and make the lake files, not
 ## Architecture (read in 60 seconds)
 
 ```
-  Runtimes (on-disk records)        Ingest (just / cron)          Lake (files) + engine (disposable)
+  Runtimes (on-disk records)        Build (just sync, just build)  Lake (files) + engine (disposable)
   --------------------------        --------------------          ----------------------------------
   Claude Code  ~/.claude/*.jsonl ─┐                               Parquet partitions
   pi           ~/.pi/*.jsonl     ─┼─ transcript adapters ──────▶  ~/.local/share/varve/lake/runtime=*/date=*/*.parquet
   opencode     opencode.db       ─┘  (cwd→estate mapping,                     │
                                       version-tolerant)                       ▼
-                                                                 DuckDB views / marts (~/.local/share/varve/varve.duckdb)
+                                                                 DuckDB views generated at startup by bin/duck
                                                                              │
                                                                              ▼
                                                                  SQL query library / notebooks / reports
@@ -49,21 +49,21 @@ Build a local session-record lake, not a dashboard, and make the lake files, not
   No server. No container runtime. No listener of any kind. Zero resident processes. Zero egress.
 ```
 
-**Transcript plane (primary, canonical, runtime-agnostic; the only plane in v1).** Per-runtime adapters read each runtime's on-disk session records and normalize them into shared-schema Parquet partitions; DuckDB attaches views and marts over them. Full content, local-only. Serves G2, G3 and G4; enables backfill from existing transcripts. The common denominator is [ccusage](https://github.com/ryoppippi/ccusage)'s `UsageEntry` (session_id, timestamp, model, provider, usage{input, output, cache_read, cache_write}, cost_usd), validated across all three runtimes at per-API-call granularity (ADR-0006). Runtime-specific fields are nullable. Parsers are version-tolerant, pinned per observed schema version; ingest failures alert, they do not crash.
+**Transcript plane (primary, canonical, runtime-agnostic; the only plane in v1).** Per-runtime adapters read each runtime's on-disk session records and normalize them into shared-schema Parquet partitions; DuckDB attaches views and marts over them. Full content, local-only. Serves G2, G3 and G4; reads existing transcripts from the mirror. The common denominator is [ccusage](https://github.com/ryoppippi/ccusage)'s `UsageEntry` (session_id, timestamp, model, provider, usage{input, output, cache_read, cache_write}, cost_usd), validated across all three runtimes at per-API-call granularity (ADR-0006). Runtime-specific fields are nullable. Parsers are version-tolerant, pinned per observed schema version; ingest failures alert, they do not crash.
 
 **Lake tables** (Parquet partitions, exposed as DuckDB views; DDL in RFC-0001):
 
 | Table | Grain | Key fields (runtime-specific are nullable) |
 |-------|-------|--------------------------------------------|
-| `sessions` | one row per session | session_id, runtime, cwd, harness, estate, campaign (derived at ingest), started_at, parent_session_id (nullable; empty for pi children) |
+| `sessions` | one row per session | session_id, runtime, cwd, harness, estate, campaign (derived at build), started_at, parent_session_id (nullable; empty for pi children) |
 | `messages` | one row per message | message_id, session_id, role, parent_id (tree for pi), is_sidechain (Claude Code), timestamp |
 | `api_calls` | one row per model call | session_id, message_id, timestamp, model, provider, input, output, cache_read, cache_write, cost_usd (the ccusage `UsageEntry` grain) |
-| `tool_calls` | one row per tool invocation | session_id, message_id, tool_name, started_at, ended_at, duration_ms (NULL except opencode), decision (nullable) |
+| `tool_calls` | one row per tool invocation | session_id, message_id, tool_name, started_at, ended_at, duration_ms (NULL except opencode), outcome (nullable) |
 | `correction_events` | one row per confirmed correction | RFC-0002 |
 
-**Attribution columns.** Every `sessions` row carries three tags derived from its working directory at ingest (ADR-0005), through a mapping file you keep outside the repo (`adapters/attribution.example.csv` is the template): `estate`, a label you assign to a group of directories (for example one forge namespace); `harness`, the repository directory the session ran in; `campaign`, the worktree inside it, if any. Unmatched directories land in an explicit `unknown` bucket.
+**Attribution columns.** Every `sessions` row carries three tags derived from its working directory at build (ADR-0005), through a mapping file you keep outside the repo (`adapters/attribution.example.toml` is the template): `estate`, a label you assign to a group of directories (for example one forge namespace); `harness`, the repository directory the session ran in; `campaign`, the worktree inside it, if any. Unmatched directories land in an explicit `unknown` bucket.
 
-Cost lives at the `api_calls` grain everywhere, priced at ingest from `adapters/pricing.csv`, so cost analytics and counterfactuals are SQL over one table.
+Cost lives at the `api_calls` grain everywhere, priced at build from `pricing.toml` in the data home (`adapters/pricing.example.toml` is the template), so cost analytics and counterfactuals are SQL over one table.
 
 **Live counts plane: deferred (D9).** Would carry OTel metrics and events over OpenTelemetry Protocol (OTLP), counts only. Not wired in v1: transcripts are canonical and telemetry loss is acceptable. Do not add `CLAUDE_CODE_ENABLE_TELEMETRY` / `OTEL_*_EXPORTER` keys to `settings.json`. The counts-only invariant (I1) is retained for whenever it wakes.
 
@@ -90,9 +90,9 @@ These do not change across any part of the work. If a design choice conflicts wi
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| DuckDB single-writer | Concurrent writes corrupt / block | Discipline: cron/`just ingest` is sole writer; interactive analysis attaches read-only |
+| DuckDB single-writer | Concurrent writes corrupt / block | Discipline: `bin/duck` holds one lock, so a build or a mine is the sole writer |
 | Engine re-entry at team stage | Rework to move off DuckDB | Mitigated by design: Parquet + the SQL library port to ClickHouse natively; the engine is the disposable part |
-| Transcript format drift (all three runtimes internal/unstable) | Ingest breaks silently | Version-tolerant parsers, pinned per observed schema version; ingest failures alert, not crash |
+| Transcript format drift (all three runtimes internal/unstable) | The build breaks silently | Version-tolerant parsers, pinned per observed schema version; a failed runtime keeps its last good partitions |
 | opencode SQLite/WAL locking | Adapter reads corrupt/blocked | Proper WAL reader with lock handling; not a line-tailer |
 | pi subagent invisibility (`--no-session` children) | Child-session cost/linkage missing | Accept upstream gap; record parent rolled-up usage; document empty linkage |
 | Locally-computed cost vs billing divergence | Wrong cost figures | Console authoritative; transcript-derived cost cross-checks vs console/ccusage; state tolerance |

@@ -1,6 +1,6 @@
 # ADR-0010: Resource envelope
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-11-06
 - **Deciders:** maintainer
 

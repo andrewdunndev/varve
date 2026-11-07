@@ -23,7 +23,7 @@ can serve as simulation evidence and leak-free benchmark material.
 
 ## Architecture
 
-Design: ADR-0008 to ADR-0010. `just sync` copies sources into a mirror, `just build` rebuilds the lake from it.
+`just sync` copies sources into a mirror. `just build` rebuilds the lake from it, checks it, swaps it in, then runs the mines (ADR-0008 to ADR-0010).
 
 Three primitives: files, SQL files, one runner (`bin/duck`). Everything extensible is a SQL file, run in a fixed order: adapters, checks, swap, mines.
 
@@ -49,17 +49,29 @@ One wrapper bounds every DuckDB process.
 ## Layout
 
 | Path | What |
+|------|------|
 | `adapters/` | One normalizer per runtime (Claude Code, pi, opencode), plus example pricing and attribution tables |
-| `sql/` | Shared adapter prelude |
-| `sql/` | Shared prelude, staging, delta detection and lake views |
+| `sql/` | Shared adapter prelude and the written meaning of every column (`record.sql`) |
 | `queries/` | The versioned SQL query library |
-| `mining/` | Correction mining, review rendering, year-in-review stats and their queries |
+| `mining/` | Example mines (one detector per file), example patterns and taxonomy, review rendering, year-in-review stats and their queries |
 | `docs/` | PRD, ADRs (`adr/`), RFCs (`rfc/`), query index |
 | `checks/` | Checks that run on every build |
 | `tests/` | Synthetic three-runtime fixtures and expected output for `just test` |
+| `bin/` | The runner (`duck`) and the scripts behind `sync`, `build`, `check`, `forget` and `mine` |
 | `justfile` | `sync`, `build`, `check`, `forget`, `mine`, `review`, `interventions`, `stats`, `sql`, `lint`, `test`, `disk` |
 
 `mise install` provisions the pinned `duckdb`, `just` and `yq` from `mise.toml`.
+
+## Mining
+
+The repo's `mining/` holds example mines, one detector per file. To use them, copy
+`mining/[0-9]*.sql` into `mining/` in your data home, copy `patterns.example.toml`
+and `divergence_taxonomy.example.toml` there without the `.example`, and tune the
+patterns. `just mine` runs your files in filename order. Each saves one table under
+the lake: `NN-<table>[.<part>].sql` leaves its rows in `mine_out` and lands in
+`<table>/<part>.parquet`. A mine's version is the hash of its file. A failing mine
+keeps its last good file and the others still run. `just review` renders the
+adjudication document from the mined tables.
 
 Lake data never lives in this repo. It lands in `~/.local/share/varve/`, and so
 does your own data: attribution rules, adjudications, worksheets (ADR-0004). The

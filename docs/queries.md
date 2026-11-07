@@ -22,3 +22,5 @@ Run one with `just sql -f <path>`.
 | `mining/queries/` | `stats_year.sql` | What did the year look like, one day per cell? |
 
 Keep personal queries outside the repo and run them the same way.
+
+The `mining/queries/` files read the mined tables, so run `just mine` first.

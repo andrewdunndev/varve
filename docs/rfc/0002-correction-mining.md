@@ -1,6 +1,6 @@
 # RFC-0002: Correction mining
 
-- **Status:** draft. Phase 1 (mechanical mining) is built: `mining/corrections.sql`,
+- **Status:** draft. Phase 1 (mechanical mining) is built: the mines in `mining/`,
   `just mine`, `just review`. Phases 2 and 3 (classification, taxonomy
   derivation) are design only.
 - **Date:** 2026-07-06
@@ -59,7 +59,7 @@ and structural features:
 - **Lexical correction openers.** A user message directly following an assistant
   message, opening with a correction marker (no / don't / stop / not what /
   instead / actually / wrong / I meant / undo / revert; the marker list is
-  versioned in the adapter). Highest false-positive risk of the four; features
+  a patterns row per marker in the data home). Highest false-positive risk of the four; features
   carry the matched marker so precision is measurable per marker.
 - **Rewrite detection.** A user message with high token overlap against the
   preceding assistant message but not identical: the user restating or rewriting
@@ -70,9 +70,9 @@ Output: `correction_candidates` in the lake, one row per (detector, locus):
 `candidate_id`, `runtime`, `session_id`, `message_uuid` (the corrective message),
 `prior_assistant_uuid` (the corrected draft's locus), `ts`, `date` (partition),
 `detector`, `detector_version`, `features` (JSON: marker matched, overlap score,
-decision value), `model_id` of the corrected draft, and `cwd`-derived attribution
+outcome value), `model_id` of the corrected draft, and `cwd`-derived attribution
 (estate and harness, from the attribution rules). Candidates derive purely from
-the lake, so the table is rebuilt deterministically on ingest with no manifest
+the lake, so the table is rebuilt deterministically on every mine with no manifest
 interaction. Candidates live only in the local lake; loci use the non-identifying
 `lake:` form.
 
@@ -81,11 +81,11 @@ interaction. Candidates live only in the local lake; loci use the non-identifyin
 An analysis session surfaces a candidate sample, stratified by detector. The user
 labels each: `verdict` {true_positive | false_positive | unclear},
 `context_judgment` {had_context | lacked_context | ambiguous}, and a free `note`
-(role-level gloss). Labels append to a JSONL ledger outside the repo at a
-configured path (`VARVE_ADJUDICATIONS`, default `<data_home>/adjudications.jsonl`).
+(role-level gloss). Labels append to a JSONL ledger outside the repo at
+`<data_home>/adjudications.jsonl`.
 The ledger sits in the data home outside `lake/`, so it survives a lake rebuild
-(`just backfill` clears `lake/` only), and it holds non-identifying loci and
-labels only, so I4 and I5 hold. `mining/corrections.sql` joins the ledger back to
+(a build replaces `lake/` only), and it holds non-identifying loci and
+labels only, so I4 and I5 hold. `mining/40-correction_events.sql` joins the ledger back to
 candidates and promotes `verdict=true_positive` rows into `correction_events`
 with `channel='mined'` and adjudication provenance. One JSON object per line:
 
@@ -143,7 +143,7 @@ until measured:
 
 ### DDL
 
-`correction_candidates`: columns above; partition `date`; rebuilt on ingest.
+`correction_candidates`: columns above, one file per detector; rebuilt on every mine.
 
 `correction_events`: one row per confirmed event; partition `channel`/`date`;
 multi-label `category` as `VARCHAR[]`; nullable `direction` override; NOT NULL
@@ -171,8 +171,8 @@ phase 3; it is an analysis input, not a lake source.
   model bumps.
 - Small n: the divergence category is the unit of analysis, not the event; a
   human stays in the loop on distillation.
-- Detector drift: `detector_version` on every candidate; the marker list is
-  versioned.
+- Detector drift: `detector_version` on every candidate is the hash of the mine file;
+  the marker list is data-home config and does not move it.
 
 ### Novelty and prior art
 
@@ -221,11 +221,12 @@ and CLAUDE.md distillation (manual, unmeasured; "Beyond the Prompt", 2025).
   I4, embedding exclusion, LLM-labelling boundary), RFC-0001 (content inline, the
   decision that makes mining possible; this RFC resolves its open
   `correction_events` DDL).
-- In this repo: `mining/corrections.sql` (candidates and events adapter),
-  `mining/divergence_taxonomy.csv` (the PRIOR; the canonical taxonomy is a
+- In this repo: the example mines `mining/[0-9]*.sql` (operator context, one file per
+  detector, operator messages, events),
+  `mining/divergence_taxonomy.example.toml` (the PRIOR; the canonical taxonomy is a
   phase-3 output), `mining/queries/corrections_candidates.sql`,
   `mining/queries/adjudication_sample.sql`. The adjudication ledger lives outside
-  the repo at `VARVE_ADJUDICATIONS` (default `<data_home>/adjudications.jsonl`),
+  the repo at `<data_home>/adjudications.jsonl`,
   created by the first adjudication round.
 - External: PRELUDE/CIPHER <https://arxiv.org/abs/2404.15269>; Ziegler et al.,
   CACM 2024; Langfuse annotation queues; "Beyond the Prompt" (2025).

@@ -1,7 +1,7 @@
 # RFC-0001: Lake schema
 
 - **Status:** accepted for the four core tables, partitioning, attribution,
-  ingest and content storage across Claude Code, pi and opencode.
+  build and the record columns across Claude Code, pi and opencode.
   `correction_events` (RFC-0002) is draft. The marts list is open.
 - **Date:** 2026-07-06
 
@@ -9,7 +9,7 @@
 
 The normalized schema for the session lake: `sessions`, `messages`, `api_calls`,
 `tool_calls` and `correction_events`, stored as Parquet partitions and exposed as
-DuckDB views, fed by version-tolerant adapters with idempotent incremental ingest.
+DuckDB views, fed by version-tolerant adapters with a whole build from the mirror.
 
 ## Motivation
 
@@ -26,7 +26,7 @@ One row per session, message, model call and tool invocation. Fields a runtime
 does not produce are nullable.
 
 - `sessions`: `session_id` VARCHAR, `runtime` VARCHAR, `cwd` VARCHAR, `harness`
-  VARCHAR, `estate` VARCHAR, `campaign` VARCHAR (derived at ingest, ADR-0005;
+  VARCHAR, `estate` VARCHAR, `campaign` VARCHAR (derived at build, ADR-0005;
   null off-worktree), `started_at` TIMESTAMP, `parent_session_id` VARCHAR
   (opencode only, from `session.parent_id`; ADR-0006), `cc_version` VARCHAR,
   `pi_version` VARCHAR, `oc_version` VARCHAR, `agent` VARCHAR (opencode agent,
@@ -92,9 +92,9 @@ present; `adapters/pi.sql` states how far it has been validated.
 
 Claude Code records carry no `costUSD`, so cost is computed:
 `input*p_in + output*p_out + cache_read*p_cr + cache_write*p_cw` from a
-versioned per-token price seed (`adapters/pricing.csv`, LiteLLM rates, the table
-ccusage prices from). `unpriced_model` flags a model missing from the seed. The
-seed is the only external data; no transcript data leaves the machine.
+versioned per-token price table (`pricing.toml` in the data home, from `adapters/pricing.example.toml`; LiteLLM rates, the table
+ccusage prices from). `unpriced_model` flags a model missing from the table. The
+table is the only external data; no transcript data leaves the machine.
 
 opencode's assistant `cost` is trusted when above zero. When zero or absent, cost
 is computed from the seed if the model is seeded; otherwise it stays zero and
@@ -113,8 +113,8 @@ day.
 ### Attribution (ADR-0005)
 
 A versioned, ordered rule table owned by the user at a configured path
-(`VARVE_ATTRIBUTION`, default `<data_home>/attribution.csv`; template
-`adapters/attribution.example.csv`): `priority, cwd_glob, estate, harness,
+(`<data_home>/attribution.toml`; template
+`adapters/attribution.example.toml`): `priority, cwd_glob, estate, harness,
 campaign, note`. The adapter takes the lowest-priority rule whose `cwd_glob`
 matches (glob `*` becomes SQL `LIKE '%'`; `coalesce(cwd,'')` so a null cwd still
 hits the fallback). `harness` and `campaign` accept tokens resolved from the cwd:
@@ -124,37 +124,22 @@ rule is the explicit unknown bucket. The template vocabulary: `acme/*` = work,
 `me-personal/*` and `github.com/*` = personal, else unknown.
 
 Attribution (`_attr_rules` plus the token resolution) and pricing are shared
-across runtimes, so they live in `sql/prelude.sql` (seeds plus the
+across runtimes, so they live in `sql/prelude.sql` (the views plus the
 `varve_harness()` and `varve_campaign()` macros), loaded once before any adapter.
 
-### Staging
+### Staging and build
 
-Each adapter builds `_<rt>_sessions`, `_<rt>_messages`, `_<rt>_api_calls`,
-`_<rt>_tool_calls` and a `_<rt>_files` map. `sql/stage.sql` stubs any absent
-runtime and unions the present ones into the `stg_*` tables the pipeline COPYs,
-via `UNION ALL BY NAME`, so a column one runtime lacks is NULL for its rows. One
-manifest spans all runtimes; `sql/affected.sql` keys on the unified `_files`. A
-runtime whose adapter is skipped contributes no rows, so `OVERWRITE_OR_IGNORE`
-leaves its existing partitions untouched.
+Each adapter reads one runtime's mirror folder (`getvariable('mirror_dir')`) and
+writes `stg_sessions`, `stg_messages`, `stg_api_calls` and `stg_tool_calls`.
+`bin/build` runs one process per runtime into `lake.new`, copying each table with
+`PARTITION_BY (runtime, date)` and `FILENAME_PATTERN 'part'`. A runtime that fails,
+or whose mirror is empty, keeps its last good partitions: every published
+`runtime=` partition that `lake.new` lacks is copied across. The checks read
+`lake.new`, the lake is swapped by rename, and the mines run (ADR-0008).
+`sql/prelude.sql` holds the attribution and pricing macros the adapters share.
 
-The live opencode SQLite store (WAL) is never attached directly. The justfile
-makes an APFS copy-on-write clone (`cp -c`) of `opencode.db` with its `-wal` and
-`-shm` files and `ATTACH`es the clone `READ_ONLY`. Manifest change detection keys
-on the live `.db` path only, since the `-wal` and `-shm` mtimes drift; a db change
-marks every opencode date partition dirty, because opencode is one file.
-
-### Incremental ingest
-
-A per-file high-water mark, `(path, size, mtime)`, is persisted as a manifest
-parquet under `<data_home>/state/`. Files that are new or whose size or mtime
-changed mark their session's date partition dirty; dirty partitions are rewritten
-in full from current file content, with every co-resident session re-derived.
-The rewrite is deterministic, so appends to a live session's JSONL are counted
-exactly once. No change means no dirty partition, no write and identical row
-counts. Idempotence comes from per-partition re-derivation plus stable filenames
-(`FILENAME_PATTERN 'part'` with `OVERWRITE_OR_IGNORE`), not from row-level
-upserts. ingest and backfill are the sole writers; `just sql` attaches read-only
-(ADR-0002, enforced by `-readonly`).
+The opencode adapter reads the mirrored `opencode.db` and its `-wal` with
+`sqlite_scan`; the live store is never opened.
 
 ### Subagents
 
@@ -172,19 +157,21 @@ else it is absent. This is an accepted coverage limitation (ADR-0006).
 
 ### Content storage
 
-Message text is stored inline in Parquet. The lake is local-only (ADR-0004),
-so inlining costs nothing on confidentiality and lets mining run `fts` and `vss`
-over text without a second fetch from source files. Correction-event pointers
+Message text is stored in Parquet as `messages.text`, and tool arguments and
+results as `tool_calls.arguments` and `result_text`. The lake is local-only
+(ADR-0004), so keeping text costs nothing on confidentiality and lets mining run
+`fts` and `vss` over it without a second fetch from source files. `sql/record.sql`
+gives every column its written meaning. Correction-event pointers
 (`model_draft_ptr`, `operator_rewrite_ptr`) stay pointer-based per RFC-0002 and
-invariant I5; the inline decision covers the message stream, not correction
-drafts.
+invariant I5.
 
 ### Engine
 
-DuckDB views in `<data_home>/varve.duckdb` over the Parquet, rebuildable and never
-the source of truth (ADR-0002). Views use `getvariable('lake')` so `just sql`
-resolves them read-only after `SET VARIABLE lake=...`. Materialized marts are
-deferred (see unresolved questions).
+No database file holds the views. `bin/duck` creates one view per lake folder
+and one per data-home TOML or JSONL file at every start (ADR-0009), so the
+Parquet is the only state and the engine stays disposable (ADR-0002). `just sql`
+runs through the same runner. Materialized marts are deferred (see unresolved
+questions).
 
 ### Reconciliation (ADR-0006)
 
@@ -204,7 +191,7 @@ read) against the on-disk count rather than assuming the glob loaded everything.
 
 `vss` (vector similarity) and `fts` (full text) for mining; `sqlite` for the
 opencode `ATTACH` (ADR-0006), installed and loaded by the opencode adapter at
-ingest.
+build.
 
 ## Unresolved questions
 

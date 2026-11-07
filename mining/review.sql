@@ -78,7 +78,7 @@ WHERE c.candidate_id NOT IN (SELECT candidate_id FROM _rv_ledger_cands);
 -- PART 2 -- recall-floor sample. The DETERMINISTIC top-50 unflagged operator messages
 -- (ORDER BY md5(message_uuid), matching mining/queries/recall_floor_sample.sql so the floor
 -- denominator is a stable set), with already-adjudicated loci dropped from the render (the
--- sample IDENTITY stays those 50; we do not backfill, which would shift the denominator).
+-- sample IDENTITY stays those 50; we do not refill, which would shift the denominator).
 CREATE TEMP TABLE _rv_floor AS
 WITH f50 AS (
   SELECT * FROM operator_messages WHERE NOT flagged

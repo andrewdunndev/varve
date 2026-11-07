@@ -1,6 +1,7 @@
 # ADR-0003: Keep everything, no TTL, no cull
 
 - **Status:** accepted
+- **Amended by:** ADR-0008 (keep-everything binds the mirror)
 - **Date:** 2026-07-06
 - **Deciders:** maintainer
 

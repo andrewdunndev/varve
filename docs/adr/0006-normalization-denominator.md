@@ -1,6 +1,7 @@
 # ADR-0006: ccusage UsageEntry as the normalization denominator
 
 - **Status:** accepted
+- **Amended by:** ADR-0009 (the record contract adds columns and retires content)
 - **Date:** 2026-07-06
 - **Deciders:** maintainer
 
