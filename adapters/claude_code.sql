@@ -255,12 +255,12 @@ DROP TABLE _cc_arr;
 
 CREATE OR REPLACE TABLE _cc_res AS
 SELECT session_id, message_id, timestamp, i,
-       blk ->> 'tool_use_id'                                             AS tool_use_id,
-       coalesce(try_cast(blk ->> 'is_error' AS BOOLEAN), false)          AS is_error,
-       json_type(blk -> 'content')                                       AS ctype,
-       blk -> 'content'                                                  AS cjson
+       json_extract_string(blk, '$.tool_use_id')                                             AS tool_use_id,
+       coalesce(try_cast(json_extract_string(blk, '$.is_error') AS BOOLEAN), false)          AS is_error,
+       json_type(json_extract(blk, '$.content'))                                       AS ctype,
+       json_extract(blk, '$.content')                                                AS cjson
 FROM _cc_blocks
-WHERE blk ->> 'type' = 'tool_result';
+WHERE _block_type(blk) = 'tool_result';
 
 CREATE OR REPLACE TABLE _cc_res_arr_raw AS
 SELECT * FROM _cc_res WHERE ctype = 'ARRAY';
@@ -281,12 +281,12 @@ DROP TABLE _cc_res_arr_raw;
 -- operator's say-so, cancelled when the operator interrupted it, else error.
 CREATE OR REPLACE TABLE stg_tool_calls AS
 WITH u AS (
-  SELECT session_id, message_id, blk ->> 'id' AS tool_use_id, blk ->> 'name' AS tool_name,
-         timestamp AS started_at, (blk -> 'input')::varchar AS arguments,
-         row_number() OVER (PARTITION BY session_id, blk ->> 'id'
+  SELECT session_id, message_id, json_extract_string(blk, '$.id') AS tool_use_id, json_extract_string(blk, '$.name') AS tool_name,
+         timestamp AS started_at, json_extract(blk, '$.input')::varchar AS arguments,
+         row_number() OVER (PARTITION BY session_id, json_extract_string(blk, '$.id')
                             ORDER BY timestamp, message_id) AS urank
   FROM _cc_blocks
-  WHERE record_type = 'assistant' AND blk ->> 'type' = 'tool_use'
+  WHERE record_type = 'assistant' AND _block_type(blk) = 'tool_use'
 ),
 r AS (
   SELECT session_id, message_id, tool_use_id, result_text,

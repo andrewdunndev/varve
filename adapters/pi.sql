@@ -145,11 +145,11 @@ FROM _pi_msg WHERE json_type(cj) IS DISTINCT FROM 'ARRAY';
 
 -- Arguments of each tool call, from the assistant entry's toolCall blocks.
 CREATE OR REPLACE TABLE _pi_calls AS
-SELECT session_id, blk ->> 'id' AS tool_use_id, min((blk -> 'arguments')::varchar) AS arguments
+SELECT session_id, json_extract_string(blk, '$.id') AS tool_use_id, min(json_extract(blk, '$.arguments')::varchar) AS arguments
 FROM (SELECT session_id, unnest(cast(cj AS json[])) AS blk
       FROM _pi_arr_raw WHERE role = 'assistant')
-WHERE blk ->> 'type' = 'toolCall'
-GROUP BY session_id, blk ->> 'id';
+WHERE _block_type(blk) = 'toolCall'
+GROUP BY session_id, json_extract_string(blk, '$.id');
 DROP TABLE _pi_arr_raw;
 
 CREATE OR REPLACE TABLE stg_messages AS
