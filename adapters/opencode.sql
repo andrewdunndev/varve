@@ -1,4 +1,4 @@
--- varve opencode adapter (W2). Reads opencode's SQLite store via DuckDB's sqlite
+-- varve opencode adapter. Reads opencode's SQLite store via DuckDB's sqlite
 -- extension and derives the four normalized per-runtime staging tables
 -- (_oc_sessions, _oc_messages, _oc_api_calls, _oc_tool_calls) plus a
 -- file->session->date map (_oc_files). sql/stage.sql unions these into stg_*.
@@ -15,7 +15,7 @@
 --                 manifest change-detection keys on the real file (not the clone).
 --   repo_dir    : this repo root.
 --
--- Source shape (validated against the live store 2026-07-06, opencode V1 tables):
+-- Source shape (opencode V1 tables):
 --   * V1 contract tables: session / message / part (ADR-0006 -- pinned; the V2
 --     event tables are maintainer-declared disposable and NOT read).
 --   * session(id, parent_id, directory, version, agent, model, time_created ms)
@@ -80,7 +80,7 @@ FROM matched;
 
 -- ---------------------------------------------------------------------------
 -- messages: one row per message (all roles). Content inlined from the text/
--- reasoning parts (RFC-0001: inline content enables W7 fts/vss; opencode stores
+-- reasoning parts (RFC-0001: inline content enables full-text and vector search; opencode stores
 -- text in `part`, not on the message). is_sidechain is false -- opencode has no
 -- sidechain flag; its parent/child structure lives at SESSION grain (parent_id).
 CREATE OR REPLACE TABLE _oc_messages AS

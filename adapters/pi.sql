@@ -1,4 +1,4 @@
--- varve pi adapter (W2). Reads pi's append-only JSONL session files and derives
+-- varve pi adapter. Reads pi's append-only JSONL session files and derives
 -- the four normalized per-runtime staging tables (_pi_sessions, _pi_messages,
 -- _pi_api_calls, _pi_tool_calls) plus a file->session->date map (_pi_files).
 -- sql/stage.sql unions these into the shared stg_*.

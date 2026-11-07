@@ -1,5 +1,4 @@
--- varve Claude Code adapter (W1; W2 renamed staging stg_* -> _cc_* and moved the
--- shared seeds/macros to sql/prelude.sql when pi + opencode landed). Near-pure
+-- varve Claude Code adapter. Near-pure
 -- DuckDB SQL, per ADR-0002. Reads raw Claude Code JSONL in place and derives the
 -- four normalized per-runtime staging tables (_cc_sessions, _cc_messages,
 -- _cc_api_calls, _cc_tool_calls) plus a file->session->date map (_cc_files) used
@@ -11,7 +10,7 @@
 --   cc_source : glob of source JSONL (recursive; MUST include subagent files)
 --   repo_dir  : this repo root (to read the versioned CSV seeds)
 --
--- Source shape (validated against the live corpus 2026-07-06, CC v2.1.x):
+-- Source shape (Claude Code v2.1.x):
 --   * ~/.claude/projects/<dashed-cwd>/<session_id>.jsonl  = main session
 --   * .../<session_id>/subagents/agent-*.jsonl            = subagent (sidechain)
 --     traffic; these carry the SAME sessionId as the parent, isSidechain=true.
@@ -82,8 +81,8 @@ FROM matched;
 -- ---------------------------------------------------------------------------
 -- messages: one row per user/assistant line. message_id = line uuid (unique per
 -- event); api_message_id = provider message.id (msg_...), nullable. Content is
--- stored INLINE (RFC-0001 decision: lake is local-only per ADR-0004; inline
--- content enables W7 fts/vss). Other record types (system/mode/snapshot/...)
+-- stored INLINE (the lake is local-only per ADR-0004; inline
+-- content enables full-text and vector search). Other record types (system/mode/snapshot/...)
 -- are not messages and are skipped -- the raw JSONL remains the source of truth.
 CREATE OR REPLACE TABLE _cc_messages AS
 SELECT
