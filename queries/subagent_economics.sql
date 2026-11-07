@@ -8,7 +8,7 @@
 --   four token classes by role. A totals row (week = NULL via ROLLUP) closes it.
 -- This query also carries the cache_read:input ratio per role, per week.
 -- CAVEATS: claude-code sidechain is the CLEAN dispatch signal (subagents write real
---   transcripts under <session>/subagents/, RFC-0001); opencode/pi are excluded here
+--   transcripts under <session>/subagents/); opencode/pi are excluded here
 --   (opencode chains sessions, pi writes no child transcript). "Savings" is a
 --   comparison of where cost lands, not a counterfactual -- re-pricing the same work
 --   inline is out of scope.

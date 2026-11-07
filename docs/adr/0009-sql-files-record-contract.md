@@ -51,5 +51,5 @@ Three primitives: files, SQL files, one runner (`bin/duck`). Everything extensib
 
 ## References
 
-- Amends ADR-0006. RFC-0001 carries the column text.
+- Amends ADR-0006. `sql/record.sql` carries the column text.
 - Field signal: three outside adapter PRs (Copilot, Antigravity, Vibe).

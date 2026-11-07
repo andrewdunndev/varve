@@ -7,7 +7,7 @@
 ## Context
 
 The project started as a metrics stack watching cost and token burn. Counts cannot
-serve three of the four goals in the PRD:
+serve three of the four goals in `docs/prd.md`:
 
 - Correction mining needs the content of a model draft and the user's rewrite, to
   measure the difference between them.
@@ -45,7 +45,7 @@ Lake first, observability second.
 - No near-real-time counts. A session in flight is invisible until its transcript is
   ingested. Acceptable, because the transcript is the source of truth.
 - The design depends on undocumented, drifting on-disk formats. Mitigation:
-  version-tolerant parsers pinned per observed schema version (ADR-0006, RFC-0001).
+  version-tolerant parsers pinned per observed schema version (ADR-0006).
 
 **Neutral**
 - Live counts can be added later as a supplement, not a foundation.
@@ -54,6 +54,5 @@ Lake first, observability second.
 
 ## References
 
-- PRD sections: Decisions (D1, D9); Architecture.
 - Related: ADR-0002 (files-first engine), ADR-0003 (retention), ADR-0006
-  (normalization), RFC-0001 (lake schema).
+  (normalization), `sql/record.sql` (the record contract).

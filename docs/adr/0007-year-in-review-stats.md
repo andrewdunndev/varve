@@ -86,6 +86,5 @@ invented:
 
 ## References
 
-- PRD sections: Goals (G1); Architecture.
-- Related: ADR-0006 (per-runtime gaps), RFC-0001 (lake schema, timestamps, subagent
-  traffic), RFC-0002 (`operator_messages`), `docs/queries.md`.
+- Goals: `docs/prd.md` (G1).
+- Related: ADR-0006 (per-runtime gaps), `sql/record.sql` (the record contract), RFC-0002 (`operator_messages`), `docs/queries.md`.

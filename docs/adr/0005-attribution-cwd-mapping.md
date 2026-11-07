@@ -8,7 +8,7 @@
 ## Context
 
 Every analysis slices by `harness`, `estate` and `campaign`, the three attribution
-columns on `sessions` (defined in the PRD, Architecture): burn by campaign,
+columns on `sessions` (defined in `sql/record.sql`): burn by campaign,
 divergence by estate, dispatch shape by harness. Each session record needs those
 three tags.
 
@@ -22,7 +22,7 @@ Two channels could supply them:
    starts in its project's directory, so the recorded path is a deterministic key.
 
 The env channel has two disqualifying limits for v1: it only feeds the live plane
-(deferred, D9), and it can only tag future sessions. It cannot attribute the
+(deferred), and it can only tag future sessions. It cannot attribute the
 historical backfill, which is most of the value. The cwd mapping is deterministic,
 retroactive, and covers all history.
 
@@ -46,7 +46,7 @@ retroactive, and covers all history.
 
 **Negative**
 - Depends on a maintained cwd → estate mapping table. Directories that do not match
-  need an "unknown" bucket (RFC-0001).
+  need an "unknown" bucket.
 - A session launched from an unusual working directory may misattribute until the
   mapping is extended.
 
@@ -55,6 +55,5 @@ retroactive, and covers all history.
 
 ## References
 
-- PRD sections: Decisions (D5); Architecture.
-- Related: ADR-0001 (the transcript is the source), RFC-0001 (mapping-table
-  representation).
+- Related: ADR-0001 (the transcript is the source),
+  ADR-0009 (the record contract).

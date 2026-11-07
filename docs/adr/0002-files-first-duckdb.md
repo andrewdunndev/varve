@@ -7,7 +7,7 @@
 
 ## Context
 
-The first PRD draft preselected a server-class column store: ClickStack (HyperDX) under
+The first draft preselected a server-class column store: ClickStack (HyperDX) under
 Apple's `container` runtime, with an OTLP live plane, a LaunchAgent, volumes and TTL surgery.
 
 A single user's transcript history is small. Even heavy multi-year use projects to
@@ -56,7 +56,6 @@ engine was server-shaped.
 
 ## References
 
-- PRD sections: Decisions (D2, D3, D8); Architecture; Risks.
 - Related: ADR-0001 (why a lake at all), ADR-0004 (no server means no listener).
 - External: [DuckDB](https://duckdb.org/) (MIT); [Apache Parquet](https://parquet.apache.org/);
   [ClickStack](https://clickhouse.com/docs/use-cases/observability/clickstack); apple/container

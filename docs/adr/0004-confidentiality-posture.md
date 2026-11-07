@@ -69,6 +69,5 @@ Two rulings on the correction-mining channel:
 
 ## References
 
-- PRD sections: Confidentiality invariants; Decisions (D7); Non-goals; Risks.
 - Related: ADR-0001 (content enters via transcripts), ADR-0002 (no server means no
   listener), RFC-0002 (correction schema and local-only pointers).

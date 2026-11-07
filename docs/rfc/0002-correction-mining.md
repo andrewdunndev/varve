@@ -1,35 +1,27 @@
 # RFC-0002: Correction mining
 
 - **Status:** draft. Phase 1 (mechanical mining) is built: the mines in `mining/`,
-  `just mine`, `just review`. Phases 2 and 3 (classification, taxonomy
-  derivation) are design only.
+  `just mine`, `just review`; the mine files carry the detectors, the candidate
+  and event columns and the adjudication ledger format. Phases 2 and 3 are design
+  only. This file keeps the method: what the mines do not say.
 - **Date:** 2026-07-06
 
 ## Summary
 
 Measure the gap between what the model produced and what the user corrected it
-to, over time, by mining the lake. A mechanical detection pass over transcript
-structure and content produces `correction_candidates`. The user adjudicates
-samples at review time (true or false positive, plus the context confound),
-which promotes candidates into `correction_events`. The divergence taxonomy is
-derived from adjudicated events and only then versioned as the controlled
-vocabulary.
+to, over time, by mining the lake. A mechanical pass over transcript structure
+and content produces `correction_candidates`. The user adjudicates samples (true
+or false positive, plus the context confound), which promotes candidates into
+`correction_events`. The divergence taxonomy is derived from adjudicated events
+and only then versioned as the controlled vocabulary.
 
-Throughout, the rulebook is the versioned instruction file where the user
-distils corrections into standing rules. It stays distilled rules only; the
-analysis feeds it, not the other way around.
+The rulebook is the versioned instruction file where the user distils
+corrections into standing rules. It stays distilled rules only; the analysis
+feeds it, not the other way around.
 
-## Motivation
-
-Does a correction land once and hold, or is it made again? Mining answers that
-from the full lake history (message `text` is a column, an RFC-0001 decision made
-for this) and keeps answering as the lake grows, with no per-event effort from
-the user. A hand-kept ledger records only what someone remembers to log, and
-that decays. The method is where the research novelty lives and where the
-confounds are, so it is written down before capture hardens around a weaker
-shape.
-
-## Design
+The question is whether a correction lands once and holds, or is made again. A
+hand-kept ledger records only what someone remembers to log, and that decays;
+mining answers from the full lake history with no per-event effort.
 
 ### Channels
 
@@ -42,69 +34,6 @@ shape.
   one. Rare; rides the same event schema.
 
 There is no capture surface outside the lake.
-
-### Phase 1: mechanical mining
-
-Pure lake-side SQL (DuckDB over the existing views), no model in the loop, tuned
-for precision over recall. Each detector emits candidates with a `detector` id
-and structural features:
-
-- **Tool-decision rejections.** Claude Code: tool results carrying the rejection
-  marker ("The user doesn't want to proceed with this tool use") and the
-  interrupt marker ("[Request interrupted by user...]"), already structured in
-  `tool_calls` and `messages`. opencode: the native tool `outcome`.
-- **Interrupt-then-redirect.** A user interrupt followed by a user message within
-  the same session. The message after an interrupt is a correction with high
-  prior.
-- **Lexical correction openers.** A user message directly following an assistant
-  message, opening with a correction marker (no / don't / stop / not what /
-  instead / actually / wrong / I meant / undo / revert; the marker list is
-  a patterns row per marker in the data home). Highest false-positive risk of the four; features
-  carry the matched marker so precision is measurable per marker.
-- **Rewrite detection.** A user message with high token overlap against the
-  preceding assistant message but not identical: the user restating or rewriting
-  the model's text. Similarity is cheap set overlap (jaccard on token shingles)
-  in phase 1; embedding similarity is phase 2.
-
-Output: `correction_candidates` in the lake, one row per (detector, locus):
-`candidate_id`, `runtime`, `session_id`, `message_uuid` (the corrective message),
-`prior_assistant_uuid` (the corrected draft's locus), `ts`, `date` (partition),
-`detector`, `detector_version`, `features` (JSON: marker matched, overlap score,
-outcome value), `model_id` of the corrected draft, and `cwd`-derived attribution
-(estate and harness, from the attribution rules). Candidates derive purely from
-the lake, so the table is rebuilt deterministically on every mine.
-Candidates live only in the local lake; loci use the non-identifying
-`lake:` form.
-
-### Adjudication
-
-An analysis session surfaces a candidate sample, stratified by detector. The user
-labels each: `verdict` {true_positive | false_positive | unclear},
-`context_judgment` {had_context | lacked_context | ambiguous}, and a free `note`
-(role-level gloss). Labels append to a JSONL ledger outside the repo at
-`<data_home>/adjudications.jsonl`.
-The ledger sits in the data home outside `lake/`, so it survives a lake rebuild
-(a build replaces `lake/` only), and it holds non-identifying loci and
-labels only, so I4 and I5 hold. `mining/40-correction_events.sql` joins the ledger back to
-candidates and promotes `verdict=true_positive` rows into `correction_events`
-with `channel='mined'` and adjudication provenance. One JSON object per line:
-
-```
-{ "candidate_id":     "cand-<md5>",                            // REQUIRED; joins a candidate
-  "verdict":          "true_positive|false_positive|unclear",  // REQUIRED
-  "context_judgment": "had_context|lacked_context|ambiguous",  // the context confound
-  "note":             "<role-level gloss only>",               // optional; no verbatim text/ids
-  "adjudicated_at":   "2026-07-06T12:00:00" }                  // optional ISO timestamp
-```
-
-`mining/queries/adjudication_sample.sql` emits a ready-to-fill skeleton of this
-line per candidate. For the review sitting, `just review` renders
-`<data_home>/review_round1.md`: one section per flagged candidate with the full
-prior draft and full corrective message dereferenced (a truncated excerpt leaves
-`context_judgment` hard to judge), the model's suggestion marked ADVISORY, and a
-copy-in skeleton; a second part carries the recall-floor sample. Loci already in
-the ledger are skipped, so re-rendering is idempotent as the ledger grows.
-Output stays under the data home. See `docs/queries.md`.
 
 ### Phase 2: assisted classification
 
@@ -141,17 +70,6 @@ until measured:
 - **G-idempotence:** re-running the mining pass on an unchanged lake yields
   byte-identical candidates.
 
-### DDL
-
-`correction_candidates`: columns above, one file per detector; rebuilt on every mine.
-
-`correction_events`: one row per confirmed event; partition `channel`/`date`;
-multi-label `category` as `VARCHAR[]`; nullable `direction` override; NOT NULL
-`context_judgment`, `selection`, `privacy_scope`; durability block
-`intervention_ref`/`bake_date`/`recurred_after_bake`/`observation_window_days`;
-non-identifying loci only. `channel` is `mined` (with the adjudication provenance
-columns `adjudicated_at` and `verdict`) or `opt_in` for deliberate diffs.
-
 ### Durability test
 
 The rulebook's git history timestamps every rule, and each rule is a baked
@@ -187,10 +105,6 @@ phase 3; it is an analysis input, not a lake source.
 5. Single-user longitudinal framing with model version as a controlled
    covariate.
 
-The team extension is the least novel part. The saturation criterion in the PRD
-is hypothesised novel; the prior-art sweep did not cover that exact claim.
-Verify before any external positioning.
-
 Nearest neighbours, none of which does the above: PRELUDE/CIPHER (Gao et al.,
 NeurIPS 2024; learns latent preferences from user edits but optimizes outputs
 rather than characterizing the gap; <https://arxiv.org/abs/2404.15269>); DRIFT
@@ -199,34 +113,3 @@ studies (Ziegler et al., CACM 2024); annotation-queue tools such as Langfuse
 (corrections as eval labels, not a preference-divergence stream); Cursor rules
 and CLAUDE.md distillation (manual, unmeasured; "Beyond the Prompt", 2025).
 
-## Unresolved questions
-
-- Phase-1 marker list and overlap threshold: start values are a judgement call,
-  measured by G-precision and tuned by adjudication rounds.
-- Adjudication cadence: per analysis session or batched; the volume estimate
-  sets it.
-- Phase-2 trigger: the candidate volume or precision gap that justifies assisted
-  classification.
-- Per-category signed direction: promote `direction` to per-category structure
-  only if the data shows opposing directions within single events.
-- Whether `correction_candidates` should carry a short content excerpt column
-  for adjudication ergonomics (lake-local only, never exported) or adjudication
-  always dereferences the locus live. Needs a confidentiality analysis with the
-  change.
-
-## References
-
-- PRD sections: Architecture; Goals.
-- Related: ADR-0004 (confidentiality: local-only pointers I5, no-identifier rule
-  I4, embedding exclusion, LLM-labelling boundary), RFC-0001 (message text in the lake, the
-  decision that makes mining possible; this RFC resolves its open
-  `correction_events` DDL).
-- In this repo: the example mines `mining/[0-9]*.sql` (operator context, one file per
-  detector, operator messages, events),
-  `mining/divergence_taxonomy.example.toml` (the PRIOR; the canonical taxonomy is a
-  phase-3 output), `mining/queries/corrections_candidates.sql`,
-  `mining/queries/adjudication_sample.sql`. The adjudication ledger lives outside
-  the repo at `<data_home>/adjudications.jsonl`,
-  created by the first adjudication round.
-- External: PRELUDE/CIPHER <https://arxiv.org/abs/2404.15269>; Ziegler et al.,
-  CACM 2024; Langfuse annotation queues; "Beyond the Prompt" (2025).

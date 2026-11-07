@@ -24,7 +24,7 @@
 --     "time":{"start","end"}}}.
 --     step-finish parts carry PER-STEP cost/tokens -- deliberately NOT read for
 --     api_calls (the assistant MESSAGE already sums them; reading step-finish too
---     would double-count). See RFC-0001 (opencode api_calls grain).
+--     would double-count).
 --
 -- Cost (cost:0 defense, ADR-0006). Assistant data.cost is authoritative when
 -- present and > 0 -> use it. Some rows record cost 0 (the historic opencode
@@ -32,7 +32,7 @@
 -- the inline cost is 0/absent AND the model is in the pricing table, compute from
 -- tokens x pricing table. When 0/absent AND unpriced (subscription/gpt/gemini not in the pricing table),
 -- keep 0 and flag unpriced_model -- fabricating a per-token cost for a
--- subscription model would be wrong. (RFC-0001 records this.)
+-- subscription model would be wrong.
 --
 INSTALL sqlite;
 LOAD sqlite;
@@ -117,7 +117,7 @@ LEFT JOIN txt ON txt.message_id = m.id;
 -- ---------------------------------------------------------------------------
 -- api_calls: the ccusage UsageEntry spine. Grain = one assistant MESSAGE (the
 -- rolled-up cost/tokens live there; per-step step-finish parts are not read to
--- avoid double counting -- RFC-0001). cache read/write map to the nested
+-- avoid double counting). cache read/write map to the nested
 -- tokens.cache.{read,write}.
 CREATE OR REPLACE TABLE stg_api_calls AS
 WITH asst AS (

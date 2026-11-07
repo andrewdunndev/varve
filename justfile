@@ -125,11 +125,11 @@ stats *ARGS:
       -c ".output /dev/null" -f "{{repo}}/mining/queries/stats_year.sql" \
       -c ".output" -f "{{repo}}/mining/stats_render.sql"
 
-# Report lake size; tripwire at ~100 GB (PRD D4: keep-everything is cheap
+# Report lake size; tripwire at ~100 GB (ADR-0003: keep-everything is cheap
 # at this scale, the watch is the control).
 disk:
     @du -sh {{data_home}} 2>/dev/null || echo "no lake yet at {{data_home}}"
-    @kb="$(du -sk {{data_home}} 2>/dev/null | cut -f1)"; if [ "${kb:-0}" -ge 104857600 ]; then echo "varve disk: TRIPWIRE -- data home exceeds ~100 GB (PRD D4 disk watch)"; fi
+    @kb="$(du -sk {{data_home}} 2>/dev/null | cut -f1)"; if [ "${kb:-0}" -ge 104857600 ]; then echo "varve disk: TRIPWIRE -- data home exceeds ~100 GB (ADR-0003 disk watch)"; fi
 
 # CI/local lint. `just --evaluate` parses every recipe body and evaluates the
 # top-level assignments, so a broken interpolation or recipe declaration fails

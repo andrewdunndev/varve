@@ -68,7 +68,7 @@ One wrapper bounds every DuckDB process.
 | `sql/` | Shared adapter prelude and the written meaning of every column (`record.sql`) |
 | `queries/` | The versioned SQL query library |
 | `mining/` | Example mines (one detector per file), example patterns and taxonomy, review rendering, year-in-review stats and their queries |
-| `docs/` | PRD, ADRs (`adr/`), RFCs (`rfc/`), query index |
+| `docs/` | Goals (`prd.md`), ADRs (`adr/`), the correction-mining method (`rfc/`), query index |
 | `checks/` | Checks that run on every build |
 | `tests/` | Synthetic three-runtime fixtures and expected output for `just test` |
 | `bin/` | The runner (`duck`) and the scripts behind `sync`, `build`, `check`, `forget` and `mine` |
