@@ -29,7 +29,7 @@ Only the first rung needs the core. The rest are layers over the four tables.
 
 ## Architecture
 
-Target design (ADR-0008 to ADR-0010, proposed). `just ingest` still runs until it is built.
+Target design (ADR-0008 to ADR-0010, proposed). `just ingest` runs until it is built.
 
 Three primitives: files, SQL files, one runner (`bin/duck`). Everything extensible is a SQL file, run in a fixed order: adapters, checks, swap, mines.
 
@@ -56,28 +56,28 @@ One wrapper bounds every DuckDB process.
 
 | Path | What |
 |------|------|
-| `docs/prd.md` | Product requirements document, the spine |
-| `docs/adr/` | Architecture decision records (settled, dated, with evidence) |
-| `docs/rfc/` | Requests for comment (designs still open to iteration) |
-| `adapters/` | Per-runtime transcript normalizers (Claude Code, pi, opencode) |
-| `queries/` | The versioned SQL query library, the real analytics artifact |
-| `tests/fixtures/` | Synthetic three-runtime corpus CI backfills against (`just test`) |
-| `tests/snapshots/` | Expected rendered output `just test` diffs against |
-| `justfile` | `just backfill` / `just ingest` / `just sql` / `just stats` / `just lint` / `just test` / `just disk` |
+| `adapters/` | Per-runtime normalizers (Claude Code, pi, opencode) and the pricing and attribution seeds |
+| `sql/` | Shared prelude, staging, delta detection and lake views |
+| `queries/` | The versioned SQL query library |
+| `mining/` | Correction mining, review rendering, year-in-review stats and their queries |
+| `docs/` | PRD, ADRs (`adr/`), RFCs (`rfc/`), query index |
+| `tests/` | Synthetic three-runtime fixtures and expected output for `just test` |
+| `justfile` | `backfill`, `ingest`, `mine`, `review`, `stats`, `sql`, `lint`, `test`, `disk` |
 
-Toolchain: `mise install` provisions the pinned `duckdb` + `just` from
-`mise.toml`; every recipe assumes both are on PATH.
+`mise install` provisions the pinned `duckdb` and `just` from `mise.toml`.
 
-Lake data never lives in this repo. It lands at `~/.local/share/varve/lake/`
-(Parquet partitions). Until ADR-0008 lands it also writes `~/.local/share/varve/varve.duckdb` (rebuildable
-views/marts).
+Lake data never lives in this repo. It lands in `~/.local/share/varve/`. Your
+data (attribution rules, adjudications, worksheets) lives there too, by design
+(ADR-0004): the instrument is public, the readings are not.
 
 ## Status
 
-The lake foundation, correction mining and cost analytics are in use. Adapters
-are validated to differing depths: the pi adapter is the least exercised and
-documents its own status (`adapters/pi.sql`). Decisions are dated in
-`docs/adr/`; the PRD is `docs/prd.md`.
+The lake, correction mining and cost analytics are in use. The pi adapter is the
+least exercised and documents its own status (`adapters/pi.sql`).
 
-Your data (attribution rules, adjudications, worksheets) lives outside this
-repo by design (ADR-0004): the instrument is public, the readings are not.
+## Contributing
+
+GitLab is canonical. GitHub is a push mirror.
+Adapters for new runtimes are welcome.
+A pull request on the mirror is ported to GitLab with authorship kept.
+Adapters should follow ADR-0009.
