@@ -25,6 +25,22 @@ It serves a goal ladder:
 4. **Supporting:** the historic record as simulation evidence and leak-free
    benchmark synthesis.
 
+## Architecture
+
+Target design (ADR-0008 to ADR-0010, proposed). `just ingest` still runs until it is built.
+
+![Runtime stores are copied into a mirror, built into a new lake, checked, and swapped in.](docs/img/tiers.svg)
+
+Only the mirror and operator data cannot be rebuilt.
+
+![A new runtime adds an adapter, a fixture and a runtimes.csv row.](docs/img/runtime.svg)
+
+A new runtime touches three files.
+
+![Every DuckDB process runs inside the bin/duck boundary.](docs/img/envelope.svg)
+
+One wrapper bounds every DuckDB process.
+
 ## Layout
 
 | Path | What |

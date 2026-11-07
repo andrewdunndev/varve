@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 350" width="860" height="350" role="img" aria-labelledby="tiers-t">
+  <title id="tiers-t">Runtime stores are copied into a mirror. A build reads the mirror and operator data, writes a new lake, checks it, and swaps it in. SQL questions read the lake.</title>
+  <style>
+    svg { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .box { fill: #f4f4f4; stroke: #c4c4c4; stroke-width: 1; }
+    .acc { fill: #4a6741; stroke: #4a6741; }
+    .dim { fill: none; stroke: #c4c4c4; stroke-width: 1; stroke-dasharray: 5 4; }
+    .zone { fill: none; stroke: #4a6741; stroke-width: 1.5; stroke-dasharray: 6 4; }
+    .nm { font-size: 14px; font-weight: 600; fill: #0a0a0a; }
+    .sub { font-size: 12px; fill: #707070; }
+    .lbl { font-size: 12px; fill: #404040; }
+    .anm { font-size: 14px; font-weight: 600; fill: #ffffff; }
+    .asub { font-size: 12px; fill: #ffffff; }
+    .gnm { font-size: 14px; font-weight: 600; fill: #707070; }
+    .ln { fill: none; stroke: #404040; stroke-width: 1.5; }
+    .ah { fill: #404040; }
+    .zl { font-size: 12px; font-weight: 600; fill: #4a6741; }
+    @media (prefers-color-scheme: dark) {
+      .box { fill: #242426; stroke: #48484a; }
+      .acc { fill: #6aaa58; stroke: #6aaa58; }
+      .dim { stroke: #48484a; }
+      .zone { stroke: #6aaa58; }
+      .nm { fill: #f2f2f7; }
+      .sub { fill: #8e8e93; }
+      .lbl { fill: #aeaeb2; }
+      .anm { fill: #1c1c1e; }
+      .asub { fill: #1c1c1e; }
+      .gnm { fill: #8e8e93; }
+      .ln { stroke: #aeaeb2; }
+      .ah { fill: #aeaeb2; }
+      .zl { fill: #6aaa58; }
+    }
+  </style>
+  <defs><marker id="tiers-ar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto"><path class="ah" d="M0,0 L10,4 L0,8 Z"/></marker></defs>
+  <!-- arrows -->
+  <path class="ln" d="M140,95 H200" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M280,95 H340" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M460,85 H560" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M460,165 H560" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M725,176 V260" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M670,290 H600" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M520,290 H450" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M370,290 H300" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M220,290 H150" marker-end="url(#tiers-ar)"/>
+  <!-- arrow labels -->
+  <text class="lbl" x="170" y="86" text-anchor="middle">copy</text>
+  <text class="lbl" x="310" y="86" text-anchor="middle">files</text>
+  <text class="lbl" x="510" y="76" text-anchor="middle">read</text>
+  <text class="lbl" x="510" y="156" text-anchor="middle">read</text>
+  <text class="lbl" x="735" y="224">write</text>
+  <text class="lbl" x="635" y="281" text-anchor="middle">mine</text>
+  <text class="lbl" x="485" y="281" text-anchor="middle">pass</text>
+  <text class="lbl" x="335" y="281" text-anchor="middle">rename</text>
+  <text class="lbl" x="185" y="281" text-anchor="middle">query</text>
+  <!-- nodes -->
+  <rect class="box" x="20" y="60" width="120" height="70" rx="6"/>
+  <text class="nm" x="80" y="92" text-anchor="middle">runtime</text>
+  <text class="nm" x="80" y="110" text-anchor="middle">stores</text>
+  <rect class="box" x="200" y="60" width="80" height="70" rx="6"/>
+  <text class="nm" x="240" y="100" text-anchor="middle">sync</text>
+  <rect class="acc" x="340" y="60" width="120" height="50" rx="6"/>
+  <text class="anm" x="400" y="82" text-anchor="middle">mirror</text>
+  <text class="asub" x="400" y="99" text-anchor="middle">not rebuildable</text>
+  <rect class="acc" x="340" y="140" width="120" height="50" rx="6"/>
+  <text class="anm" x="400" y="162" text-anchor="middle">operator data</text>
+  <text class="asub" x="400" y="179" text-anchor="middle">not rebuildable</text>
+  <rect class="box" x="560" y="40" width="280" height="136" rx="6"/>
+  <text class="nm" x="700" y="64" text-anchor="middle">build</text>
+  <rect class="dim" x="580" y="76" width="240" height="26" rx="4"/>
+  <text class="sub" x="700" y="94" text-anchor="middle">runtime A</text>
+  <rect class="dim" x="580" y="106" width="240" height="26" rx="4"/>
+  <text class="sub" x="700" y="124" text-anchor="middle">runtime B</text>
+  <rect class="dim" x="580" y="136" width="240" height="26" rx="4"/>
+  <text class="sub" x="700" y="154" text-anchor="middle">runtime C</text>
+  <rect class="box" x="670" y="260" width="110" height="60" rx="6"/>
+  <text class="nm" x="725" y="296" text-anchor="middle">lake.new</text>
+  <rect class="box" x="520" y="260" width="80" height="60" rx="6"/>
+  <text class="nm" x="560" y="296" text-anchor="middle">check</text>
+  <rect class="box" x="370" y="260" width="80" height="60" rx="6"/>
+  <text class="nm" x="410" y="296" text-anchor="middle">swap</text>
+  <rect class="box" x="220" y="260" width="80" height="60" rx="6"/>
+  <text class="nm" x="260" y="296" text-anchor="middle">lake</text>
+  <rect class="box" x="20" y="260" width="130" height="60" rx="6"/>
+  <text class="nm" x="85" y="288" text-anchor="middle">SQL</text>
+  <text class="nm" x="85" y="306" text-anchor="middle">questions</text>
+</svg>
