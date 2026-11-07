@@ -1,31 +1,28 @@
--- QUESTION: Of operator messages mining did NOT flag, how many are correction misses --
---   the recall floor. Mining is tuned precision-over-recall, so
---   this measures the blind spot once rather than assuming it away: adjudicate a random
---   sample of unflagged operator messages and report detected/undetected. This sample is
---   also the selection-bias denominator arm -- every event carries `selection`
---   {organic|sampled}; mined promotions are organic, this population is sampled.
--- METRIC: adjudicated missed-correction rate = (rows from THIS sample labelled
---   verdict=true_positive) / (rows sampled here) -- a recall FLOOR, not the true recall
---   (only this sample is adjudicated, not the full flagged=false population). Read
---   alongside per-detector precision to bound overall recall from both sides.
--- SAMPLE: 50 rows from `operator_messages` WHERE flagged=false ("random sample of
---   user-after-assistant messages NOT flagged by any detector"), deterministic
---   (ORDER BY md5(message_uuid)) so the sample reproduces run to run. By construction
---   (flagged is defined as "also a correction_candidates locus"), zero rows here overlap
---   correction_candidates.
--- OUTPUT per row: the same shape as adjudication_sample.sql -- loci (`lake:` form),
---   attribution (estate/harness/campaign), a truncated EXCERPT of the message, and a
---   ready-to-fill JSONL skeleton. The skeleton keys on `message_uuid` (there is no
---   candidate_id -- these messages were never flagged) and fixes `"selection":"sampled"`
---   so recall-floor labels are distinguishable from precision-sample labels once both
---   land in the same adjudication ledger.
+-- QUESTION: How many corrections did mining miss? Of the operator messages no detector
+--   flagged, how many are corrections: the recall floor. Mining is tuned for precision
+--   over recall, so this measures the blind spot once instead of assuming it away:
+--   adjudicate a sample of unflagged operator messages and report detected against
+--   undetected. The sample is also the selection-bias denominator arm: every event
+--   carries `selection` {organic|sampled}; mined promotions are organic, this population
+--   is sampled.
+-- METRIC: missed-correction rate = (rows from this sample labelled verdict=true_positive)
+--   / (rows sampled here). A recall floor, not the true recall: only this sample is
+--   adjudicated, not the whole flagged=false population. Read alongside per-detector
+--   precision to bound overall recall from both sides.
+-- SAMPLE: 50 rows from `operator_messages` WHERE flagged=false, deterministic
+--   (ORDER BY md5(message_uuid)) so the sample reproduces run to run. flagged means "also
+--   a correction_candidates locus", so no row here overlaps correction_candidates.
+-- OUTPUT per row: the same shape as adjudication_sample.sql: loci (`lake:` form),
+--   attribution (estate/harness/campaign), a truncated excerpt of the message, and a
+--   ready-to-fill JSONL skeleton. The skeleton keys on `message_uuid` (these messages were
+--   never flagged, so there is no candidate_id) and fixes `"selection":"sampled"`, so
+--   recall-floor labels stay distinguishable from precision-sample labels once both land
+--   in the same adjudication ledger.
 --
--- EXCERPT + CONFIDENTIALITY (as in adjudication_sample.sql;
---   ADR-0004): the excerpt is a truncated (240-char, whitespace-collapsed) rendering of
+-- EXCERPT: as in adjudication_sample.sql. A 240-char, whitespace-collapsed rendering of
 --   the operator message, computed at query time from lake content and printed to the
---   operator's terminal. It is LAKE-LOCAL ONLY -- NEVER written to a repo-committed file
---   (this .sql contains zero transcript content) and NEVER exported. Do not redirect this
---   query's output into the repo or off ~/.local/share/varve.
+--   operator's terminal. Confidentiality (ADR-0004): this file holds no transcript
+--   content. Never redirect the output into the repo or off ~/.local/share/varve.
 -- Run: just sql -f mining/queries/recall_floor_sample.sql
 
 CREATE TEMP TABLE _floor_sample AS

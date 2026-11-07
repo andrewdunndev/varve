@@ -1,9 +1,9 @@
--- varve adjudication review renderer. Builds the review document from the
--- mined tables and the model-suggested worksheet, so the operator can adjudicate
--- correction candidates with the full prior draft and full corrective message in
--- front of them (context_judgment is largely un-inferable from a 240-char excerpt).
+-- Renders the adjudication review document from the mined tables and the
+-- advisory worksheet, so the operator judges each correction candidate with the
+-- full prior draft and the full corrective message in front of them. A 240-char
+-- excerpt rarely settles context_judgment.
 --
--- Run by `just review` through bin/duck, which then writes review_document out as
+-- `just review` runs this through bin/duck and writes review_document out as
 -- markdown. Reads the generated views: messages, correction_candidates,
 -- operator_messages, operator_context, adjudications and adjudication_worksheet.
 --   adjudications           ledger JSONL in the data home. Used only to skip loci
@@ -13,11 +13,10 @@
 --                           suggested_verdict, suggested_context_judgment, rationale,
 --                           suggested_by, suggested_at. Absent means no advisory.
 --
--- CONFIDENTIALITY (ADR-0004): this .sql holds zero transcript content. Draft and
+-- Confidentiality (ADR-0004): this file holds no transcript content. Draft and
 -- message text is read from the local lake at run time and written only under the
 -- data home. Loci are the non-identifying `lake:` form. Nothing is printed to a
 -- terminal.
--- =====================================================================================
 
 CREATE VIEW IF NOT EXISTS adjudications AS SELECT NULL::JSON AS j WHERE false;
 CREATE VIEW IF NOT EXISTS adjudication_worksheet AS SELECT NULL::JSON AS j WHERE false;
