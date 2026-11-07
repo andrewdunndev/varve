@@ -350,7 +350,7 @@ test:
       -c "COPY (SELECT 't1' AS tool_use_id, 's1' AS session_id, 'rt' AS runtime, 'maybe' AS outcome) TO '$bad/tool_calls/part.parquet' (FORMAT parquet);"
     rc=0; VARVE_LAKE="$bad" {{repo}}/bin/check 2>"$tmp/bad.err" || rc=$?
     if [ "$rc" -ne 1 ]; then echo "FAIL: the record checks should fail a bad lake, got exit $rc" >&2; fail=1; fi
-    for want in 'messages.content is retired' 'messages.origin has 1 row' 'tool_calls.outcome has 1 row'; do
+    for want in 'messages.content is not in sql/record.sql' 'messages.origin has 1 row' 'tool_calls.outcome has 1 row'; do
       if ! grep -q "$want" "$tmp/bad.err"; then echo "FAIL: no record check line for: $want" >&2; fail=1; fi
     done
 

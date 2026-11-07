@@ -11,9 +11,7 @@ ext AS (
   SELECT lower(name) AS prefix FROM runtimes
   UNION SELECT 'cc' UNION SELECT 'pi' UNION SELECT 'oc'
 )
-SELECT CASE WHEN h.column_name IN ('content', 'decision')
-            THEN h.table_name || '.' || h.column_name || ' is retired but still in the lake; run just build so every runtime is rebuilt'
-            ELSE h.table_name || '.' || h.column_name || ' is not in sql/record.sql; add its meaning there, or name it <runtime>_' || h.column_name END AS action
+SELECT h.table_name || '.' || h.column_name || ' is not in sql/record.sql; add its meaning there, or name it <rt>_' || h.column_name AS action
 FROM have h
 WHERE h.column_name <> 'agent'
   AND NOT EXISTS (SELECT 1 FROM record r WHERE r.table_name = h.table_name AND r.column_name = h.column_name)

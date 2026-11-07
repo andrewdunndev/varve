@@ -37,6 +37,7 @@ Three primitives: files, SQL files, one runner (`bin/duck`). Everything extensib
 - A column arrives with the query that reads it. Every JSON read of source data lists explicit columns. The exception is a config table: its columns are whatever the user's TOML rows name, so `bin/duck` reads them with inferred types over the whole file.
 - Parsers report facts. Judgment stays in mining. Analysis never parses content or raw formats. `<rt>_*` nullable columns are the extension point.
 - New columns: messages `origin`, `text`, `interrupted`; tool_calls `outcome` (ok, error, denied, cancelled, running), `arguments`, `result_text`, `mcp_server`, `mcp_tool`. `outcome` replaces `decision`.
+- Two checks hold the lake to the record: the columns are the ones `sql/record.sql` lists, no more and no fewer (`<rt>_*` and `agent` exempt, so a retired `content` fails as unlisted), and `origin` and `outcome` take only their named values.
 
 **Rejected:** an ext table, semver, renamed fact tables, a banned runtime literal in queries, a pluggable non-SQL parser (one real consumer), a dependency graph, a general overlay, option flags, plugin hooks.
 
