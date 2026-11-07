@@ -6,6 +6,10 @@
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 ![built with GitLab](https://img.shields.io/badge/built_with-GitLab-FC6D26?logo=gitlab)
 
+**Status: built for and used by its author, maintained occasionally.** CI tests every change. It has no support, roadmap or releases.
+
+We'd like to hear how you use it: open a GitLab issue. Core fixes are welcome as merge requests. We're moving toward a small, solid set of composable primitives. New runtimes and mines live in your own data home; the ones in this repo are examples.
+
 A varve is one annual sediment layer in a glacial lake. Scientists read the
 sequence to reconstruct past climate. varve is that instrument for coding-agent
 sessions: a local lake of everything your agents did, in readable layers, mined
@@ -40,9 +44,9 @@ Three primitives: files, SQL files, one runner (`bin/duck`). Everything extensib
 | mine | the tables | a saved table |
 | query | the tables | printed output |
 
-![Each SQL file kind, what it reads and writes, when it runs and where it is looked up; a new runtime is a row, an adapter and a fixture.](docs/img/files.svg)
+![Each SQL file kind, what it reads and writes, when it runs and where it is looked up; a new runtime is a row and an adapter in the data home; a contributed one also adds a fixture.](docs/img/files.svg)
 
-A new runtime is meant to touch three files; none has been added that way yet.
+A new runtime is a row in `runtimes.toml` and an adapter, both in the data home.
 
 ![The per-file decision in bin/sync and the replace set that moves a database and its journal together.](docs/img/sync.svg)
 
@@ -68,7 +72,7 @@ One wrapper bounds every DuckDB process.
 | `sql/` | Shared adapter prelude and the written meaning of every column (`record.sql`) |
 | `queries/` | The versioned SQL query library |
 | `mining/` | Example mines (one detector per file), example patterns and taxonomy, review rendering, year-in-review stats and their queries |
-| `docs/` | PRD, ADRs (`adr/`), RFCs (`rfc/`), query index |
+| `docs/` | Goals (`prd.md`), ADRs (`adr/`), the correction-mining method (`rfc/`), query index |
 | `checks/` | Checks that run on every build |
 | `tests/` | Synthetic three-runtime fixtures and expected output for `just test` |
 | `bin/` | The runner (`duck`) and the scripts behind `sync`, `build`, `check`, `forget` and `mine` |
@@ -87,6 +91,10 @@ done
 just sync && just build
 ```
 
+## Write your own adapter
+
+The three adapters are examples. To add a runtime, copy the closest one to `<data home>/adapters/`, edit it, and add a row to `<data home>/runtimes.toml` naming it. Then `just sync && just build`. Every build grades the lake against `sql/record.sql` (`bin/check`), so a wrong column fails the build. The repo needs no change. The one compatibility rule: a column's meaning never changes, and a new meaning gets a new name.
+
 ## Mining
 
 The repo's `mining/` holds example mines, one detector per file. To use them, copy
@@ -102,13 +110,6 @@ Lake data never lives in this repo. It lands in `~/.local/share/varve/`, and so
 does your own data: attribution rules, adjudications, worksheets (ADR-0004). The
 instrument is public; the readings are not.
 
-## Status
-
-The lake, correction mining and cost analytics are in use. The pi adapter is the
-least exercised and states its own status in `adapters/pi.sql`.
-
 ## Contributing
 
-GitLab is canonical; GitHub is a push mirror. A pull request on the mirror is
-ported to GitLab with authorship kept. Adapters for new runtimes are welcome and
-should follow ADR-0009.
+Open a GitLab issue to tell us how you use varve. Core fixes are welcome as merge requests. GitLab is canonical; GitHub is a push mirror. New runtimes live in your data home, with no repo change (see [Write your own adapter](#write-your-own-adapter)).

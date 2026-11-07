@@ -7,7 +7,7 @@
 
 ## Context
 
-The historic record is the asset. The far goals in the PRD depend on long history,
+The historic record is the asset. The far goals in `docs/prd.md` depend on long history,
 and the correction signal is longitudinal: its whole point is recurrence across
 sessions and across model versions. Data thrown away is signal that can never be
 recovered.
@@ -56,7 +56,6 @@ observed.
 
 ## References
 
-- PRD sections: Decisions (D4); Risks (disk growth).
 - Related: ADR-0001 (why the record matters), ADR-0002 (Parquet + zstd make
   keep-everything cheap).
 - External: Claude Code settings documentation (`cleanupPeriodDays`).

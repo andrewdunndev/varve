@@ -1,4 +1,4 @@
-# Copy to <data home>/divergence_taxonomy.toml and edit. A prior for soft
+# SAMPLE: starting categories for your own prior; copy to <data home>/divergence_taxonomy.toml and edit. A prior for soft
 # validation of correction_events.category: a label outside this list sets
 # unknown_category, it never fails a mine. The controlled vocabulary comes from
 # adjudicated events, not from this file.

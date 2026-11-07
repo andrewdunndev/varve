@@ -62,8 +62,6 @@ SELECT * FROM (VALUES
   ('tool_calls', 'outcome', 'VARCHAR', 'What happened: ok, error, denied (the operator refused the call), cancelled (the operator interrupted it), running. NULL when the source records no result.'),
   ('tool_calls', 'arguments', 'VARCHAR', 'The call''s input as JSON text. NULL when the source holds none.'),
   ('tool_calls', 'result_text', 'VARCHAR', 'The result as text: a string result as is, an array result as its text items joined with the two characters backslash and n. opencode: the output, else the error. NULL when none. Output a runtime stores in a side file reads as the stub the source keeps.'),
-  ('tool_calls', 'mcp_server', 'VARCHAR', 'Server part of an mcp__server__tool name. NULL for other tools.'),
-  ('tool_calls', 'mcp_tool', 'VARCHAR', 'Tool part of an mcp__server__tool name. NULL for other tools.'),
   ('tool_calls', 'result_message_id', 'VARCHAR', 'The message that carries the result: the messages row whose origin is tool_result for Claude Code. NULL when there is no result.'),
   ('tool_calls', 'runtime', 'VARCHAR', 'The runtimes.toml name. Partition key.'),
   ('tool_calls', 'date', 'DATE', 'Day of the session''s started_at in the same zone. Partition key.')

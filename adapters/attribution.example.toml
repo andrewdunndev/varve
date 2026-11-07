@@ -1,3 +1,4 @@
+# SAMPLE: one example rule per namespace shape; replace the globs with your own.
 # cwd -> estate / harness / campaign mapping (ADR-0005). Copy to
 # <data home>/attribution.toml and edit; the globs name real namespaces, so the
 # edited file stays out of the repo.

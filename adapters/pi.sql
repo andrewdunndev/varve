@@ -6,7 +6,7 @@
 -- (earendil-works/pi, packages/coding-agent/docs/session-format.md); so far it
 -- has executed against a single-session real corpus only. Validate row counts
 -- and reconcile inline against computed cost before trusting it at scale.
--- (RFC-0001 records this as a coverage limitation.)
+-- (a coverage limitation.)
 --
 -- Depends on sql/prelude.sql (run first): _attr_rules, _pricing, varve_harness(),
 -- varve_campaign(). Variable set by the build:
@@ -25,7 +25,7 @@
 --     model, provider, api, stopReason. ToolResultMessage carries toolCallId,
 --     toolName, isError.
 --
--- COVERAGE HOLE (upstream gap, ADR-0006 / RFC-0001): pi subagents spawn
+-- COVERAGE HOLE (upstream gap, ADR-0006): pi subagents spawn
 -- `pi --no-session` children that write NO transcript; the parent records only a
 -- rolled-up usage blob. Child-session linkage is therefore empty for pi and those
 -- child API calls are not individually observable. We do NOT fabricate child
@@ -173,7 +173,7 @@ FROM _pi_msg_x;
 
 -- ---------------------------------------------------------------------------
 -- api_calls: assistant entries. usage -> tokens; cost.total is pi's inline cost.
--- Cost policy (RFC-0001): prefer the runtime's inline cost.total when present;
+-- Cost policy: prefer the runtime's inline cost.total when present;
 -- else compute from tokens x pricing table. unpriced_model flags a model absent from the
 -- pricing table. The inline-vs-computed reconciliation delta is a query-time concern
 -- (queries/reconcile_pi_cost.sql), not a stored column.
@@ -234,8 +234,6 @@ SELECT
   CASE WHEN t.is_error THEN 'error' ELSE 'ok' END           AS outcome,
   c.arguments,
   t.txt                                                     AS result_text,
-  NULL::varchar                                             AS mcp_server,
-  NULL::varchar                                             AS mcp_tool,
   t.message_id                                              AS result_message_id,
   'pi'                                                      AS runtime,
   t.date

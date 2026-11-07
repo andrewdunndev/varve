@@ -61,9 +61,7 @@ still in motion.
 
 ## References
 
-- PRD sections: Architecture (transcript plane, lake table shapes); Risks (pi
-  subagent invisibility, opencode WAL / cost divergence).
-- Related: ADR-0001 (transcript plane), RFC-0001 (lake schema and DDL).
+- Related: ADR-0001 (transcript plane), `sql/record.sql` (the record contract).
 - External: ccusage <https://github.com/ryoppippi/ccusage>; pi
   <https://github.com/earendil-works/pi> (`docs/session-format.md`); opencode
   <https://github.com/anomalyco/opencode>; OTel semantic conventions

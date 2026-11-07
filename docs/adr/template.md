@@ -28,6 +28,5 @@ alternatives were weighed, name them and say why they lost.
 
 ## References
 
-- PRD section: <name>
 - Related: ADR-XXXX, RFC-XXXX
 - External: <links>

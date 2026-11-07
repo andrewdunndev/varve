@@ -1,3 +1,4 @@
+# SAMPLE: starting values for your own list; the rows are not exhaustive.
 # Copy to <data home>/patterns.toml and tune: add the injected text of your own
 # harness as noise rows. The mines read it through the
 # patterns view. Rows are [[row]] with kind, name, pattern.

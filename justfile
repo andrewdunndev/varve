@@ -125,11 +125,11 @@ stats *ARGS:
       -c ".output /dev/null" -f "{{repo}}/mining/queries/stats_year.sql" \
       -c ".output" -f "{{repo}}/mining/stats_render.sql"
 
-# Report lake size; tripwire at ~100 GB (PRD D4: keep-everything is cheap
+# Report lake size; tripwire at ~100 GB (ADR-0003: keep-everything is cheap
 # at this scale, the watch is the control).
 disk:
     @du -sh {{data_home}} 2>/dev/null || echo "no lake yet at {{data_home}}"
-    @kb="$(du -sk {{data_home}} 2>/dev/null | cut -f1)"; if [ "${kb:-0}" -ge 104857600 ]; then echo "varve disk: TRIPWIRE -- data home exceeds ~100 GB (PRD D4 disk watch)"; fi
+    @kb="$(du -sk {{data_home}} 2>/dev/null | cut -f1)"; if [ "${kb:-0}" -ge 104857600 ]; then echo "varve disk: TRIPWIRE -- data home exceeds ~100 GB (ADR-0003 disk watch)"; fi
 
 # CI/local lint. `just --evaluate` parses every recipe body and evaluates the
 # top-level assignments, so a broken interpolation or recipe declaration fails
@@ -362,6 +362,26 @@ test:
     out="$(VARVE_LAKE="$use" {{repo}}/bin/duck use -noheader -list -f "{{repo}}/sql/record.sql" -f "{{repo}}/checks/usage_present.sql")"
     if [ "$out" != "api_calls for zero: 3 recent calls carry no tokens; a usage field moved, fix the adapter" ]; then
       echo "FAIL: usage_present should name only the runtime with no tokens, got: $out" >&2; fail=1
+    fi
+
+    # A runtime is added from the data home alone: an adapter the repo does not have, a runtimes.toml row and a mirror folder build into the lake, and the repo tree does not change.
+    echo "varve test: a runtime added from the data home alone" >&2
+    repo_sums() { (cd "{{repo}}" && find . -type f -not -path './.git/*' -not -path './golden-out/*' | LC_ALL=C sort | xargs cksum); }
+    repo_before="$(repo_sums)"
+    own="$tmp/own"
+    mkdir -p "$own/data/adapters" "$own/mirror/scratch-rt"
+    cp "{{repo}}"/adapters/*.example.toml "$own/data/"
+    for f in attribution pricing; do mv "$own/data/$f.example.toml" "$own/data/$f.toml"; done
+    sed "s/'claude-code'/'scratch-rt'/" "{{repo}}/adapters/claude_code.sql" > "$own/data/adapters/scratch_rt.sql"
+    printf '[[row]]\nname = "scratch-rt"\nadapter = "scratch_rt.sql"\n' > "$own/data/runtimes.toml"
+    cp -R "{{repo}}/tests/fixtures/mirror/claude-code/." "$own/mirror/scratch-rt/"
+    rc=0; VARVE_DATA="$own/data" VARVE_MIRROR="$own/mirror" VARVE_LAKE="$own/data/lake" {{repo}}/bin/duck locked {{repo}}/bin/build 2>"$tmp/own.err" || rc=$?
+    n="$(VARVE_DATA="$own/data" VARVE_LAKE="$own/data/lake" {{repo}}/bin/duck own -noheader -list -c "SELECT count(DISTINCT session_id) FROM sessions WHERE runtime = 'scratch-rt';")"
+    if [ "$rc" -ne 0 ] || [ "$n" = "0" ]; then
+      echo "FAIL: a runtime added from the data home should build and land its sessions, got exit $rc and $n sessions" >&2; tail -5 "$tmp/own.err" >&2; fail=1
+    fi
+    if [ "$(repo_sums)" != "$repo_before" ]; then
+      echo "FAIL: adding a runtime from the data home changed the repo tree" >&2; fail=1
     fi
 
     # A runtime that built owns its partitions: a table it now builds empty fails row_counts instead of staying frozen.
