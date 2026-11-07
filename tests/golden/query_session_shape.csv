@@ -1,0 +1,13 @@
+estate,runtime,sessions,calls_p50,calls_p90,calls_max,wall_min_p50,wall_min_p90,wall_min_max,cost_p50,cost_p90,cost_max
+oc-session-1,opencode,unknown,unknown,NULL,1,0.0,0.0
+oc-session-2023,opencode,unknown,unknown,NULL,1,0.1,0.0
+pi-session-1,pi,unknown,unknown,NULL,1,0.0,0.0
+session_id,runtime,estate,harness,campaign,n_calls,wall_min,cost_usd
+test-session-0,claude-code,unknown,unknown,NULL,2,0.0,0.0
+test-session-1,claude-code,unknown,unknown,NULL,0,0.1,0.0
+test-session-2023,claude-code,unknown,unknown,NULL,10,0.4,0.01
+test-session-noise,claude-code,unknown,unknown,NULL,1,0.3,0.0
+test-session-ny,claude-code,unknown,unknown,NULL,8,4320.5,0.01
+unknown,claude-code,5,2.0,9.0,10,0.3,2592.5,4320.5,0.0,0.01,0.01
+unknown,opencode,2,1.0,1.0,1,0.1,0.1,0.1,0.0,0.0,0.0
+unknown,pi,1,1.0,1.0,1,0.0,0.0,0.0,0.0,0.0,0.0

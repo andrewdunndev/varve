@@ -1,0 +1,2 @@
+2026,all,prompts,2026-11-07,2026-01-01,2026-11-07,4,1,6,9,7975,0.01,4,1,75.0,4,2
+year,runtime,metric,today,first_day,last_day,sessions,subagents,prompts,steps,tokens,cost_usd,tool_results,tool_errors,tool_success_pct,active_days,best_streak

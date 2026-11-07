@@ -44,5 +44,3 @@ test:
     expire_in: 1 week
     paths:
       - golden-out/
-  variables:
-    VARVE_GOLDEN_CAPTURE: "1"

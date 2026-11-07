@@ -1,0 +1,10 @@
+2023-05-29,claude-code,11,0.0,NULL,0.01,NULL
+2025-12-29,claude-code,8,0.25,0.1449,0.01,0.3835
+2026-07-27,claude-code,2,0.0,NULL,0.0,NULL
+dispatch_unit,runtime,estate,harness,campaign,calls,cost_usd
+dispatch_unit,runtime,estate,harness,campaign,calls,share_calls,share_tokens,cost_usd,share_cost
+test-session-0,claude-code,unknown,unknown,NULL,2,0.0,0.0,0.0,0.0
+test-session-2023,claude-code,unknown,unknown,NULL,10,0.0,0.0,0.01,0.0
+test-session-noise,claude-code,unknown,unknown,NULL,1,0.0,0.0,0.0,0.0
+test-session-ny,claude-code,unknown,unknown,NULL,8,0.25,0.1449,0.01,0.3835
+week,runtime,calls,share_calls,share_tokens,cost_usd,share_cost

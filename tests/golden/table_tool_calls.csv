@@ -1,0 +1,15 @@
+oc-session-1,oc-msg-2,call-1,bash,2026-08-03 00:00:01.6,2026-08-03 00:00:01.7,100,completed,2026-08-03,opencode
+oc-session-2023,oc-msg-4,call-2,bash,2023-06-01 00:00:01.6,2023-06-01 00:00:01.7,100,rejected,2023-06-01,opencode
+oc-session-2023,oc-msg-4,call-3,bash,2023-06-01 00:00:01.7,2023-06-01 00:00:01.8,100,error,2023-06-01,opencode
+pi-session-1,e3,call-1,bash,2026-08-01 00:00:01.5,NULL,NULL,NULL,2026-08-01,pi
+session_id,message_id,tool_use_id,tool_name,started_at,ended_at,duration_ms,decision,date,runtime
+test-session-0,22222222-2222-2222-2222-222222222222,tool_1,Bash,2026-08-01 00:00:01,NULL,NULL,NULL,2026-08-01,claude-code
+test-session-1,22222222-2222-2222-2222-222222222222,tool_1,Bash,2026-08-01 00:00:01,NULL,NULL,NULL,2026-08-01,claude-code
+test-session-2023,c0000000-0000-0000-0000-000000000002,tool_t1,Bash,2023-06-01 00:00:02,NULL,NULL,NULL,2023-06-01,claude-code
+test-session-2023,c0000000-0000-0000-0000-000000000013,tool_t2,mcp__srv__lookup,2023-06-01 00:00:13,NULL,NULL,NULL,2023-06-01,claude-code
+test-session-2023,c0000000-0000-0000-0000-000000000015,tool_t3,Bash,2023-06-01 00:00:15,NULL,NULL,NULL,2023-06-01,claude-code
+test-session-2023,c0000000-0000-0000-0000-000000000018,tool_t4,AskUserQuestion,2023-06-01 00:00:18,NULL,NULL,NULL,2023-06-01,claude-code
+test-session-2023,c0000000-0000-0000-0000-000000000022,tool_t5,Bash,2023-06-01 00:00:22,NULL,NULL,NULL,2023-06-01,claude-code
+test-session-ny,a0000000-0000-0000-0000-000000000002,tool_ny_1,Read,2025-12-30 12:00:05,NULL,NULL,NULL,2025-12-30,claude-code
+test-session-ny,a0000000-0000-0000-0000-000000000008,tool_ny_2,Bash,2026-01-01 12:00:05,NULL,NULL,NULL,2025-12-30,claude-code
+test-session-ny,b0000000-0000-0000-0000-000000000002,tool_ny_4,Grep,2026-01-02 12:00:12,NULL,NULL,NULL,2025-12-30,claude-code

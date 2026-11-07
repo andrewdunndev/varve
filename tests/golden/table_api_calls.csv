@@ -1,0 +1,25 @@
+oc-session-1,oc-msg-2,NULL,NULL,2026-08-03 00:00:01,claude-sonnet-5,anthropic,100,50,0,0,0.001,false,2026-08-03,opencode
+oc-session-2023,oc-msg-4,NULL,NULL,2023-06-01 00:00:01,claude-sonnet-5,anthropic,100,50,0,0,0.001,false,2023-06-01,opencode
+pi-session-1,e2,NULL,NULL,2026-08-01 00:00:01,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2026-08-01,pi
+session_id,message_id,api_message_id,request_id,timestamp,model,provider,input,output,cache_read,cache_write,cost_usd,unpriced_model,date,runtime
+test-session-0,22222222-2222-2222-2222-222222222222,msg_1,req-1,2026-08-01 00:00:01,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2026-08-01,claude-code
+test-session-0,44444444-4444-4444-4444-444444444444,msg_2,req-2,2026-08-01 00:00:03,claude-sonnet-5,anthropic,80,30,0,0,0.00046,false,2026-08-01,claude-code
+test-session-2023,c0000000-0000-0000-0000-000000000002,msg_t_1,req-t-1,2023-06-01 00:00:02,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-01,claude-code
+test-session-2023,c0000000-0000-0000-0000-000000000004,msg_t_2,req-t-2,2023-06-01 00:00:04,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-01,claude-code
+test-session-2023,c0000000-0000-0000-0000-000000000006,msg_t_3,req-t-3,2023-06-01 00:00:06,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-01,claude-code
+test-session-2023,c0000000-0000-0000-0000-000000000009,msg_t_4,req-t-4,2023-06-01 00:00:09,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-01,claude-code
+test-session-2023,c0000000-0000-0000-0000-000000000011,msg_t_5,req-t-5,2023-06-01 00:00:11,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-01,claude-code
+test-session-2023,c0000000-0000-0000-0000-000000000013,msg_t_6,req-t-6,2023-06-01 00:00:13,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-01,claude-code
+test-session-2023,c0000000-0000-0000-0000-000000000015,msg_t_7,req-t-7,2023-06-01 00:00:15,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-01,claude-code
+test-session-2023,c0000000-0000-0000-0000-000000000018,msg_t_8,req-t-8,2023-06-01 00:00:18,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-01,claude-code
+test-session-2023,c0000000-0000-0000-0000-000000000020,msg_t_9,req-t-9,2023-06-01 00:00:20,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-01,claude-code
+test-session-2023,c0000000-0000-0000-0000-000000000022,msg_t_10,req-t-10,2023-06-01 00:00:22,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-01,claude-code
+test-session-noise,n0000000-0000-0000-0000-000000000002,msg_n_1,req-n-1,2023-06-02 00:00:02,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-02,claude-code
+test-session-ny,a0000000-0000-0000-0000-000000000002,msg_ny_1,req-ny-1,2025-12-30 12:00:05,claude-sonnet-5,anthropic,200,40,1000,300,0.00175,false,2025-12-30,claude-code
+test-session-ny,a0000000-0000-0000-0000-000000000004,msg_ny_2,req-ny-2,2025-12-30 12:00:07,claude-sonnet-5,anthropic,20,10,1500,0,0.00044,false,2025-12-30,claude-code
+test-session-ny,a0000000-0000-0000-0000-000000000006,msg_ny_3,req-ny-3,2025-12-31 12:00:05,claude-sonnet-5,anthropic,20,10,1600,0,0.00046,false,2025-12-30,claude-code
+test-session-ny,a0000000-0000-0000-0000-000000000008,msg_ny_4,req-ny-4,2026-01-01 12:00:05,claude-sonnet-5,anthropic,30,20,1700,0,0.0006,false,2025-12-30,claude-code
+test-session-ny,a0000000-0000-0000-0000-000000000010,msg_ny_5,req-ny-5,2026-01-01 12:00:07,claude-sonnet-5,anthropic,30,10,1800,0,0.00052,false,2025-12-30,claude-code
+test-session-ny,a0000000-0000-0000-0000-000000000012,msg_ny_6,req-ny-6,2026-01-02 12:00:30,claude-sonnet-5,anthropic,40,30,2000,0,0.00078,false,2025-12-30,claude-code
+test-session-ny,b0000000-0000-0000-0000-000000000002,msg_ny_7,req-ny-7,2026-01-02 12:00:12,claude-sonnet-5,anthropic,50,20,0,800,0.0023,false,2025-12-30,claude-code
+test-session-ny,b0000000-0000-0000-0000-000000000004,msg_ny_8,req-ny-8,2026-01-02 12:00:15,claude-sonnet-5,anthropic,60,25,800,0,0.00053,false,2025-12-30,claude-code
