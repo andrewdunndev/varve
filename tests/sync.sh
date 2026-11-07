@@ -62,10 +62,11 @@ shim="$tmp/shim"; mkdir -p "$shim"
 cat > "$shim/cp" <<S
 #!/bin/sh
 $(command -v cp) "\$@" || exit \$?
-if [ "\$2" = "\$SHIM_GROW" ] && [ "\$(cat "\$SHIM_TIMES")" -gt 0 ]; then
+if [ "\$2" = "\${SHIM_TRIG:-\$SHIM_GROW}" ] && [ "\$(cat "\$SHIM_TIMES")" -gt 0 ]; then
   echo \$((\$(cat "\$SHIM_TIMES") - 1)) > "\$SHIM_TIMES"
-  printf x >> "\$2"
+  printf x >> "\$SHIM_GROW"
 fi
+if [ "\$2" = "\${SHIM_SHRINK:-}" ]; then printf b > "\$3"; fi
 S
 chmod +x "$shim/cp"
 export SHIM_GROW="$src/store.db-wal" SHIM_TIMES="$tmp/times"
@@ -82,7 +83,37 @@ echo 1 > "$SHIM_TIMES"
 PATH="$shim:$PATH" "$sync" 2>/dev/null
 want "pair ships once stable (db)" "db2" "$(cat "$m/store.db")"
 want "pair ships once stable (wal)" "yes" "$(cmp -s "$src/store.db-wal" "$m/store.db-wal" && echo yes || echo no)"
-unset SHIM_GROW SHIM_TIMES
+
+# The journal changing after the database was copied (a checkpoint between the
+# two copies) ships as neither file.
+printf 'db-four\n' > "$src/store.db"
+export SHIM_TRIG="$src/store.db"
+echo 99 > "$SHIM_TIMES"
+PATH="$shim:$PATH" "$sync" 2>"$tmp/err"
+want "checkpoint between copies keeps old db" "db2" "$(cat "$m/store.db")"
+want "checkpoint between copies is logged" "yes" "$(grep -q 'kept 2 unstable' "$tmp/err" && echo yes || echo no)"
+echo 1 > "$SHIM_TIMES"
+PATH="$shim:$PATH" "$sync" 2>/dev/null
+want "set ships once the journal settles" "db-four" "$(cat "$m/store.db")"
+unset SHIM_GROW SHIM_TIMES SHIM_TRIG
+
+# A journal the source no longer has leaves the mirror with the new database.
+rm -f "$src/store.db-wal"; printf 'db5\n' > "$src/store.db"
+"$sync" 2>/dev/null
+want "vanished journal: new db shipped" "db5" "$(cat "$m/store.db")"
+want "vanished journal: mirror journal removed" "no" "$([ -e "$m/store.db-wal" ] && echo yes || echo no)"
+
+# A copy that comes out shorter than the mirror's file is dropped.
+printf 'bbbbbbbbbbbbbbbb\n' > "$src/proj/one.jsonl"
+SHIM_SHRINK="$src/proj/one.jsonl" PATH="$shim:$PATH" "$sync" 2>"$tmp/err"
+want "shortened copy keeps the mirror file" "aaaaaaaa" "$(cat "$m/proj/one.jsonl")"
+want "shortened copy is counted skipped" "yes" "$(grep -q 'skipped 1 shorter' "$tmp/err" && echo yes || echo no)"
+want "shortened copy leaves no temp" "0" "$(find "$m" -name '*.tmp.*' | wc -l | tr -d ' ')"
+
+# A temp stranded by a killed run is swept at the next sync.
+printf junk > "$m/proj/one.jsonl.tmp.4242"
+"$sync" 2>/dev/null
+want "stranded temp swept" "0" "$(find "$m" -name '*.tmp.*' | wc -l | tr -d ' ')"
 
 # Nothing outside the source root is copied: symlinked files and directories
 # are not followed, a replace entry through a symlink is skipped, and an entry
