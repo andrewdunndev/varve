@@ -9,7 +9,7 @@
 -- CAVEATS: cost_usd is computed from tokens x pricing seed (costUSD absent from the
 --   corpus, RFC-0001); console is authoritative. opencode subscription-billed
 --   models (no per-token price) are $0 (unpriced) and contribute calls/tokens but no cost.
--- W5 table stakes; W1 acceptance. Run: just sql -f queries/burn_by_day.sql (or `just burn`).
+-- W5 table stakes; W1 acceptance. Run: just sql -f queries/burn_by_day.sql.
 SELECT
   s.estate,
   s.harness,

@@ -301,18 +301,6 @@ interventions rulebook_dir:
 sql *ARGS:
     {{duckdb}} -readonly "{{db}}" -c "SET VARIABLE lake='{{lake}}';" "$@"
 
-# Burn by estate/campaign/model/day (W1 acceptance query).
-burn:
-    @{{duckdb}} -readonly "{{db}}" -c "SET VARIABLE lake='{{lake}}';" -f "{{repo}}/queries/burn_by_day.sql"
-
-# varve per-model token+cost totals for reconciliation vs ccusage.
-recon:
-    @{{duckdb}} -readonly "{{db}}" -c "SET VARIABLE lake='{{lake}}';" -f "{{repo}}/queries/reconcile_ccusage.sql"
-
-# pi inline-cost vs seed-computed-cost delta (empty until a pi corpus exists).
-recon-pi:
-    @{{duckdb}} -readonly "{{db}}" -c "SET VARIABLE lake='{{lake}}'; SET VARIABLE repo='{{repo}}';" -f "{{repo}}/queries/reconcile_pi_cost.sql"
-
 # Year in review: a local-time activity heatmap plus year totals (ADR-0007).
 #   just stats [--year N] [--runtime claude|pi|opencode|all] [--metric prompts|steps|tokens]
 # VARVE_TODAY (YYYY-MM-DD) pins "today" for the current-year cut.

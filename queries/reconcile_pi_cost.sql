@@ -4,7 +4,7 @@
 -- from the stored tokens x the pricing seed and reports the per-model delta where
 -- the model overlaps the seed -- so a divergence between pi's inline cost and our
 -- seed is visible without a second stored column. Empty until a pi corpus exists.
--- Run: just recon-pi
+-- Run: just sql -c "SET VARIABLE repo='$PWD';" -f queries/reconcile_pi_cost.sql
 WITH seed AS (
   SELECT * FROM read_csv(getvariable('repo') || '/adapters/pricing.csv',
     header = true, comment = '#', auto_detect = true)
