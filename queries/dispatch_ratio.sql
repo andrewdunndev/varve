@@ -1,4 +1,4 @@
--- QUESTION: Coordinate-by-default adherence -- what share of a session's work
+-- QUESTION: Dispatch adherence -- what share of a session's work
 --   (api_calls, tokens, cost) is carried by SUBAGENT traffic vs the main thread?
 -- METRIC: A "dispatch unit" is one claude-code session. A call is SUBAGENT traffic
 --   if its message has is_sidechain = true. Per unit: share_calls / share_tokens /
@@ -7,18 +7,18 @@
 --   date_trunc('week', timestamp). FAT INLINE flag = units with total cost >=
 --   threshold and ZERO subagent traffic. Threshold defaults to $20; override with:
 --     just sql -c "SET VARIABLE fat_threshold='50'" -f queries/dispatch_ratio.sql
--- SCOPE: claude-code ONLY (coordinator decision 2026-07-06). opencode's
---   parent_session_id is a session-CHAIN link, not subagent dispatch -- 1318/1626
---   of its sessions are children yet carry ~6% of its priced cost, and the true
---   `agent` marker is populated on 2 rows -- so including it measured chaining,
---   not coordinate-by-default. pi has no sidechain and empty child linkage
+-- SCOPE: claude-code only. opencode's
+--   parent_session_id is a session-chain link, not subagent dispatch -- most of
+--   its sessions are children yet carry little of its priced cost, and the true
+--   `agent` marker is almost never populated -- so including it measured chaining,
+--   not dispatch. pi has no sidechain and empty child linkage
 --   (upstream gap): no dispatch signal there either. Revisit if either runtime
 --   grows a real dispatch marker.
 -- CAVEATS: tokens is cache_read-dominated, so share_tokens tracks cache reuse more
 --   than work volume; share_cost is the load-bearing number.
 -- The two TEMP tables are in-memory (no lake write; read-only safe) so the three
 -- result sets below can share the classification without recomputing it.
--- W5. Run: just sql -f queries/dispatch_ratio.sql
+-- Run: just sql -f queries/dispatch_ratio.sql
 CREATE TEMP TABLE call_role AS
   SELECT
     a.runtime,

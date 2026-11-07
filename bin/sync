@@ -1,0 +1,187 @@
+#!/usr/bin/env bash
+# Copy runtime sources into the mirror. No SQL. A copy only ever grows: a
+# shorter source is skipped and counted, so an eroded source never shrinks the
+# mirror. Files named in a runtime's `replace` are exempt, because a stale
+# database/journal pair corrupts; they are copied as a stable pair or not at all.
+# Config: $VARVE_DATA/runtimes.toml (see runtimes.example.toml). Sessions listed
+# in forgotten.toml are never copied.
+set -euo pipefail
+
+if [ -z "${VARVE_SYNC_NICED:-}" ]; then VARVE_SYNC_NICED=1 exec nice -n "${VARVE_NICE:-19}" "$0" "$@"; fi
+
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+data="${VARVE_DATA:-$HOME/.local/share/varve}"
+mirror="${VARVE_MIRROR:-$data/mirror}"
+lock="${VARVE_LOCK:-${TMPDIR:-/tmp}/varve-duck.lock}.sync"
+die() { echo "varve: sync: $*" >&2; exit 2; }
+
+yq="$("$repo/bin/tool" yq)" || exit 2
+[ -f "$data/runtimes.toml" ] || die "no $data/runtimes.toml (copy runtimes.example.toml there)"
+
+# st: size and whole-second mtime, to compare a source with its copy. stn: size and
+# nanosecond mtime, to tell whether a source changed while it was being read.
+if stat --version >/dev/null 2>&1; then statfmt=(-c '%s %Y'); nsfmt=(-c '%s %.9Y'); else statfmt=(-f '%z %m'); nsfmt=(-f '%z %Fm'); fi
+st() { stat "${statfmt[@]}" "$1"; }
+stn() { stat "${nsfmt[@]}" "$1"; }
+
+while ! mkdir "$lock" 2>/dev/null; do
+  holder="$(cat "$lock/pid" 2>/dev/null || true)"
+  if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then echo "varve: sync blocked: lock held by pid $holder" >&2; exit 1; fi
+  if [ -z "$holder" ]; then sleep 1; [ -n "$(cat "$lock/pid" 2>/dev/null || true)" ] && continue; fi
+  rm -rf "$lock"
+done
+echo "$$" > "$lock/pid"
+trap 'rm -rf "$lock"' EXIT
+
+# Temp copies stranded by a killed run; the lock is held, so none is live.
+if [ -d "$mirror" ]; then find "$mirror" -type f -name '*.tmp.[0-9]*' -exec rm -f {} +; fi
+
+forgotten=""
+if [ -f "$data/forgotten.toml" ]; then
+  forgotten="$("$yq" -p toml -o=tsv '(.row // [])[] | .session_id' "$data/forgotten.toml")"
+fi
+
+is_forgotten() {
+  local id
+  [ -n "$forgotten" ] || return 1
+  while IFS= read -r id; do
+    [ -n "$id" ] || continue
+    case "$1" in *"$id"*) return 0 ;; esac
+  done <<< "$forgotten"
+  return 1
+}
+
+in_list() { case ",$2," in *",$1,"*) return 0 ;; *) return 1 ;; esac; }
+
+# put SRC DEST: copy to a temp name, then rename. Returns 1, leaving DEST, when
+# the copy came out shorter than DEST; a source rewritten mid-copy cannot shrink
+# the mirror.
+put() {
+  local t="$2.tmp.$$" tsize dsize
+  mkdir -p "$(dirname "$2")"
+  cp -p "$1" "$t" || { rm -f "$t"; return 2; }
+  if [ -f "$2" ]; then
+    read -r tsize _ <<< "$(st "$t")"
+    read -r dsize _ <<< "$(st "$2")"
+    if [ "$tsize" -lt "$dsize" ]; then rm -f "$t"; return 1; fi
+  fi
+  mv "$t" "$2" || return 2
+}
+
+# stage_set: copy every file of $todo (relative to $src) to its temp name in the
+# mirror, succeeding only when none of them changed between before the first
+# copy and after the last. Three tries; a failure leaves the temps for the caller.
+stage_set() {
+  local try r i ok before=()
+  for try in 1 2 3; do
+    before=()
+    for r in "${todo[@]}"; do before+=("$(stn "$src/$r")"); done
+    ok=1
+    for r in "${todo[@]}"; do
+      mkdir -p "$(dirname "$mirror/$name/$r")"
+      cp -p "$src/$r" "$mirror/$name/$r.tmp.$$" || { ok=0; break; }
+    done
+    if [ "$ok" = 1 ]; then
+      i=0
+      for r in "${todo[@]}"; do
+        if [ "$(stn "$src/$r")" != "${before[$i]}" ]; then ok=0; fi
+        i=$((i + 1))
+      done
+    fi
+    if [ "$ok" = 1 ]; then return 0; fi
+  done
+  return 1
+}
+
+# safe_rel REL: succeeds for a relative path that cannot leave its root.
+safe_rel() {
+  case "$1" in
+    ""|/*|..|../*|*/..|*/../*) return 1 ;;
+  esac
+  return 0
+}
+
+# inside FILE: succeeds when FILE is not a symlink and its directory, with
+# symlinks resolved, is under the resolved source root.
+inside() {
+  local d
+  [ ! -L "$1" ] || return 1
+  d="$(cd "$(dirname "$1")" 2>/dev/null && pwd -P)" || return 1
+  case "$d/" in "$realsrc"/*) return 0 ;; esac
+  return 1
+}
+
+rows="$("$yq" -p toml -o=tsv '(.row // [])[] | [.name, .source, (.include | join(",")), ((.replace // []) | join(","))]' "$data/runtimes.toml")"
+
+while IFS=$'\t' read -r name source include replace; do
+  [ -n "$name" ] || continue
+  src="${source/#\~/$HOME}"
+  if [ ! -d "$src" ]; then echo "varve: sync $name: no source at $src" >&2; continue; fi
+  copied=0; skipped=0; kept=0
+  realsrc="$(cd "$src" && pwd -P)"
+  entries=()
+  IFS=, read -r -a entries <<< "$include,$replace"
+  for e in "${entries[@]}"; do
+    [ -z "$e" ] || safe_rel "$e" || die "$name: '$e' must be a relative name without '..'"
+  done
+  # Regular files first, then the replace set in listed order (database before journal).
+  pats=()
+  IFS=, read -r -a pats <<< "$include"
+  for pat in "${pats[@]}"; do
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      rel="${f#"$src"/}"
+      in_list "$(basename "$f")" "$replace" && continue
+      if is_forgotten "$rel"; then continue; fi
+      dest="$mirror/$name/$rel"
+      read -r ssize smtime <<< "$(st "$f")"
+      if [ -f "$dest" ]; then
+        read -r dsize dmtime <<< "$(st "$dest")"
+        if [ "$ssize" -lt "$dsize" ]; then skipped=$((skipped + 1)); continue; fi
+        if [ "$ssize" -eq "$dsize" ] && [ "$smtime" = "$dmtime" ]; then continue; fi
+      fi
+      prc=0; put "$f" "$dest" || prc=$?
+      case "$prc" in
+        0) copied=$((copied + 1)) ;;
+        1) skipped=$((skipped + 1)) ;;
+        *) die "$name: could not copy $f" ;;
+      esac
+    done < <(find "$src" -type f -name "$pat" | LC_ALL=C sort)
+  done
+  reps=()
+  if [ -n "$replace" ]; then IFS=, read -r -a reps <<< "$replace"; fi
+  if [ "${#reps[@]}" -gt 0 ]; then
+    # The replace set ships together or not at all: every file is staged under a
+    # temp name, checked unchanged since before the first copy, then all are
+    # renamed into place. One unstable file leaves the whole previous set
+    # untouched. A member the source no longer has leaves the mirror with the
+    # new set, so a database is never paired with a journal from an older one.
+    todo=(); changed=0
+    for r in "${reps[@]}"; do
+      f="$src/$r"
+      dest="$mirror/$name/$r"
+      if [ ! -f "$f" ]; then
+        if [ -s "$dest" ]; then changed=1; fi
+        continue
+      fi
+      if ! inside "$f"; then echo "varve: sync $name: replace entry $r is a symlink or resolves outside the source, skipped" >&2; continue; fi
+      todo+=("$r")
+      if [ ! -f "$dest" ] || [ "$(stn "$f")" != "$(stn "$dest")" ]; then changed=1; fi
+    done
+    if [ "$changed" = 1 ] && [ "${#todo[@]}" -gt 0 ] && [ "${todo[0]}" = "${reps[0]}" ]; then
+      if stage_set; then
+        i=0
+        for r in "${reps[@]}"; do
+          if [ "$i" -gt 0 ]; then rm -f "$mirror/$name/$r"; fi
+          i=$((i + 1))
+        done
+        for r in "${todo[@]}"; do mv "$mirror/$name/$r.tmp.$$" "$mirror/$name/$r"; done
+        copied=$((copied + ${#todo[@]}))
+      else
+        for r in "${todo[@]}"; do rm -f "$mirror/$name/$r.tmp.$$"; done
+        kept=$((kept + ${#todo[@]}))
+      fi
+    fi
+  fi
+  echo "varve: sync $name: copied $copied, skipped $skipped shorter, kept $kept unstable" >&2
+done <<< "$rows"

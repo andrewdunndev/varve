@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 390" width="860" height="390" role="img" aria-labelledby="tiers-t">
+  <title id="tiers-t">Runtime stores are copied into a mirror. Adapters read the mirror into a new lake, checks grade it, and a swap publishes it. Queries read the lake. Mines run after the swap and save tables back to the lake. A data home feeds adapters, mines and queries.</title>
+  <style>
+    svg { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .box { fill: #f4f4f4; stroke: #c4c4c4; stroke-width: 1; }
+    .acc { fill: #4a6741; stroke: #4a6741; }
+    .dim { fill: none; stroke: #c4c4c4; stroke-width: 1; stroke-dasharray: 5 4; }
+    .zone { fill: none; stroke: #4a6741; stroke-width: 1.5; stroke-dasharray: 6 4; }
+    .nm { font-size: 14px; font-weight: 600; fill: #0a0a0a; }
+    .sub { font-size: 12px; fill: #707070; }
+    .lbl { font-size: 12px; fill: #404040; }
+    .anm { font-size: 14px; font-weight: 600; fill: #ffffff; }
+    .asub { font-size: 12px; fill: #ffffff; }
+    .gnm { font-size: 14px; font-weight: 600; fill: #707070; }
+    .ln { fill: none; stroke: #404040; stroke-width: 1.5; }
+    .ah { fill: #404040; }
+    .zl { font-size: 12px; font-weight: 600; fill: #4a6741; }
+    @media (prefers-color-scheme: dark) {
+      .box { fill: #242426; stroke: #48484a; }
+      .acc { fill: #6aaa58; stroke: #6aaa58; }
+      .dim { stroke: #48484a; }
+      .zone { stroke: #6aaa58; }
+      .nm { fill: #f2f2f7; }
+      .sub { fill: #8e8e93; }
+      .lbl { fill: #aeaeb2; }
+      .anm { fill: #1c1c1e; }
+      .asub { fill: #1c1c1e; }
+      .gnm { fill: #8e8e93; }
+      .ln { stroke: #aeaeb2; }
+      .ah { fill: #aeaeb2; }
+      .zl { fill: #6aaa58; }
+    }
+  </style>
+  <defs><marker id="tiers-ar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto"><path class="ah" d="M0,0 L10,4 L0,8 Z"/></marker></defs>
+  <!-- arrows -->
+  <path class="ln" d="M130,80 H170" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M240,80 H280" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M390,80 H430" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M560,80 H600" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M700,80 H740" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M790,110 V200" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M740,230 H690" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M580,230 H530" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M615,260 V310" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M655,310 V260" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M95,200 V155 H495 V110" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M170,230 H420" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M95,260 V340 H580" marker-end="url(#tiers-ar)"/>
+  <!-- arrow labels -->
+  <text class="lbl" x="150" y="72" text-anchor="middle">copy</text>
+  <text class="lbl" x="260" y="72" text-anchor="middle">files</text>
+  <text class="lbl" x="410" y="72" text-anchor="middle">read</text>
+  <text class="lbl" x="580" y="72" text-anchor="middle">rows</text>
+  <text class="lbl" x="720" y="72" text-anchor="middle">read</text>
+  <text class="lbl" x="798" y="160">pass</text>
+  <text class="lbl" x="715" y="222" text-anchor="middle">swap</text>
+  <text class="lbl" x="555" y="222" text-anchor="middle">read</text>
+  <text class="lbl" x="607" y="290" text-anchor="end">read</text>
+  <text class="lbl" x="663" y="290">saves</text>
+  <text class="lbl" x="300" y="147" text-anchor="middle">reads</text>
+  <text class="lbl" x="295" y="222" text-anchor="middle">reads</text>
+  <text class="lbl" x="330" y="332" text-anchor="middle">reads</text>
+  <!-- nodes -->
+  <rect class="box" x="20" y="50" width="110" height="60" rx="6"/>
+  <text class="nm" x="75" y="77" text-anchor="middle">runtime</text>
+  <text class="nm" x="75" y="95" text-anchor="middle">stores</text>
+  <rect class="box" x="170" y="50" width="70" height="60" rx="6"/>
+  <text class="nm" x="205" y="86" text-anchor="middle">sync</text>
+  <rect class="acc" x="280" y="50" width="110" height="60" rx="6"/>
+  <text class="anm" x="335" y="76" text-anchor="middle">mirror</text>
+  <text class="asub" x="335" y="94" text-anchor="middle">not rebuildable</text>
+  <rect class="box" x="430" y="50" width="130" height="60" rx="6"/>
+  <text class="nm" x="495" y="76" text-anchor="middle">adapters</text>
+  <text class="sub" x="495" y="94" text-anchor="middle">per runtime</text>
+  <rect class="box" x="600" y="50" width="100" height="60" rx="6"/>
+  <text class="nm" x="650" y="86" text-anchor="middle">lake.new</text>
+  <rect class="box" x="740" y="50" width="100" height="60" rx="6"/>
+  <text class="nm" x="790" y="86" text-anchor="middle">checks</text>
+  <rect class="box" x="740" y="200" width="100" height="60" rx="6"/>
+  <text class="nm" x="790" y="236" text-anchor="middle">swap</text>
+  <rect class="box" x="580" y="200" width="110" height="60" rx="6"/>
+  <text class="nm" x="635" y="236" text-anchor="middle">lake</text>
+  <rect class="box" x="420" y="200" width="110" height="60" rx="6"/>
+  <text class="nm" x="475" y="236" text-anchor="middle">queries</text>
+  <rect class="box" x="580" y="310" width="110" height="60" rx="6"/>
+  <text class="nm" x="635" y="336" text-anchor="middle">mines</text>
+  <text class="sub" x="635" y="354" text-anchor="middle">after the swap</text>
+  <rect class="acc" x="20" y="200" width="150" height="60" rx="6"/>
+  <text class="anm" x="95" y="226" text-anchor="middle">data home</text>
+  <text class="asub" x="95" y="244" text-anchor="middle">not rebuildable</text>
+</svg>

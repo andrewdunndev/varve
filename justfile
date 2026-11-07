@@ -1,7 +1,7 @@
-# varve -- local agent-session record lake (Parquet + DuckDB).
+# varve -- local agent-session record lake (Parquet + SQL).
 # Data home: ~/.local/share/varve (never in this repo; VARVE_DATA overrides).
-# Zero resident processes: every target is invoke-and-exit. DuckDB is single-
-# writer -- ingest/backfill are the SOLE writers; `just sql` opens read-only.
+# Zero resident processes: every target is invoke-and-exit. Every SQL run goes
+# through bin/duck, which bounds it and serializes writers.
 
 # Recipe args reach recipes as "$@" with quoting intact ({{ARGS}} interpolation
 # would re-split quoted SQL at the shell).
@@ -9,267 +9,62 @@ set positional-arguments
 
 data_home := env_var_or_default("VARVE_DATA", env_var("HOME") + "/.local/share/varve")
 repo      := justfile_directory()
-lake      := data_home + "/lake"
+lake      := env_var_or_default("VARVE_LAKE", data_home + "/lake")
 state     := data_home + "/state"
-# DuckDB otherwise claims 80% of RAM, every core, and spill up to 90% of free disk.
-mine_memory_limit := env_var_or_default("VARVE_MINE_MEMORY_LIMIT", "4GB")
-duckdb_threads    := env_var_or_default("VARVE_DUCKDB_THREADS", "4")
-duckdb_max_spill  := env_var_or_default("VARVE_DUCKDB_MAX_SPILL", "20GB")
-manifest  := state + "/manifest.parquet"
-db        := data_home + "/varve.duckdb"
-# W7 adjudication ledger: OPERATOR DATA, never in the repo (public-instrument rule).
-# Defaults to the data home (survives a lake rebuild -- backfill clears lake/ only);
-# VARVE_ADJUDICATIONS overrides. `mine` handles an absent file gracefully.
-adjudications := env_var_or_default("VARVE_ADJUDICATIONS", data_home + "/adjudications.jsonl")
-# W7 adjudication worksheet: OPERATOR DATA (model-suggested labels + role-level rationale),
-# never in the repo (public-instrument rule). Defaults to the data home; VARVE_WORKSHEET
-# overrides. Advisory input to `just review`; absence is non-fatal.
-worksheet := env_var_or_default("VARVE_WORKSHEET", data_home + "/adjudication_worksheet.jsonl")
-# Attribution rules: OPERATOR DATA (the cwd globs name real namespaces), never in
-# the repo (public-instrument rule). Defaults to the data home; VARVE_ATTRIBUTION
-# overrides. Required: _pipeline fails loudly when absent (silent generic rules
-# would mis-attribute every session) -- bootstrap by copying
-# adapters/attribution.example.csv there and editing.
-attribution := env_var_or_default("VARVE_ATTRIBUTION", data_home + "/attribution.csv")
-
-# Per-runtime source roots. Each has an env override mirroring VARVE_CC_ROOT so a
-# frozen snapshot or alternate location can be pointed at for tests. A missing
-# root skips that runtime with a note (exit 0) -- see _pipeline.
-#
-# Claude Code: the glob MUST recurse -- subagent traffic lives in
-# <session_id>/subagents/agent-*.jsonl and is otherwise silently dropped.
-cc_root     := env_var_or_default("VARVE_CC_ROOT", env_var("HOME") + "/.claude/projects")
-cc_source   := cc_root + "/**/*.jsonl"
-# pi: append-only JSONL, one dir per dir-encoded cwd, recursive glob.
-pi_root     := env_var_or_default("VARVE_PI_ROOT", env_var("HOME") + "/.pi/agent/sessions")
-pi_source   := pi_root + "/**/*.jsonl"
-# opencode: a single SQLite db (WAL). Read via a read-only APFS clone snapshot so
-# the live store is never written or locked (see _pipeline).
-opencode_db := env_var_or_default("VARVE_OPENCODE_DB", env_var("HOME") + "/.local/share/opencode/opencode.db")
-
-duckdb := "mise exec -- duckdb"
 
 default:
     @just --list
 
-# Full historical backfill: all Claude Code history -> Parquet partitions.
-# Clears the lake first (append-only history means no stale partitions, but a
-# clean full rebuild is the contract for `backfill`).
-backfill:
-    rm -rf "{{lake}}"
-    @just _pipeline backfill
+# Copy runtime sources into the mirror (no engine, nice 19).
+sync:
+    {{repo}}/bin/sync
 
-# Incremental, idempotent ingest. Rewrites only the date partitions whose source
-# files changed (per-file size+mtime high-water mark). Handles live-session
-# appends: a grown JSONL re-derives its whole session -> appended rows counted
-# exactly once. No changes -> no writes -> identical row counts.
-ingest:
-    @just _pipeline ingest
+# Rebuild the lake from the mirror: one process per runtime into lake.new, the
+# checks, a swap by rename, then the mines. A failed runtime keeps its last good
+# partitions. Needs runtimes.toml, attribution.toml and pricing.toml in the data
+# home (copy the *.example.toml files and edit).
+build:
+    {{repo}}/bin/duck locked {{repo}}/bin/build
 
-# Shared pipeline. mode = backfill | ingest. All runtimes flow through one
-# manifest-driven incremental model: each present runtime's adapter derives its
-# _<rt>_* staging, sql/stage.sql unions them into stg_*, sql/affected.sql marks
-# the changed date partitions, and one COPY per table writes the affected
-# (runtime, date) partitions. A missing source root SKIPS that runtime with a
-# note (exit 0). opencode is read via a read-only APFS clone so the live db is
-# never written or locked.
-_pipeline mode:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if [ ! -f "{{attribution}}" ]; then
-      echo "varve: no attribution rules at {{attribution}}" >&2
-      echo "       copy adapters/attribution.example.csv there and edit (VARVE_ATTRIBUTION overrides)" >&2
-      exit 1
-    fi
-    mkdir -p "{{lake}}" "{{state}}"
-    # Manifest bootstrap: empty (schema-only) parquet on first run.
-    if [ ! -f "{{manifest}}" ]; then
-      {{duckdb}} -c "COPY (SELECT ''::VARCHAR path, 0::BIGINT size, 0::BIGINT mtime WHERE 1=0) TO '{{manifest}}' (FORMAT parquet);"
-    fi
-    # Current file inventory = high-water mark (path | size-bytes | mtime-epoch),
-    # spanning every present runtime. The manifest is refreshed from this, so one
-    # manifest covers all runtimes.
-    #
-    # `stat` is not portable: BSD (macOS) wants `-f '%N|%z|%m'`; GNU (Linux, the
-    # CI runner) has no `-f FORMAT` at all -- `-f` there means "filesystem status"
-    # instead, so the BSD invocation fails hard on Linux. Detect the flavor once
-    # via `stat --version` (GNU understands it and exits 0; BSD errors on the
-    # unknown long option) and pick the matching format string. Both formats are
-    # semantically identical -- name, size in bytes (st_size), mtime as decimal
-    # seconds since epoch -- so the manifest's (path, size, mtime) high-water mark
-    # means exactly the same thing on either platform; this is a syntax fix, not
-    # a behavior change.
-    if stat --version >/dev/null 2>&1; then
-      stat_fmt=(--format='%n|%s|%Y')
-    else
-      stat_fmt=(-f '%N|%z|%m')
-    fi
-    inv="$(mktemp -t varve_inv.XXXXXX)"
-    printf 'path|size|mtime\n' > "$inv"
-    adapters=()
-    oc_snap=""
-    # ---- Claude Code (JSONL glob; only load the adapter if files exist so
-    #      read_json is never handed an empty glob -- same guard as pi) ----
-    if [ -d "{{cc_root}}" ] && find "{{cc_root}}" -name '*.jsonl' -type f -print -quit | grep -q .; then
-      find "{{cc_root}}" -name '*.jsonl' -type f -exec stat "${stat_fmt[@]}" {} + >> "$inv"
-      adapters+=(-f "{{repo}}/adapters/claude_code.sql")
-    else
-      echo "varve: skip claude-code -- no sessions at {{cc_root}}" >&2
-    fi
-    # ---- pi (JSONL glob; only load the adapter if files exist so read_json is
-    #      never handed an empty glob) ----
-    if [ -d "{{pi_root}}" ] && find "{{pi_root}}" -name '*.jsonl' -type f -print -quit | grep -q .; then
-      find "{{pi_root}}" -name '*.jsonl' -type f -exec stat "${stat_fmt[@]}" {} + >> "$inv"
-      adapters+=(-f "{{repo}}/adapters/pi.sql")
-    else
-      echo "varve: skip pi -- no sessions at {{pi_root}}" >&2
-    fi
-    # ---- opencode (SQLite; read-only clone snapshot) ----
-    if [ -f "{{opencode_db}}" ]; then
-      # Manifest keys on the LIVE db path (only .db; -wal/-shm mtimes drift
-      # externally and would cause false "changed"). A change to the db marks all
-      # opencode date partitions for rewrite (opencode is one file).
-      stat "${stat_fmt[@]}" "{{opencode_db}}" >> "$inv"
-      # APFS copy-on-write clone (cp -c: instant, no extra space) so ATTACH
-      # READ_ONLY can neither write nor lock the operator's live opencode db.
-      # Plain cp is the non-APFS fallback. Clone -wal/-shm too for WAL consistency.
-      oc_snap="$(mktemp -d -t varve_ocsnap.XXXXXX)"
-      cp -c "{{opencode_db}}" "$oc_snap/opencode.db" 2>/dev/null || cp "{{opencode_db}}" "$oc_snap/opencode.db"
-      for ext in -wal -shm; do
-        if [ -f "{{opencode_db}}$ext" ]; then
-          cp -c "{{opencode_db}}$ext" "$oc_snap/opencode.db$ext" 2>/dev/null || cp "{{opencode_db}}$ext" "$oc_snap/opencode.db$ext"
-        fi
-      done
-      # ATTACH needs a literal path (no getvariable), so inject it here where the
-      # snapshot path is known -- before opencode.sql, after the CC adapter.
-      adapters+=(-c "INSTALL sqlite; LOAD sqlite; ATTACH '$oc_snap/opencode.db' AS oc (TYPE sqlite, READ_ONLY);" -f "{{repo}}/adapters/opencode.sql")
-      echo "varve: opencode read-only clone -> $oc_snap" >&2
-    else
-      echo "varve: skip opencode -- no db at {{opencode_db}}" >&2
-    fi
-    # Derive + write affected partitions + refresh manifest, one DuckDB session.
-    # Large-corpus safety: an in-memory session cannot spill without a
-    # temp_directory, and insertion order buys nothing here (every COPY is
-    # partitioned; readers sort) -- without both, a first backfill over a
-    # multi-GB corpus exhausts the memory limit and dies.
-    mkdir -p "{{state}}"; spill="$(mktemp -d "{{state}}/duckdb_tmp.XXXXXX")"
-    trap 'rm -rf "$spill"' EXIT
-    {{duckdb}} :memory: \
-      -c "SET preserve_insertion_order=false; SET threads={{duckdb_threads}}; SET max_temp_directory_size='{{duckdb_max_spill}}'; SET temp_directory='$spill';" \
-      -c "SET VARIABLE cc_source='{{cc_source}}'; SET VARIABLE pi_source='{{pi_source}}'; SET VARIABLE opencode_db='{{opencode_db}}'; SET VARIABLE repo_dir='{{repo}}'; SET VARIABLE attribution='{{attribution}}'; SET VARIABLE mode='{{mode}}'; SET VARIABLE inventory='$inv'; SET VARIABLE manifest='{{manifest}}';" \
-      -f "{{repo}}/sql/prelude.sql" \
-      ${adapters[@]+"${adapters[@]}"} \
-      -f "{{repo}}/sql/stage.sql" \
-      -f "{{repo}}/sql/affected.sql" \
-      -c "COPY (SELECT * FROM stg_sessions   WHERE date IN (SELECT date FROM _affected)) TO '{{lake}}/sessions'   (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);" \
-      -c "COPY (SELECT * FROM stg_messages   WHERE date IN (SELECT date FROM _affected)) TO '{{lake}}/messages'   (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);" \
-      -c "COPY (SELECT * FROM stg_api_calls  WHERE date IN (SELECT date FROM _affected)) TO '{{lake}}/api_calls'  (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);" \
-      -c "COPY (SELECT * FROM stg_tool_calls WHERE date IN (SELECT date FROM _affected)) TO '{{lake}}/tool_calls' (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);" \
-      -c "COPY (SELECT path, size, mtime FROM _inventory) TO '{{manifest}}' (FORMAT parquet, OVERWRITE_OR_IGNORE);"
-    rm -f "$inv"
-    [ -n "$oc_snap" ] && rm -rf "$oc_snap" || true
-    just _views
-    just mine
+# Run every check (checks/ in the repo, then checks/ in the data home) against
+# the published lake. Each failure line names the next action.
+check:
+    {{repo}}/bin/check
 
-# (Re)create the read-side views in varve.duckdb over the Parquet lake.
-_views:
-    {{duckdb}} "{{db}}" -c "SET VARIABLE lake='{{lake}}';" -f "{{repo}}/sql/views.sql"
+# Drop a session from the mirror and the lake for good, then rebuild. The one
+# way a session leaves the record.
+forget id:
+    {{repo}}/bin/duck locked {{repo}}/bin/forget "$1"
 
-# W7 correction mining. Rebuilds correction_candidates (four detectors, precision-first),
-# operator_messages (G-recall-floor denominator: metadata-only, flagged = also a candidate
-# locus) and promotes adjudicated candidates into correction_events -- all PURELY from the
-# lake, so the rebuild is deterministic (byte-identical on an unchanged lake; no manifest
-# interaction). _pipeline calls this AFTER the core tables + views are written; ingest/
-# backfill remain the sole lake writers. The adjudication ledger is operator data outside
-# the repo (see `adjudications`); when absent, an empty temp file is substituted so the
-# read never errors -> zero promoted events. COPY targets are literals here (COPY TO cannot
-# take getvariable), matching how _pipeline writes the core tables.
+# Run the mines in the data home's mining/ in filename order, then the checks.
+# Each mine saves one table under the lake. A failing mine keeps its last good
+# file and the rest still run. No mining/ files, no mining. `build` calls this
+# after the swap.
 mine:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if [ ! -d "{{lake}}/messages" ]; then
-      echo "varve: skip mine -- no core tables at {{lake}}" >&2; exit 0
-    fi
-    adj="{{adjudications}}"
-    tmp=""
-    if [ ! -f "$adj" ]; then tmp="$(mktemp -t varve_adj.XXXXXX)"; adj="$tmp"; fi
-    # Full-rebuild semantics need a clean target: these three are pure derivations
-    # of the lake, and OVERWRITE_OR_IGNORE only replaces partitions the new run
-    # writes -- a (runtime, date) partition that becomes EMPTY after a detector
-    # change would otherwise survive as stale rows (observed when detector v2
-    # landed: one v1 row lingered in a partition v2 no longer writes).
-    rm -rf "{{lake}}/correction_candidates" "{{lake}}/operator_messages" "{{lake}}/correction_events"
-    mkdir -p "{{state}}"; spill="$(mktemp -d "{{state}}/duckdb_tmp.XXXXXX")"
-    trap 'rm -rf "$spill"' EXIT
-    {{duckdb}} :memory: \
-      -c "SET memory_limit='{{mine_memory_limit}}'; SET preserve_insertion_order=false; SET threads={{duckdb_threads}}; SET max_temp_directory_size='{{duckdb_max_spill}}'; SET temp_directory='$spill';" \
-      -c "SET VARIABLE lake='{{lake}}'; SET VARIABLE repo_dir='{{repo}}'; SET VARIABLE adjudications='$adj';" \
-      -f "{{repo}}/adapters/corrections.sql" \
-      -c "COPY (SELECT * FROM stg_correction_candidates ORDER BY runtime, date, candidate_id) TO '{{lake}}/correction_candidates' (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);" \
-      -c "COPY (SELECT * FROM stg_operator_messages ORDER BY runtime, date, message_uuid) TO '{{lake}}/operator_messages' (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);" \
-      -c "COPY (SELECT * FROM stg_correction_events ORDER BY channel, date, event_id) TO '{{lake}}/correction_events' (FORMAT parquet, PARTITION_BY (channel, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);"
-    [ -n "$tmp" ] && rm -f "$tmp" || true
-    # (Re)create the read-side W7 views over the just-written tables. CREATE VIEW binds its
-    # glob eagerly, so EVERY table gets a view only once its dir holds parquet:
-    # correction_events is empty until the first adjudication round, and a corpus that
-    # trips zero detectors (or has no user messages at all) leaves candidates/
-    # operator_messages fileless too -- an empty COPY writes no partition files.
-    ev="DROP VIEW IF EXISTS correction_events;"
-    if find "{{lake}}/correction_events" -name '*.parquet' -print -quit 2>/dev/null | grep -q .; then
-      ev="CREATE OR REPLACE VIEW correction_events AS SELECT * FROM read_parquet('{{lake}}/correction_events/**/*.parquet', hive_partitioning=true, union_by_name=true);"
-    fi
-    cands="DROP VIEW IF EXISTS correction_candidates;"
-    if find "{{lake}}/correction_candidates" -name '*.parquet' -print -quit 2>/dev/null | grep -q .; then
-      cands="CREATE OR REPLACE VIEW correction_candidates AS SELECT * FROM read_parquet('{{lake}}/correction_candidates/**/*.parquet', hive_partitioning=true, union_by_name=true);"
-    fi
-    om="DROP VIEW IF EXISTS operator_messages;"
-    if find "{{lake}}/operator_messages" -name '*.parquet' -print -quit 2>/dev/null | grep -q .; then
-      om="CREATE OR REPLACE VIEW operator_messages AS SELECT * FROM read_parquet('{{lake}}/operator_messages/**/*.parquet', hive_partitioning=true, union_by_name=true);"
-    fi
-    {{duckdb}} "{{db}}" -c "$cands $om $ev"
+    {{repo}}/bin/duck locked {{repo}}/bin/mine
 
-# W7 adjudication REVIEW document (RFC-0002). Renders the operator's review sitting to
-# <data_home>/review_round1.md (override with `out=`): one section per flagged correction
-# candidate carrying the FULL prior draft + FULL corrective message + the model's advisory
-# suggestion from the worksheet (round-0 finding: context_judgment is largely un-inferable
-# from a 240-char excerpt, so the review dereferences the full loci), then the recall-floor
-# sample (unflagged operator messages) as a second part. Candidates/loci already in the
-# adjudications ledger are SKIPPED, so the doc shrinks as the operator works through it
-# (idempotent re-render). CONFIDENTIALITY: the ONLY output is the markdown under the data
-# home; adapters/review.sql holds zero transcript content, loci are the `lake:` form, and
-# nothing is printed to a terminal. The worksheet is advisory operator data outside the repo
-# (see `worksheet`); absence is non-fatal (a non-matching sentinel primes read_json_auto).
-# The adjudication ledger is handled like `mine` (empty temp file when absent). COPY target
-# is a literal here (COPY TO cannot take getvariable), matching how `mine` writes.
+# Adjudication review document. Renders the review sitting to
+# <data_home>/review_round1.md (override with `out=`): one section per flagged
+# correction candidate with the full prior draft, the full corrective message and
+# the advisory suggestion from adjudication_worksheet.jsonl, then the recall-floor
+# sample of unflagged operator messages. Loci already in adjudications.jsonl are
+# skipped, so the document shrinks as the operator works through it. The only
+# output is the markdown under the data home; nothing is printed.
 review out=(data_home + "/review_round1.md"):
     #!/usr/bin/env bash
     set -euo pipefail
-    if [ ! -d "{{lake}}/correction_candidates" ]; then
+    if [ -z "$(find "{{lake}}/correction_candidates" -name '*.parquet' -print -quit 2>/dev/null)" ]; then
       echo "varve: skip review -- no correction_candidates at {{lake}} (run just mine first)" >&2; exit 0
     fi
-    adj="{{adjudications}}"; adjtmp=""
-    if [ ! -f "$adj" ]; then adjtmp="$(mktemp -t varve_adj.XXXXXX)"; adj="$adjtmp"; fi
-    ws="{{worksheet}}"; wstmp=""
-    if [ ! -s "$ws" ]; then
-      # Absent/empty worksheet: prime read_json_auto with a non-matching sentinel row so the
-      # advisory LEFT JOIN yields nothing (worksheet absence is non-fatal per RFC-0002 review).
-      wstmp="$(mktemp -t varve_ws.XXXXXX)"
-      printf '%s\n' '{"candidate_id":"__no_worksheet__","detector":"","suggested_verdict":"","suggested_context_judgment":"","rationale":"","suggested_by":"","model_id":"","suggested_at":""}' > "$wstmp"
-      ws="$wstmp"
-    fi
     mkdir -p "$(dirname "{{out}}")"
-    {{duckdb}} :memory: \
-      -c "SET VARIABLE lake='{{lake}}'; SET VARIABLE adjudications='$adj'; SET VARIABLE worksheet='$ws';" \
-      -f "{{repo}}/adapters/review.sql" \
-      -c "COPY (SELECT md FROM stg_review_document ORDER BY part, ord2, ord3) TO '{{out}}' (FORMAT csv, HEADER false, QUOTE '', ESCAPE '', DELIMITER E'\t');"
-    [ -n "$adjtmp" ] && rm -f "$adjtmp" || true
-    [ -n "$wstmp" ] && rm -f "$wstmp" || true
+    {{repo}}/bin/duck review \
+      -f "{{repo}}/mining/review.sql" \
+      -c "COPY (SELECT md FROM review_document ORDER BY part, ord2, ord3) TO '{{out}}' (FORMAT csv, HEADER false, QUOTE '', ESCAPE '', DELIMITER E'\t');"
     echo "varve: wrote review -> {{out}}" >&2
 
-# W7 durability-test input (RFC-0002): the intervention timeline for "does baking a
-# correction into a rule stop it recurring" -- recovered from a RULEBOOK's own git
-# history, no new capture surface. GENERIC: rulebook_dir is any git repo the operator
-# points this at (their voicing/rules directory, e.g.); nothing here names a real path.
+# Intervention timeline for "does baking a correction into a rule stop it recurring",
+# recovered from a rulebook's own git history, no new capture surface. GENERIC:
+# rulebook_dir is any git repo the operator points this at; nothing here names a real path.
 # Read-only -- shells `git log`, never writes to rulebook_dir; safe against a dirty
 # working tree. Idempotent -- full rewrite of interventions.csv every run.
 # Writes <data_home>/state/interventions.csv:
@@ -295,23 +90,11 @@ interventions rulebook_dir:
     mv "$tmp" "$out"
     echo "varve: wrote $(($(wc -l < "$out") - 1)) row(s) -> $out" >&2
 
-# Open DuckDB READ-ONLY with lake views attached. Pass args, e.g.
+# Open the engine with a view per lake folder. Pass args, e.g.
 #   just sql -c "SELECT count(*) FROM api_calls;"
 #   just sql -f queries/burn_by_day.sql
 sql *ARGS:
-    {{duckdb}} -readonly "{{db}}" -c "SET VARIABLE lake='{{lake}}';" "$@"
-
-# Burn by estate/campaign/model/day (W1 acceptance query).
-burn:
-    @{{duckdb}} -readonly "{{db}}" -c "SET VARIABLE lake='{{lake}}';" -f "{{repo}}/queries/burn_by_day.sql"
-
-# varve per-model token+cost totals for reconciliation vs ccusage.
-recon:
-    @{{duckdb}} -readonly "{{db}}" -c "SET VARIABLE lake='{{lake}}';" -f "{{repo}}/queries/reconcile_ccusage.sql"
-
-# pi inline-cost vs seed-computed-cost delta (empty until a pi corpus exists).
-recon-pi:
-    @{{duckdb}} -readonly "{{db}}" -c "SET VARIABLE lake='{{lake}}'; SET VARIABLE repo='{{repo}}';" -f "{{repo}}/queries/reconcile_pi_cost.sql"
+    {{repo}}/bin/duck sql "$@"
 
 # Year in review: a local-time activity heatmap plus year totals (ADR-0007).
 #   just stats [--year N] [--runtime claude|pi|opencode|all] [--metric prompts|steps|tokens]
@@ -334,10 +117,13 @@ stats *ARGS:
     case "$runtime" in claude|pi|opencode|all) ;; *) echo "varve stats: --runtime takes claude|pi|opencode|all" >&2; exit 2 ;; esac
     case "$metric" in prompts|steps|tokens) ;; *) echo "varve stats: --metric takes prompts|steps|tokens" >&2; exit 2 ;; esac
     today="${VARVE_TODAY:-$(date +%F)}"
-    {{duckdb}} -readonly "{{db}}" -noheader -list \
-      -c "SET VARIABLE lake='{{lake}}'; SET VARIABLE year=$year; SET VARIABLE runtime='$runtime'; SET VARIABLE metric='$metric'; SET VARIABLE today=DATE '$today';" \
-      -c ".output /dev/null" -f "{{repo}}/queries/stats_year.sql" \
-      -c ".output" -f "{{repo}}/sql/stats_render.sql"
+    if [ -z "$(find "{{lake}}/operator_messages" -name '*.parquet' -print -quit 2>/dev/null)" ]; then
+      echo "varve stats: no operator_messages at {{lake}}; run just mine (prompt counts come from it)" >&2; exit 2
+    fi
+    {{repo}}/bin/duck stats -noheader -list \
+      -c "SET VARIABLE year=$year; SET VARIABLE runtime='$runtime'; SET VARIABLE metric='$metric'; SET VARIABLE today=DATE '$today';" \
+      -c ".output /dev/null" -f "{{repo}}/mining/queries/stats_year.sql" \
+      -c ".output" -f "{{repo}}/mining/stats_render.sql"
 
 # Report lake size; tripwire at ~100 GB (PRD D4: keep-everything is cheap
 # at this scale, the watch is the control).
@@ -345,87 +131,89 @@ disk:
     @du -sh {{data_home}} 2>/dev/null || echo "no lake yet at {{data_home}}"
     @kb="$(du -sk {{data_home}} 2>/dev/null | cut -f1)"; if [ "${kb:-0}" -ge 104857600 ]; then echo "varve disk: TRIPWIRE -- data home exceeds ~100 GB (PRD D4 disk watch)"; fi
 
-# CI/local lint: syntax-validate the justfile itself. `--evaluate` parses every
-# recipe body and evaluates the top-level variable assignments, so a broken
-# interpolation or a malformed recipe declaration fails here (verified: an
-# unclosed `{{` and a stray `:` both fail `--evaluate` with a parser error).
-# Deliberately NOT `just --fmt --check`: this file's aligned `:=` blocks are a
-# readability choice, and fmt's canonical reformatting would flatten them --
-# that is a style opinion, not a defect, so it stays off the merge gate.
-# mise.toml resolving is validated for free: every CI job's `mise install`
-# fails outright on an unresolvable duckdb/just pin before any recipe runs.
+# CI/local lint. `just --evaluate` parses every recipe body and evaluates the
+# top-level assignments, so a broken interpolation or recipe declaration fails
+# here. Scripts under bin/ must parse. The engine's name appears nowhere
+# outside the runner, the toolchain pin and docs: every run goes through
+# bin/duck, which owns the bounds.
 lint:
+    #!/usr/bin/env bash
+    set -euo pipefail
     just --evaluate > /dev/null
-    @echo "varve lint: justfile OK"
+    for s in bin/* tests/*.sh; do bash -n "$s"; done
+    word="duck""db"
+    hits="$(find . -type f -not -path './.git/*' -not -path './docs/*' -not -path './golden-out/*' -not -path './bin/duck' -not -path './mise.toml' -not -name '*.md' -not -name '*.svg' -not -name '*.png' -exec grep -Ilwi "$word" {} + || true)"
+    if [ -n "$hits" ]; then
+      echo "varve lint: the engine is named outside bin/duck:" >&2
+      echo "$hits" >&2
+      exit 1
+    fi
+    echo "varve lint: OK"
 
-# CI/local test: the real assertion behind `lint`. Runs the full pipeline
-# (backfill -> mine -> views) against a synthetic three-runtime fixture
-# (tests/fixtures/), isolated under a scratch VARVE_DATA so it never touches
-# the operator's real lake, then executes every file in queries/ plus `just
-# review` against the result. This exercises every statement in adapters/*.sql
-# and sql/*.sql for real against DuckDB (the actual engine, not a generic SQL
-# linter) -- a broken statement fails the run, not just a parse-only check.
+# CI/local test: a build over fixtures. The mirror fixtures go through the real
+# build under a scratch VARVE_DATA, so the operator's lake is never touched.
+# Assertions are checks. Then every query and the review run against the result,
+# outputs are diffed against tests/golden and tests/snapshots, and the behavior
+# tests break things on purpose: a failing adapter, a bound hit, a lost session.
 test:
     #!/usr/bin/env bash
     set -euo pipefail
     tmp="$(mktemp -d -t varve_test.XXXXXX)"
     trap 'rm -rf "$tmp"' EXIT
     export VARVE_DATA="$tmp/data"
-    export VARVE_CC_ROOT="{{repo}}/tests/fixtures/cc"
-    export VARVE_PI_ROOT="{{repo}}/tests/fixtures/pi"
-    export VARVE_OPENCODE_DB="$tmp/opencode.db"
-    export VARVE_ATTRIBUTION="{{repo}}/adapters/attribution.example.csv"
-    export VARVE_ADJUDICATIONS="$tmp/no_adjudications.jsonl"
-    export VARVE_WORKSHEET="$tmp/no_worksheet.jsonl"
+    export VARVE_MIRROR="$tmp/mirror"
+    export VARVE_LOCK="$tmp/lock"
     export TZ=UTC
+    unset VARVE_LAKE VARVE_PUBLISHED VARVE_LOCK_PID
+    lake="$VARVE_DATA/lake"
 
+    mkdir -p "$VARVE_DATA/checks" "$VARVE_DATA/mining" "$VARVE_MIRROR"
+    cp -R "{{repo}}/tests/fixtures/mirror/." "$VARVE_MIRROR/"
+    mkdir -p "$VARVE_MIRROR/opencode"
     echo "varve test: seeding synthetic opencode fixture db" >&2
-    {{duckdb}} :memory: \
-      -c "INSTALL sqlite; LOAD sqlite; ATTACH '$VARVE_OPENCODE_DB' AS oc (TYPE sqlite);" \
+    {{repo}}/bin/duck seed \
+      -c "INSTALL sqlite; LOAD sqlite; ATTACH '$VARVE_MIRROR/opencode/opencode.db' AS oc (TYPE sqlite);" \
       -f "{{repo}}/tests/fixtures/opencode_seed.sql"
+    for f in "{{repo}}"/adapters/*.example.toml "{{repo}}"/mining/*.example.toml; do
+      cp "$f" "$VARVE_DATA/$(basename "$f" .example.toml).toml"
+    done
+    cp "{{repo}}/tests/fixtures/runtimes.toml" "$VARVE_DATA/runtimes.toml"
+    cp "{{repo}}"/tests/checks/build/*.sql "$VARVE_DATA/checks/"
+    cp "{{repo}}"/mining/[0-9]*.sql "$VARVE_DATA/mining/"
 
-    echo "varve test: full backfill over the synthetic fixture" >&2
-    just backfill
+    echo "varve test: build over the synthetic mirror" >&2
+    just build
+    cp "{{repo}}"/tests/checks/mined/*.sql "$VARVE_DATA/checks/"
+    just check
 
-    echo "varve test: asserting every runtime actually produced rows (a" >&2
-    echo "  silently-skipped adapter would otherwise pass unnoticed)" >&2
-    for rt in claude-code pi opencode; do
-      n="$(just sql -noheader -list -c "SELECT count(*) FROM sessions WHERE runtime='$rt';")"
-      echo "  $rt: $n session(s)" >&2
-      if [ "${n:-0}" -lt 1 ]; then
-        echo "FAIL: $rt produced zero sessions in the fixture backfill" >&2
-        exit 1
+    echo "varve test: executing every queries/*.sql and mining/queries/*.sql against the fixture" >&2
+    # Output of each query, each lake table and the review document is written to
+    # golden-out/ (a CI artifact) and diffed against tests/golden/. Lines are sorted
+    # so a query without ORDER BY cannot flake the comparison.
+    gold="{{repo}}/golden-out"
+    rm -rf "$gold"; mkdir -p "$gold"
+    fail=0
+    for f in "{{repo}}"/queries/*.sql "{{repo}}"/mining/queries/*.sql; do
+      echo "  -- $f" >&2
+      case "$f" in
+        "{{repo}}"/mining/*) name="mining_$(basename "$f" .sql).csv" ;;
+        *) name="query_$(basename "$f" .sql).csv" ;;
+      esac
+      if ! just sql -csv -c "SET VARIABLE repo='{{repo}}';" -f "$f" | LC_ALL=C sort > "$gold/$name"; then
+        echo "FAIL: $f did not execute cleanly" >&2
+        fail=1
       fi
     done
-    cand="$(just sql -noheader -list -c "SELECT count(*) FROM correction_candidates;")"
-    if [ "${cand:-0}" -lt 1 ]; then
-      echo "FAIL: correction_candidates is empty -- the fixture no longer trips" >&2
-      echo "      a W7 detector (mine's correction_candidates view creation" >&2
-      echo "      requires at least one row; see justfile _views comment)" >&2
-      exit 1
-    fi
-    # session-copy.jsonl repeats lines of session.jsonl under a later-starting,
-    # lower-sorting session id; the copy must count once, in the earliest-started session.
-    m="message_uuid = '33333333-3333-3333-3333-333333333333'"
-    owners="$(just sql -noheader -list -c "SELECT (SELECT string_agg(DISTINCT session_id, ',') FROM correction_candidates WHERE $m) || ' ' || (SELECT string_agg(session_id, ',' ORDER BY session_id) FROM operator_messages WHERE $m);")"
-    if [ "$owners" != "test-session-1 test-session-1" ]; then
-      echo "FAIL: copied message attributed to '$owners' (candidates operator_messages)," >&2
-      echo "      want test-session-1 once in each" >&2
-      exit 1
-    fi
-
-    echo "varve test: executing every queries/*.sql against the fixture" >&2
-    fail=0
-    for f in "{{repo}}"/queries/*.sql; do
-      echo "  -- $f" >&2
-      if ! just sql -c "SET VARIABLE repo='{{repo}}';" -f "$f" > /dev/null; then
-        echo "FAIL: $f did not execute cleanly against DuckDB" >&2
+    for t in sessions messages api_calls tool_calls correction_candidates operator_messages; do
+      if ! just sql -csv -c "SELECT * FROM $t ORDER BY ALL;" | LC_ALL=C sort > "$gold/table_$t.csv"; then
+        echo "FAIL: could not dump table $t" >&2
         fail=1
       fi
     done
 
-    echo "varve test: just review (adapters/review.sql)" >&2
+    echo "varve test: just review (mining/review.sql)" >&2
     just review "$tmp/review.md" > /dev/null
+    sed -E 's/_Generated [0-9: -]+\./_Generated <ts>./' "$tmp/review.md" > "$gold/review.md"
 
     echo "varve test: just stats (snapshot, year-boundary streak, empty year, runtime filter)" >&2
     export VARVE_TODAY=2026-10-13
@@ -444,5 +232,209 @@ test:
     stats_tail $'1 session · 0 subagents\n2 prompts · 3 steps · 4.7k tokens · $0.00\n100.0% tool success · 2 active days · best streak 2 days' --year 2025
     stats_tail $'0 sessions · 0 subagents\n0 prompts · 0 steps · 0 tokens · $0.00\nn/a tool success · 0 active days · best streak 0 days' --year 2024
     stats_tail $'1 session · 0 subagents\n1 prompt · 1 step · 150 tokens · $0.00\n100.0% tool success · 1 active day · best streak 1 day' --year 2026 --runtime pi
+
+    echo "varve test: golden outputs (tests/golden)" >&2
+    if [ -n "${VARVE_GOLDEN_CAPTURE:-}" ]; then
+      echo "  capture mode: golden-out/ is the artifact, no comparison" >&2
+    elif [ ! -d "{{repo}}/tests/golden" ]; then
+      echo "FAIL: tests/golden is missing; capture golden-out/ from a CI run" >&2
+      fail=1
+    elif ! diff -ru "{{repo}}/tests/golden" "$gold" > "$tmp/golden.diff"; then
+      echo "FAIL: output differs from tests/golden (first 60 lines of the diff):" >&2
+      head -60 "$tmp/golden.diff" >&2
+      fail=1
+    fi
+
+    echo "varve test: runner caps, startup views and sync" >&2
+    {{repo}}/tests/caps.sh || fail=1
+    {{repo}}/tests/views.sh || fail=1
+    {{repo}}/tests/sync.sh || fail=1
+
+    echo "varve test: build behavior" >&2
+    sums() { (cd "$1" && find . -type f | LC_ALL=C sort | xargs cksum); }
+    rm -f "$VARVE_DATA/checks/"{candidates_present,copy_owner,detectors}.sql
+
+    # A runtime whose adapter fails keeps its published partitions; the others rebuild.
+    mkdir -p "$VARVE_DATA/adapters"
+    echo "SELECT * FROM no_such_table;" > "$VARVE_DATA/adapters/pi.sql"
+    pi_before="$(sums "$lake/messages/runtime=pi")"
+    rm -rf "$lake/messages/runtime=opencode"
+    rc=0; just build 2>"$tmp/build.err" || rc=$?
+    if [ "$rc" -ne 1 ]; then echo "FAIL: a failing adapter should exit the build 1, got $rc" >&2; fail=1; fi
+    if [ "$(sums "$lake/messages/runtime=pi")" != "$pi_before" ]; then
+      echo "FAIL: the failed runtime's published partitions changed" >&2; fail=1
+    fi
+    if [ ! -d "$lake/messages/runtime=opencode" ]; then
+      echo "FAIL: the other runtimes were not rebuilt around the failure" >&2; fail=1
+    fi
+    rm -rf "$VARVE_DATA/adapters"
+    if [ ! -d "$lake.old" ]; then echo "FAIL: the previous lake was not kept as lake.old after a swap" >&2; fail=1; fi
+
+    # A bound hit abandons the build and leaves the lake alone.
+    before="$(sums "$lake")"
+    rc=0; VARVE_MEMORY_LIMIT=1MB just build 2>"$tmp/build.err" || rc=$?
+    if [ "$rc" -ne 1 ]; then echo "FAIL: a bound hit should exit the build 1, got $rc" >&2; tail -5 "$tmp/build.err" >&2; fail=1; fi
+    if [ -e "$lake.new" ] || [ "$(sums "$lake")" != "$before" ]; then
+      echo "FAIL: a bound hit left lake.new behind or changed the lake" >&2; fail=1
+    fi
+
+    # A build that drops messages inside a surviving session fails row_counts and leaves the lake alone.
+    pi_file="$VARVE_MIRROR/pi/testproj/20260801T000000_pi-session-1.jsonl"
+    cp "$pi_file" "$tmp/pi-session.jsonl"
+    sed -i.bak '$d' "$pi_file"; rm -f "$pi_file.bak"
+    rc=0; just build 2>"$tmp/build.err" || rc=$?
+    if [ "$rc" -ne 1 ] || ! grep -q 'check row_counts: messages rows for pi fell' "$tmp/build.err"; then
+      echo "FAIL: a build that loses messages should fail row_counts, got exit $rc" >&2; tail -5 "$tmp/build.err" >&2; fail=1
+    fi
+    if [ -e "$lake.new" ] || [ "$(sums "$lake")" != "$before" ]; then
+      echo "FAIL: a failed row_counts left lake.new behind or changed the lake" >&2; fail=1
+    fi
+    cp "$tmp/pi-session.jsonl" "$pi_file"
+
+    # A lost session fails the build and leaves the lake alone; forget then passes.
+    mv "$VARVE_MIRROR/claude-code/testproj/session-noise.jsonl" "$tmp/session-noise.jsonl"
+    rc=0; just build 2>"$tmp/build.err" || rc=$?
+    if [ "$rc" -ne 1 ] || ! grep -q 'check no_lost_sessions' "$tmp/build.err"; then
+      echo "FAIL: a lost session should fail no_lost_sessions, got exit $rc" >&2; tail -5 "$tmp/build.err" >&2; fail=1
+    fi
+    if [ -e "$lake.new" ] || [ "$(sums "$lake")" != "$before" ]; then
+      echo "FAIL: a failed check left lake.new behind or changed the lake" >&2; fail=1
+    fi
+    if ! just forget test-session-noise 2>"$tmp/forget.err"; then
+      echo "FAIL: just forget did not clear the lost session" >&2; tail -5 "$tmp/forget.err" >&2; fail=1
+    fi
+    n="$(just sql -noheader -list -c "SELECT count(*) FROM sessions WHERE session_id = 'test-session-noise';")"
+    if [ "$n" != "0" ]; then echo "FAIL: the forgotten session is still in the lake" >&2; fail=1; fi
+
+    # A mine's version is the hash of its file, and an empty result still saves a table.
+    lex="$VARVE_DATA/mining/22-correction_candidates.lexical.sql"
+    bad_versions="$(just sql -noheader -list -c "SELECT count(*) FROM correction_candidates WHERE detector = 'lexical' AND detector_version <> (SELECT md5(content) FROM read_text('$lex'));")"
+    all_lexical="$(just sql -noheader -list -c "SELECT count(*) FROM correction_candidates WHERE detector = 'lexical';")"
+    if [ "$bad_versions" != "0" ] || [ "$all_lexical" = "0" ]; then
+      echo "FAIL: detector_version is not the hash of the mine file ($bad_versions of $all_lexical differ)" >&2; fail=1
+    fi
+    empty="$(just sql -noheader -list -c "SELECT count(*) FROM correction_events;" 2>/dev/null || true)"
+    if [ "$empty" != "0" ]; then echo "FAIL: an empty mine did not save a readable table: $empty" >&2; fail=1; fi
+
+    # A failing mine keeps its last good file; the mines after it still run.
+    cp "$lex" "$tmp/lexical.sql"
+    echo "SELECT * FROM no_such_table;" > "$lex"
+    lex_before="$(sums "$lake/correction_candidates" | grep lexical)"
+    rm -f "$lake/operator_messages/part.parquet"
+    rc=0; just mine 2>"$tmp/mine.err" || rc=$?
+    if [ "$rc" -ne 1 ] || ! grep -q 'mine 22-correction_candidates.lexical failed' "$tmp/mine.err"; then
+      echo "FAIL: a failing mine should exit 1 and name itself, got exit $rc" >&2; tail -5 "$tmp/mine.err" >&2; fail=1
+    fi
+    if [ "$(sums "$lake/correction_candidates" | grep lexical)" != "$lex_before" ]; then
+      echo "FAIL: the failing mine's last good file changed" >&2; fail=1
+    fi
+    if [ ! -f "$lake/operator_messages/part.parquet" ]; then
+      echo "FAIL: the mines after the failing one did not run" >&2; fail=1
+    fi
+    cp "$tmp/lexical.sql" "$lex"
+    if ! just mine 2>"$tmp/mine.err"; then echo "FAIL: just mine did not pass once the mine was restored" >&2; tail -5 "$tmp/mine.err" >&2; fail=1; fi
+
+    # A mine named for a core table is refused, so it cannot write into the published record.
+    echo "CREATE TABLE mine_out AS SELECT 1 AS x;" > "$VARVE_DATA/mining/99-messages.sql"
+    rc=0; just mine 2>"$tmp/mine.err" || rc=$?
+    if [ "$rc" -ne 1 ] || ! grep -q 'mine 99-messages refused' "$tmp/mine.err" || [ -e "$lake/messages/part.parquet" ]; then
+      echo "FAIL: a mine named for a core table should be refused and write nothing, got exit $rc" >&2; fail=1
+    fi
+    rm -f "$VARVE_DATA/mining/99-messages.sql" "$lake/messages/part.parquet"
+
+    # The record checks have teeth: a retired column and a value outside a closed set fail.
+    bad="$tmp/badlake"
+    mkdir -p "$bad/messages" "$bad/tool_calls"
+    {{repo}}/bin/duck bad \
+      -c "COPY (SELECT 'm1' AS message_id, 's1' AS session_id, 'rt' AS runtime, 'x' AS content, 'bogus' AS origin) TO '$bad/messages/part.parquet' (FORMAT parquet);" \
+      -c "COPY (SELECT 't1' AS tool_use_id, 's1' AS session_id, 'rt' AS runtime, 'maybe' AS outcome) TO '$bad/tool_calls/part.parquet' (FORMAT parquet);"
+    rc=0; VARVE_LAKE="$bad" {{repo}}/bin/check 2>"$tmp/bad.err" || rc=$?
+    if [ "$rc" -ne 1 ]; then echo "FAIL: the record checks should fail a bad lake, got exit $rc" >&2; fail=1; fi
+    for want in 'messages.content is not in sql/record.sql' 'messages.origin has 1 row' 'tool_calls.outcome has 1 row'; do
+      if ! grep -q "$want" "$tmp/bad.err"; then echo "FAIL: no record check line for: $want" >&2; fail=1; fi
+    done
+
+    # A runtime whose recent calls all carry no tokens fires usage_present and names the action; a runtime with tokens, and one with too few calls, do not.
+    use="$tmp/uselake"
+    mkdir -p "$use/api_calls"
+    {{repo}}/bin/duck use \
+      -c "COPY (SELECT * FROM (VALUES ('zero', DATE '2026-08-01', 0, 0, 0, 0), ('zero', DATE '2026-08-02', 0, 0, 0, 0), ('zero', DATE '2026-08-03', NULL, NULL, NULL, NULL), ('ctl', DATE '2026-08-01', 0, 0, 0, 0), ('ctl', DATE '2026-08-02', 0, 0, 0, 0), ('ctl', DATE '2026-08-03', 10, 5, 0, 0), ('few', DATE '2026-08-01', 0, 0, 0, 0), ('few', DATE '2026-08-02', 0, 0, 0, 0)) AS t(runtime, date, input, output, cache_read, cache_write)) TO '$use/api_calls/part.parquet' (FORMAT parquet);"
+    out="$(VARVE_LAKE="$use" {{repo}}/bin/duck use -noheader -list -f "{{repo}}/sql/record.sql" -f "{{repo}}/checks/usage_present.sql")"
+    if [ "$out" != "api_calls for zero: 3 recent calls carry no tokens; a usage field moved, fix the adapter" ]; then
+      echo "FAIL: usage_present should name only the runtime with no tokens, got: $out" >&2; fail=1
+    fi
+
+    # A runtime that built owns its partitions: a table it now builds empty fails row_counts instead of staying frozen.
+    before="$(sums "$lake")"
+    mkdir -p "$VARVE_DATA/adapters"
+    { cat "{{repo}}/adapters/pi.sql"; echo "CREATE TABLE _no_tools AS SELECT * FROM stg_tool_calls WHERE false; DROP TABLE stg_tool_calls; ALTER TABLE _no_tools RENAME TO stg_tool_calls;"; } > "$VARVE_DATA/adapters/pi.sql"
+    rc=0; just build 2>"$tmp/build.err" || rc=$?
+    if [ "$rc" -ne 1 ] || ! grep -q 'check row_counts: tool_calls rows for pi fell' "$tmp/build.err"; then
+      echo "FAIL: a built runtime with an empty table should fail row_counts, got exit $rc" >&2; tail -5 "$tmp/build.err" >&2; fail=1
+    fi
+    if [ -e "$lake.new" ] || [ "$(sums "$lake")" != "$before" ]; then
+      echo "FAIL: the failed row_counts left lake.new behind or changed the lake" >&2; fail=1
+    fi
+    rm -rf "$VARVE_DATA/adapters"
+
+    # A runtime with an empty mirror keeps its partitions; once every session it published is forgotten, the build completes without it.
+    mv "$VARVE_MIRROR/opencode" "$tmp/opencode-mirror"
+    rc=0; just build 2>"$tmp/build.err" || rc=$?
+    n="$(just sql -noheader -list -c "SELECT count(*) FROM sessions WHERE runtime = 'opencode';")"
+    if [ "$rc" -ne 0 ] || [ "$n" = "0" ]; then
+      echo "FAIL: an empty mirror should keep the runtime's partitions, got exit $rc and $n sessions" >&2; tail -5 "$tmp/build.err" >&2; fail=1
+    fi
+    rm -f "$VARVE_DATA/checks/"{tool_pairing,record_columns}.sql
+    for id in $(just sql -noheader -list -c "SELECT session_id FROM sessions WHERE runtime = 'opencode';"); do
+      printf '\n[[row]]\nsession_id = "%s"\nruntime = "opencode"\nat = "2026-01-01"\n' "$id" >> "$VARVE_DATA/forgotten.toml"
+    done
+    rc=0; just build 2>"$tmp/build.err" || rc=$?
+    n="$(just sql -noheader -list -c "SELECT count(*) FROM sessions WHERE runtime = 'opencode';")"
+    if [ "$rc" -ne 0 ] || [ "$n" != "0" ] || [ -d "$lake/messages/runtime=opencode" ]; then
+      echo "FAIL: forgetting a runtime's last session should complete the build, got exit $rc and $n sessions" >&2; tail -5 "$tmp/build.err" >&2; fail=1
+    fi
+    mv "$tmp/opencode-mirror" "$VARVE_MIRROR/opencode"
+
+    # A real SQLite WAL, as the opencode adapter reads it: rows held only in the -wal of a live store reach the mirror and read back through sqlite_scan, a clean close drops the -wal from the mirror, and reading never changes the mirror's database or -wal.
+    echo "varve test: opencode store through a real WAL" >&2
+    if ! command -v sqlite3 >/dev/null 2>&1; then
+      echo "FAIL: the WAL test needs the sqlite3 command" >&2; fail=1
+    else
+      w="$tmp/wal"; mkdir -p "$w/data" "$w/src"
+      printf '%s\n' '[[row]]' 'name = "oc"' 'adapter = "opencode.sql"' "source = \"$w/src\"" \
+        'include = ["store.db", "store.db-wal"]' 'replace = ["store.db", "store.db-wal"]' > "$w/data/runtimes.toml"
+      wal_sync() { VARVE_DATA="$w/data" VARVE_MIRROR="$w/mirror" {{repo}}/bin/sync 2>/dev/null; }
+      wal_rows() {
+        {{repo}}/bin/duck walrows -noheader -list \
+          -c "INSTALL sqlite; LOAD sqlite;" \
+          -c "SELECT string_agg(id, ',' ORDER BY id) FROM sqlite_scan('$w/mirror/oc/store.db', 'item');"
+      }
+      wal_sums() { cksum "$w/mirror/oc/store.db"; if [ -s "$w/mirror/oc/store.db-wal" ]; then cksum "$w/mirror/oc/store.db-wal"; fi; }
+      {
+        printf '%s\n' 'PRAGMA journal_mode=WAL;' 'CREATE TABLE item(id TEXT);' "INSERT INTO item VALUES ('main-1');" \
+          'PRAGMA wal_checkpoint(TRUNCATE);' 'PRAGMA wal_autocheckpoint=0;' "INSERT INTO item VALUES ('wal-1'), ('wal-2');"
+        n=0; while [ ! -e "$w/release" ] && [ "$n" -lt 600 ]; do sleep 0.2; n=$((n + 1)); done
+      } | sqlite3 "$w/src/store.db" > /dev/null &
+      holder=$!
+      n=0; while [ ! -s "$w/src/store.db-wal" ] && [ "$n" -lt 100 ]; do sleep 0.1; n=$((n + 1)); done
+      wal_sync
+      if [ ! -s "$w/mirror/oc/store.db-wal" ]; then
+        echo "FAIL: the live store's -wal did not reach the mirror" >&2; fail=1
+      fi
+      sums0="$(wal_sums)"
+      got="$(wal_rows)"
+      if [ "$got" != "main-1,wal-1,wal-2" ]; then echo "FAIL: rows held only in the -wal did not read back, got: $got" >&2; fail=1; fi
+      if [ "$(wal_sums)" != "$sums0" ]; then echo "FAIL: reading the live copy changed the mirror: before [$sums0] after [$(wal_sums)]" >&2; fail=1; fi
+      echo "  mirror after read: $(ls "$w/mirror/oc" | tr '\n' ' ')" >&2
+
+      touch "$w/release"; wait "$holder" || true
+      if [ -s "$w/src/store.db-wal" ]; then echo "FAIL: a clean close left data in the source -wal" >&2; fail=1; fi
+      wal_sync
+      if [ -s "$w/mirror/oc/store.db-wal" ]; then echo "FAIL: the mirror kept a -wal the source emptied" >&2; fail=1; fi
+      sums0="$(wal_sums)"
+      got="$(wal_rows)"
+      if [ "$got" != "main-1,wal-1,wal-2" ]; then echo "FAIL: rows did not read back after a clean close, got: $got" >&2; fail=1; fi
+      if [ "$(wal_sums)" != "$sums0" ]; then echo "FAIL: reading the closed copy changed the mirror: before [$sums0] after [$(wal_sums)] files [$(ls -l "$w/mirror/oc" | tr "\n" ";")]" >&2; fail=1; fi
+    fi
 
     exit $fail

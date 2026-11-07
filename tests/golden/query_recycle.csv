@@ -1,0 +1,10 @@
+estate,sessions,p50_max_ctx,p90_max_ctx,max_max_ctx,over_threshold_cost_usd,over_threshold_share
+oc-session-1,opencode,unknown,1,100,0.0,0.0,NULL,0.0
+oc-session-2023,opencode,unknown,1,100,0.0,0.0,NULL,0.0
+pi-session-1,pi,unknown,1,100,0.0,0.0,NULL,0.0
+session_id,runtime,estate,calls,max_eff_ctx,pct_over_t1,pct_over_t2,over_threshold_cost_usd,cost_usd
+test-session-0,claude-code,unknown,2,100,0.0,0.0,NULL,0.0
+test-session-2023,claude-code,unknown,12,100,0.0,0.0,NULL,0.01
+test-session-noise,claude-code,unknown,1,100,0.0,0.0,NULL,0.0
+test-session-ny,claude-code,unknown,8,2040,0.0,0.0,NULL,0.01
+unknown,7,100.0,876.0,2040,NULL,NULL

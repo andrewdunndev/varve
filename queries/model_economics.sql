@@ -5,16 +5,16 @@
 --   sum(cache_read)/nullif(sum(cache_read)+sum(input),0). Clustering result: per
 --   (harness, campaign): opus_cost_share = opus cost / total cost; cheap_call_share =
 --   calls on sonnet-or-haiku / total calls. Tier by model-name prefix: opus, fable,
---   sonnet, haiku, duo (GitLab-Duo subscription, $0), else other; "cheap" = sonnet
---   or haiku.
+--   sonnet, haiku, else other; "cheap" = sonnet or haiku.
 -- CAVEATS: fable-5 is priced ABOVE opus in the seed, so it is tier 'fable', not
---   cheap. Duo models are subscription $0 (unpriced) -- they depress cost shares
---   without being a per-token cost decision, so a high-Duo campaign reads as low
---   opus_cost_share for free reasons; read cheap_call_share (which counts Duo out)
---   alongside. cost_per_session mixes multi-model sessions (a session using opus and
+--   cheap. Subscription-billed models (no per-token price, cost 0) land in 'other'
+--   and depress cost shares without being a per-token cost decision, so a campaign
+--   heavy in them reads as low opus_cost_share for free reasons; read
+--   cheap_call_share (which counts them out) alongside.
+--   cost_per_session mixes multi-model sessions (a session using opus and
 --   haiku counts toward both). Console authoritative on absolute cost. TEMP table is
 --   in-memory (no lake write; read-only safe).
--- W5. Run: just sql -f queries/model_economics.sql
+-- Run: just sql -f queries/model_economics.sql
 CREATE TEMP TABLE tiered AS
   SELECT a.*,
     CASE
@@ -22,7 +22,6 @@ CREATE TEMP TABLE tiered AS
       WHEN model LIKE 'claude-fable%'  THEN 'fable'
       WHEN model LIKE 'claude-sonnet%' THEN 'sonnet'
       WHEN model LIKE 'claude-haiku%'  THEN 'haiku'
-      WHEN model LIKE 'duo-%'          THEN 'duo'
       ELSE 'other' END                                            AS tier
   FROM api_calls a;
 
@@ -47,8 +46,7 @@ SELECT
   count(*)                                                        AS calls,
   round(sum(t.cost_usd), 2)                                       AS cost_usd,
   round(sum(t.cost_usd) FILTER (WHERE t.tier = 'opus') / nullif(sum(t.cost_usd), 0), 4)  AS opus_cost_share,
-  round(count(*) FILTER (WHERE t.tier IN ('sonnet','haiku')) / count(*)::double, 4)      AS cheap_call_share,
-  round(count(*) FILTER (WHERE t.tier = 'duo') / count(*)::double, 4)                    AS duo_call_share
+  round(count(*) FILTER (WHERE t.tier IN ('sonnet','haiku')) / count(*)::double, 4)      AS cheap_call_share
 FROM tiered t
 JOIN sessions s USING (session_id)
 GROUP BY ALL

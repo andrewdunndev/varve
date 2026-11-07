@@ -1,23 +1,19 @@
--- varve pi adapter (W2). Reads pi's append-only JSONL session files and derives
--- the four normalized per-runtime staging tables (_pi_sessions, _pi_messages,
--- _pi_api_calls, _pi_tool_calls) plus a file->session->date map (_pi_files).
--- sql/stage.sql unions these into the shared stg_*.
+-- varve pi adapter. Reads the mirrored pi JSONL session files and derives the
+-- four normalized tables stg_sessions, stg_messages, stg_api_calls and
+-- stg_tool_calls; the build copies them to the lake.
 --
--- STATUS: correct-by-construction against the pi v3 session-format spec
--- (earendil-works/pi, packages/coding-agent/docs/session-format.md). There is NO
--- pi install on the build machine, so it only runs where a pi corpus exists
--- (the justfile skips it cleanly when no pi JSONL is present); so far it has
--- executed against a single-session real corpus only. Validate row counts +
--- reconcile inline vs computed cost before trusting it at scale.
+-- STATUS: correct by construction against the pi v3 session-format spec
+-- (earendil-works/pi, packages/coding-agent/docs/session-format.md); so far it
+-- has executed against a single-session real corpus only. Validate row counts
+-- and reconcile inline against computed cost before trusting it at scale.
 -- (RFC-0001 records this as a coverage limitation.)
 --
 -- Depends on sql/prelude.sql (run first): _attr_rules, _pricing, varve_harness(),
--- varve_campaign(). Variables (set by the justfile):
---   pi_source : recursive glob of pi JSONL (~/.pi/agent/sessions/**/*.jsonl)
---   repo_dir  : this repo root.
+-- varve_campaign(). Variable set by the build:
+--   mirror_dir : this runtime's mirror folder (no trailing slash)
 --
 -- Source shape (pi v3 spec):
---   * Path: ~/.pi/agent/sessions/<dir-encoded-cwd>/<timestamp>_<id>.jsonl.
+--   * Path: <dir-encoded-cwd>/<timestamp>_<id>.jsonl.
 --   * Line 1 header: {"type":"session","version":3,"id":<uuid>,
 --     "timestamp":<ISO>,"cwd":<path>}. The session id + cwd live ONLY here;
 --     entries carry no sessionId, so entries link to their session by FILENAME.
@@ -36,17 +32,26 @@
 -- rows -- the subagent's cost folds into the parent's rolled-up usage if pi
 -- writes one, else it is simply absent.
 --
--- Nested camelCase fields (usage.cacheRead, cost.total) are read via CAST(message
--- AS JSON) + json_extract so struct-inference casing cannot silently miss them.
+-- Nested camelCase fields (usage.cacheRead, cost.total) are read with json_extract on
+-- the message JSON, so struct-inference casing cannot silently miss them.
 
 CREATE OR REPLACE TABLE _pi_raw AS
 SELECT * FROM read_json(
-  getvariable('pi_source'),
+  getvariable('mirror_dir') || '/**/*.jsonl',
   format              = 'newline_delimited',
-  union_by_name       = true,
+  records             = true,
   ignore_errors       = true,
   filename            = true,
-  maximum_object_size = 100000000
+  maximum_object_size = 100000000,
+  columns = {
+    type:      'VARCHAR',
+    id:        'VARCHAR',
+    parentId:  'VARCHAR',
+    timestamp: 'TIMESTAMP',
+    version:   'VARCHAR',
+    cwd:       'VARCHAR',
+    message:   'JSON'
+  }
 );
 
 -- Header line per file: the only place carrying session id + cwd + version.
@@ -65,7 +70,7 @@ WHERE type = 'session' AND id IS NOT NULL;
 -- parent_session_id is NULL (pi branches WITHIN a session via message parentId;
 -- there is no session->session parent chain, and --no-session children write no
 -- transcript -- see coverage hole above).
-CREATE OR REPLACE TABLE _pi_sessions AS
+CREATE OR REPLACE TABLE stg_sessions AS
 WITH matched AS (
   SELECT h.*, r.estate, r.harness AS harness_tok, r.campaign AS campaign_tok
   FROM _pi_headers h
@@ -82,7 +87,10 @@ SELECT
   varve_campaign(cwd, campaign_tok) AS campaign,
   started_at,
   NULL::varchar                     AS parent_session_id,
+  NULL::varchar                     AS cc_version,
   pi_version,
+  NULL::varchar                     AS oc_version,
+  NULL::varchar                     AS agent,
   strftime(started_at, '%Y-%m-%d')  AS date
 FROM matched;
 
@@ -102,32 +110,74 @@ JOIN (SELECT path, session_id, strftime(started_at,'%Y-%m-%d') AS date FROM _pi_
 WHERE e.type IS DISTINCT FROM 'session' AND e.id IS NOT NULL;
 
 -- ---------------------------------------------------------------------------
--- messages: one row per user/assistant/toolResult entry. Content inlined
--- (RFC-0001). is_sidechain false -- pi has no sidechain flag; branching is the
--- parent_id tree.
-CREATE OR REPLACE TABLE _pi_messages AS
+-- messages: one row per user/assistant/toolResult entry. is_sidechain is false:
+-- pi has no sidechain flag; branching is the parent_id tree.
+--
+-- Entry content is a string or an array of blocks. The array rows are
+-- materialized before the json[] cast, as in the Claude Code adapter. text is
+-- the string or the joined text blocks; a toolResult entry carries no text, its
+-- body is the tool_calls result_text. interrupted is NULL: pi records no
+-- interrupt signal that a query reads.
+CREATE OR REPLACE TABLE _pi_msg AS
+SELECT message_id, session_id, parent_id, record_type, timestamp, date,
+       json_extract_string(mj, '$.role')            AS role,
+       json_extract(mj, '$.content')                AS cj,
+       json_extract_string(mj, '$.toolCallId')      AS tool_use_id,
+       json_extract_string(mj, '$.toolName')        AS tool_name,
+       json_extract(mj, '$.isError')::boolean       AS is_error
+FROM _pi_entries
+WHERE json_extract_string(mj, '$.role') IN ('user','assistant','toolResult');
+
+CREATE OR REPLACE TABLE _pi_arr_raw AS
+SELECT * FROM _pi_msg WHERE json_type(cj) = 'ARRAY';
+
+CREATE OR REPLACE TABLE _pi_msg_x AS
+SELECT message_id, session_id, parent_id, record_type, timestamp, date, role,
+       tool_use_id, tool_name, is_error,
+       _join_blocks(list_transform(list_filter(blocks, lambda j: _block_type(j) = 'text'),
+                                   lambda j: json_extract_string(j, '$.text'))) AS txt
+FROM (SELECT *, cast(cj AS json[]) AS blocks FROM _pi_arr_raw)
+UNION ALL
+SELECT message_id, session_id, parent_id, record_type, timestamp, date, role,
+       tool_use_id, tool_name, is_error,
+       CASE WHEN json_type(cj) = 'VARCHAR' THEN json_extract_string(cj, '$') END
+FROM _pi_msg WHERE json_type(cj) IS DISTINCT FROM 'ARRAY';
+
+-- Arguments of each tool call, from the assistant entry's toolCall blocks.
+CREATE OR REPLACE TABLE _pi_calls AS
+SELECT session_id, json_extract_string(blk, '$.id') AS tool_use_id, min(json_extract(blk, '$.arguments')::varchar) AS arguments
+FROM (SELECT session_id, unnest(cast(cj AS json[])) AS blk
+      FROM _pi_arr_raw WHERE role = 'assistant')
+WHERE _block_type(blk) = 'toolCall'
+GROUP BY session_id, json_extract_string(blk, '$.id');
+DROP TABLE _pi_arr_raw;
+
+CREATE OR REPLACE TABLE stg_messages AS
 SELECT
   message_id,
   session_id,
-  json_extract_string(mj, '$.role')       AS role,
+  role,
   parent_id,
   false                                    AS is_sidechain,
   timestamp,
   record_type,
   NULL::varchar                            AS api_message_id,
-  json_extract_string(mj, '$.content')     AS content,
+  CASE role WHEN 'toolResult' THEN 'tool_result'
+            WHEN 'user' THEN 'operator'
+            WHEN 'assistant' THEN 'model' END AS origin,
+  CASE WHEN role <> 'toolResult' THEN txt END AS text,
+  NULL::boolean                            AS interrupted,
   'pi'                                     AS runtime,
   date
-FROM _pi_entries
-WHERE json_extract_string(mj, '$.role') IN ('user','assistant','toolResult');
+FROM _pi_msg_x;
 
 -- ---------------------------------------------------------------------------
 -- api_calls: assistant entries. usage -> tokens; cost.total is pi's inline cost.
 -- Cost policy (RFC-0001): prefer the runtime's inline cost.total when present;
--- else compute from tokens x seed. unpriced_model flags a model absent from the
--- seed. The inline-vs-computed reconciliation delta is a query-time concern
+-- else compute from tokens x pricing table. unpriced_model flags a model absent from the
+-- pricing table. The inline-vs-computed reconciliation delta is a query-time concern
 -- (queries/reconcile_pi_cost.sql), not a stored column.
-CREATE OR REPLACE TABLE _pi_api_calls AS
+CREATE OR REPLACE TABLE stg_api_calls AS
 WITH asst AS (
   SELECT
     session_id,
@@ -168,29 +218,27 @@ FROM asst a
 LEFT JOIN _pricing p ON a.model = p.model;
 
 -- ---------------------------------------------------------------------------
--- tool_calls: derived from toolResult entries (the documented, reliable source;
--- the assistant content-array block shape is not spec'd). pi has no tool timing,
--- so ended_at/duration_ms are NULL (like Claude Code); decision carries the
--- isError status when present.
-CREATE OR REPLACE TABLE _pi_tool_calls AS
+-- tool_calls: one row per toolResult entry (the documented, reliable source).
+-- pi has no tool timing, so ended_at and duration_ms are NULL. outcome is error
+-- when isError is set, else ok. arguments come from the assistant entry's
+-- toolCall block with the same id, NULL when none is found.
+CREATE OR REPLACE TABLE stg_tool_calls AS
 SELECT
-  session_id,
-  message_id,
-  json_extract_string(mj, '$.toolCallId')                   AS tool_use_id,
-  json_extract_string(mj, '$.toolName')                     AS tool_name,
-  timestamp                                                 AS started_at,
+  t.session_id,
+  t.message_id,
+  t.tool_use_id,
+  t.tool_name,
+  t.timestamp                                               AS started_at,
   NULL::timestamp                                           AS ended_at,
   NULL::bigint                                              AS duration_ms,
-  CASE WHEN json_extract(mj, '$.isError')::boolean THEN 'error' END AS decision,
+  CASE WHEN t.is_error THEN 'error' ELSE 'ok' END           AS outcome,
+  c.arguments,
+  t.txt                                                     AS result_text,
+  NULL::varchar                                             AS mcp_server,
+  NULL::varchar                                             AS mcp_tool,
+  t.message_id                                              AS result_message_id,
   'pi'                                                      AS runtime,
-  date
-FROM _pi_entries
-WHERE json_extract_string(mj, '$.role') = 'toolResult';
-
--- ---------------------------------------------------------------------------
--- file -> session -> date map. One file per session; a grown (appended) file
--- changes size+mtime -> its date partition rebuilds from full content -> live
--- pi-session appends counted exactly once (same model as Claude Code).
-CREATE OR REPLACE TABLE _pi_files AS
-SELECT DISTINCT path, session_id, strftime(started_at,'%Y-%m-%d') AS date
-FROM _pi_headers;
+  t.date
+FROM _pi_msg_x t
+LEFT JOIN _pi_calls c ON c.session_id = t.session_id AND c.tool_use_id = t.tool_use_id
+WHERE t.role = 'toolResult';

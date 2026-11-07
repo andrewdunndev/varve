@@ -1,0 +1,9 @@
+claude-code,AskUserQuestion,NULL,NULL,1,0,0,1,0,0,0,0.0,2.0,136.0
+claude-code,Bash,NULL,NULL,7,0,2,1,1,0,3,0.5,4.0,69.8
+claude-code,Grep,NULL,NULL,1,1,0,0,0,0,0,0.0,2.0,7.0
+claude-code,NULL,NULL,NULL,2,2,0,0,0,0,0,0.0,NULL,13.0
+claude-code,Read,NULL,NULL,2,2,0,0,0,0,0,0.0,9.0,10.0
+claude-code,mcp__srv__lookup,srv,lookup,1,1,0,0,0,0,0,0.0,16.0,12.0
+opencode,bash,NULL,NULL,4,1,1,1,0,1,0,0.25,21.5,4.0
+pi,bash,NULL,NULL,1,1,0,0,0,0,0,0.0,21.0,2.0
+runtime,tool_name,mcp_server,mcp_tool,calls,ok,error,denied,cancelled,running,none,error_share,arg_chars,result_chars

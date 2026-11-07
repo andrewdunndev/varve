@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# bin/tool NAME: print the path of a tool pinned in mise.toml. The pin wins: a
+# copy on PATH is used only when it reports the pinned version, so a different
+# yq or engine never changes a conversion or a golden output.
+set -euo pipefail
+
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+name="${1:-}"
+[ -n "$name" ] || { echo "usage: bin/tool NAME" >&2; exit 2; }
+pin="$(sed -n "s/^$name *= *\"\(.*\)\"/\1/p" "$repo/mise.toml")"
+[ -n "$pin" ] || { echo "varve: tool: $name is not pinned in mise.toml" >&2; exit 2; }
+
+p="$(cd "$repo" && mise which "$name" 2>/dev/null || true)"
+if [ -z "$p" ]; then
+  p="$(command -v "$name" 2>/dev/null || true)"
+  if [ -n "$p" ] && ! "$p" --version 2>&1 | grep -qF "$pin"; then p=""; fi
+fi
+[ -n "$p" ] || { echo "varve: tool: $name $pin is neither in mise nor on PATH at that version (mise install)" >&2; exit 2; }
+echo "$p"

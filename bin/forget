@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# bin/forget SESSION_ID: drop a session from the mirror and the lake for good.
+# Appends the id to forgotten.toml (sync and the build then skip it), removes
+# its mirror files, and rebuilds. The one way a session leaves the record.
+# Run it as: bin/duck locked bin/forget SESSION_ID
+set -euo pipefail
+
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+data="${VARVE_DATA:-$HOME/.local/share/varve}"
+mirror="${VARVE_MIRROR:-$data/mirror}"
+die() { echo "varve: forget: $*" >&2; exit 2; }
+
+id="${1:-}"
+[ -n "$id" ] || die "usage: just forget SESSION_ID"
+case "$id" in *[!A-Za-z0-9._-]*) die "session id '$id' has characters outside A-Za-z0-9._-" ;; esac
+
+yq="$("$repo/bin/tool" yq)" || exit 2
+
+rt="$("$repo/bin/duck" forget -noheader -list -c "SELECT string_agg(DISTINCT runtime, ',') FROM sessions WHERE session_id = '$id';")"
+[ -n "$rt" ] || die "no session $id in the lake"
+
+{
+  printf '\n[[row]]\nsession_id = "%s"\nruntime = "%s"\nat = "%s"\n' "$id" "$rt" "$(date +%F)"
+} >> "$data/forgotten.toml"
+
+old="$IFS"; IFS=,
+for r in $rt; do
+  if [ -d "$mirror/$r" ]; then
+    find "$mirror/$r" -name "*$id*" -prune -exec rm -rf {} +
+  fi
+  rep="$("$yq" -p toml -o=tsv ".row[] | select(.name == \"$r\") | (.replace // []) | join(\",\")" "$data/runtimes.toml")"
+  if [ -n "$rep" ]; then
+    echo "varve: forget: $r keeps $id inside its mirrored database ($rep); the rows leave the lake but not the mirror copy" >&2
+  fi
+done
+IFS="$old"
+
+exec "$repo/bin/build"

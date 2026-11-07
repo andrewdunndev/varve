@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+# The one runner. Every SQL file in this repo executes through it.
+#
+#   bin/duck LABEL [duckdb args...]   run; LABEL names the run in a failure line
+#   bin/duck locked CMD [ARG...]      hold the lock for CMD; nested bin/duck reuses it
+#
+# Bounds (env, defaults): VARVE_MEMORY_LIMIT 4GB, VARVE_THREADS 4,
+# VARVE_MAX_SPILL 20GB, VARVE_WALL_SECONDS 7200, VARVE_MAX_RSS_MB 6144,
+# VARVE_NICE 19, VARVE_WATCH_SECONDS 2. Exit 0 ok, 1 bound hit, 2 other failure.
+# Views are generated at startup: one per data-home *.toml ([[row]] tables),
+# one per data-home *.jsonl, one per lake folder holding parquet.
+# bash 3.2 safe: no mapfile, no wait -n, no flock.
+set -euo pipefail
+
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+data="${VARVE_DATA:-$HOME/.local/share/varve}"
+lake="${VARVE_LAKE:-$data/lake}"
+lock="${VARVE_LOCK:-${TMPDIR:-/tmp}/varve-duck.lock}"
+mem="${VARVE_MEMORY_LIMIT:-4GB}"
+threads="${VARVE_THREADS:-4}"
+maxspill="${VARVE_MAX_SPILL:-20GB}"
+wall="${VARVE_WALL_SECONDS:-7200}"
+maxrss="${VARVE_MAX_RSS_MB:-6144}"
+nicen="${VARVE_NICE:-19}"
+watch="${VARVE_WATCH_SECONDS:-2}"
+
+die() { echo "varve: $*" >&2; exit 2; }
+
+if [ "${1:-}" = locked ]; then mode=locked; label=locked; shift; else mode=run; label="${1:-}"; [ -n "$label" ] || die "usage: bin/duck LABEL [args...] | bin/duck locked CMD [args...]"; shift; fi
+
+owned=0
+child=""
+run=""
+
+release() {
+  if [ -n "$child" ] && kill -0 "$child" 2>/dev/null; then kill -KILL "$child" 2>/dev/null || true; fi
+  if [ -n "$run" ]; then rm -rf "$run"; fi
+  if [ "$owned" = 1 ]; then rm -rf "$lock"; fi
+}
+trap release EXIT
+trap 'exit 130' INT TERM
+
+take_lock() {
+  if [ -n "${VARVE_LOCK_PID:-}" ] && [ "$(cat "$lock/pid" 2>/dev/null || true)" = "$VARVE_LOCK_PID" ]; then return; fi
+  local holder
+  while ! mkdir "$lock" 2>/dev/null; do
+    holder="$(cat "$lock/pid" 2>/dev/null || true)"
+    if [ -z "$holder" ]; then sleep 1; holder="$(cat "$lock/pid" 2>/dev/null || true)"; fi
+    if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then
+      echo "varve: $label blocked: lock held by pid $holder at $lock" >&2
+      exit 1
+    fi
+    rm -rf "$lock"
+  done
+  owned=1
+  echo "$$" > "$lock/pid"
+}
+
+if [ "$mode" = locked ]; then
+  [ $# -gt 0 ] || die "usage: bin/duck locked CMD [args...]"
+  take_lock
+  if [ "$owned" = 1 ]; then VARVE_LOCK_PID=$$; fi
+  export VARVE_LOCK_PID
+  rc=0
+  "$@" || rc=$?
+  exit "$rc"
+fi
+
+duck="$("$repo/bin/tool" duckdb)" || exit 2
+
+take_lock
+
+qs() { printf '%s' "$1" | sed "s/'/''/g"; }
+qi() { printf '"%s"' "$(printf '%s' "$1" | sed 's/"/""/g')"; }
+
+mkdir -p "$data/state"
+# A SIGKILL or power loss skips the EXIT trap and strands a run dir with its
+# spill. Holding the lock means no other run is live, so a dir whose pid is dead
+# is leftover.
+if [ "$owned" = 1 ]; then
+  for d in "$data"/state/run.*; do
+    [ -d "$d" ] || continue
+    pid="${d##*/run.}"
+    case "$pid" in ''|*[!0-9]*) continue ;; esac
+    kill -0 "$pid" 2>/dev/null || rm -rf "$d"
+  done
+fi
+run="$data/state/run.$$"
+mkdir -p "$run/spill"
+init="$run/init.sql"
+{
+  echo "SET preserve_insertion_order=false;"
+  echo "SET memory_limit='$(qs "$mem")';"
+  echo "SET threads=$threads;"
+  echo "SET max_temp_directory_size='$(qs "$maxspill")';"
+  echo "SET temp_directory='$(qs "$run/spill")';"
+  echo "SET VARIABLE data_home='$(qs "$data")';"
+  echo "SET VARIABLE repo='$(qs "$repo")';"
+  echo "SET VARIABLE lake='$(qs "$lake")';"
+} > "$init"
+
+yq=""
+for f in "$data"/*.toml; do
+  [ -f "$f" ] || continue
+  if [ -z "$yq" ]; then
+    yq="$("$repo/bin/tool" yq)" || exit 2
+  fi
+  stem="$(basename "$f" .toml)"
+  "$yq" -p toml -o json -I0 '(.row // [])[]' "$f" > "$run/$stem.jsonl" 2>"$run/yq.err" \
+    || die "$label: cannot parse $f: $(head -1 "$run/yq.err")"
+  [ -s "$run/$stem.jsonl" ] || continue
+  echo "CREATE VIEW $(qi "$stem") AS SELECT * FROM read_json('$(qs "$run/$stem.jsonl")', format='newline_delimited', sample_size=-1);" >> "$init"
+done
+
+for f in "$data"/*.jsonl; do
+  [ -s "$f" ] || continue
+  stem="$(basename "$f" .jsonl)"
+  echo "CREATE VIEW $(qi "$stem") AS SELECT j FROM read_json_objects('$(qs "$f")', format='newline_delimited', ignore_errors=true) t(j);" >> "$init"
+done
+
+for d in "$lake"/*/; do
+  [ -d "$d" ] || continue
+  d="${d%/}"
+  [ -n "$(find "$d" -name '*.parquet' -print -quit)" ] || continue
+  echo "CREATE VIEW $(qi "$(basename "$d")") AS SELECT * FROM read_parquet('$(qs "$d")/**/*.parquet', hive_partitioning=true, union_by_name=true);" >> "$init"
+done
+
+# VARVE_PUBLISHED names the lake a build is about to replace: its core tables
+# appear as published_<table>, so a check can compare the two.
+if [ -n "${VARVE_PUBLISHED:-}" ]; then
+  for t in sessions messages api_calls tool_calls; do
+    [ -n "$(find "$VARVE_PUBLISHED/$t" -name '*.parquet' -print -quit 2>/dev/null)" ] || continue
+    echo "CREATE VIEW published_$t AS SELECT * FROM read_parquet('$(qs "$VARVE_PUBLISHED")/$t/**/*.parquet', hive_partitioning=true, union_by_name=true);" >> "$init"
+  done
+fi
+
+rss_mb() {
+  local kb=""
+  if [ -r "/proc/$1/status" ]; then
+    kb="$(awk '/^VmRSS:/ {print $2}' "/proc/$1/status" 2>/dev/null || true)"
+  else
+    kb="$(ps -o rss= -p "$1" 2>/dev/null | tr -d ' ' || true)"
+  fi
+  case "$kb" in ''|*[!0-9]*) return 1 ;; esac
+  echo $((kb / 1024))
+}
+
+bigger() {
+  case "$1" in
+    [0-9]*) local n="${1%%[!0-9]*}"; echo "$((n * 2))${1#"$n"}" ;;
+    *) echo "<larger>" ;;
+  esac
+}
+
+stop_child() {
+  kill -TERM "$child" 2>/dev/null || true
+  local i=0
+  while [ "$i" -lt 20 ] && kill -0 "$child" 2>/dev/null; do sleep 0.1; i=$((i + 1)); done
+  kill -KILL "$child" 2>/dev/null || true
+}
+
+nice -n "$nicen" "$duck" :memory: -bail -f "$init" "$@" 2>"$run/err" <&0 &
+child=$!
+echo "$child" > "$lock/child"
+
+start=$SECONDS
+reason=""
+polls=0
+while kill -0 "$child" 2>/dev/null; do
+  if [ $((SECONDS - start)) -ge "$wall" ]; then reason=wall; break; fi
+  mb="$(rss_mb "$child" || true)"
+  if [ -n "$mb" ]; then
+    if [ "$mb" -ge "$maxrss" ]; then reason=rss; break; fi
+  else
+    sleep 0.2
+    if kill -0 "$child" 2>/dev/null && [ -z "$(rss_mb "$child" || true)" ]; then reason=blind; break; fi
+  fi
+  polls=$((polls + 1))
+  if [ "$polls" -le 20 ]; then sleep 0.1; else sleep "$watch"; fi
+done
+
+if [ -n "$reason" ]; then stop_child; fi
+rc=0
+wait "$child" || rc=$?
+elapsed=$((SECONDS - start))
+
+hit() {
+  echo "varve: $label hit $1 $2 after ${elapsed}s; rerun with $3=$(bigger "$2") on a host that has it" >&2
+  exit 1
+}
+
+case "$reason" in
+  wall) hit "wall clock" "${wall}s" VARVE_WALL_SECONDS ;;
+  rss) hit "resident memory" "${maxrss}MB" VARVE_MAX_RSS_MB ;;
+  blind) die "$label: cannot read resident memory of pid $child (no /proc, no ps); refusing a blind run" ;;
+esac
+
+if [ "$rc" -eq 0 ]; then
+  cat "$run/err" >&2
+  exit 0
+fi
+if grep -q 'max_temp_directory_size' "$run/err"; then hit spill "$maxspill" VARVE_MAX_SPILL; fi
+if grep -q 'Out of Memory' "$run/err"; then hit memory_limit "$mem" VARVE_MEMORY_LIMIT; fi
+cat "$run/err" >&2
+exit 2

@@ -6,51 +6,97 @@
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 ![built with GitLab](https://img.shields.io/badge/built_with-GitLab-FC6D26?logo=gitlab)
 
-A varve is one annual sediment layer in a glacial lake. Scientists read varve
-sequences to reconstruct past climate. This project is that instrument for an
-agent estate: a local lake that accumulates readable layers of everything the
-harness does, mined for signal.
+A varve is one annual sediment layer in a glacial lake. Scientists read the
+sequence to reconstruct past climate. varve is that instrument for coding-agent
+sessions: a local lake of everything your agents did, in readable layers, mined
+for signal.
 
-varve normalizes on-disk agent-session records (Claude Code, pi, opencode) into
+It normalizes the on-disk session records of Claude Code, pi and opencode into
 Parquet partitions and queries them with DuckDB. Files are canonical; the engine
-is disposable. Zero resident processes, no listeners, zero egress.
+is disposable. It runs no daemon, opens no port and sends nothing off the
+machine. One exception: the opencode adapter's `INSTALL sqlite` downloads the
+extension from DuckDB's extension host when it is not already installed; no
+session data goes with it.
 
-It serves a goal ladder:
+The core answers efficiency questions from history: cost, cache use, dispatch
+shape. Layers over the same four tables ask whether corrections land once and
+hold, when context engineering has saturated for a team, and whether the record
+can serve as simulation evidence and leak-free benchmark material.
 
-1. **Table stakes** -- efficiency wins from history (cost, cache, dispatch shape).
-2. **Stretch** -- harness-tuning adequacy: do corrections land once and hold, or
-   is the operator re-litigating the same decisions?
-3. **Far stretch** -- a team-level post-training decision instrument: when has
-   context engineering saturated?
-4. **Supporting** -- historic record as simulation evidence and leak-free
-   benchmark synthesis.
+## Architecture
+
+`just sync` copies sources into a mirror. `just build` rebuilds the lake from it, checks it, swaps it in, then runs the mines (ADR-0008 to ADR-0010).
+
+Three primitives: files, SQL files, one runner (`bin/duck`). Everything extensible is a SQL file, run in a fixed order: adapters, checks, swap, mines.
+
+| Kind | Reads | Rows become |
+|------|-------|-------------|
+| adapter | the mirror | the four tables |
+| check | the tables | failures |
+| mine | the tables | a saved table |
+| query | the tables | printed output |
+
+![Runtime stores are copied into a mirror, built into a new lake, checked, and swapped in. Mines run after the swap.](docs/img/tiers.svg)
+
+The mirror and your data home cannot be rebuilt.
+
+![A new runtime adds an adapter, a fixture and a runtimes row.](docs/img/runtime.svg)
+
+A new runtime is meant to touch three files; none has been added that way yet.
+
+![Every SQL file runs inside the bin/duck boundary.](docs/img/envelope.svg)
+
+One wrapper bounds every DuckDB process.
 
 ## Layout
 
 | Path | What |
 |------|------|
-| `docs/prd.md` | Product requirements document -- the spine |
-| `docs/adr/` | Architecture decision records (settled, dated, with evidence) |
-| `docs/rfc/` | Requests for comment (designs still open to iteration) |
-| `adapters/` | Per-runtime transcript normalizers (Claude Code, pi, opencode) |
-| `queries/` | The versioned SQL query library -- the real analytics artifact |
-| `tests/fixtures/` | Synthetic three-runtime corpus CI backfills against (`just test`) |
-| `tests/snapshots/` | Expected rendered output `just test` diffs against |
-| `justfile` | `just backfill` / `just ingest` / `just sql` / `just stats` / `just lint` / `just test` / `just disk` |
+| `adapters/` | One normalizer per runtime (Claude Code, pi, opencode), plus example pricing and attribution tables |
+| `sql/` | Shared adapter prelude and the written meaning of every column (`record.sql`) |
+| `queries/` | The versioned SQL query library |
+| `mining/` | Example mines (one detector per file), example patterns and taxonomy, review rendering, year-in-review stats and their queries |
+| `docs/` | PRD, ADRs (`adr/`), RFCs (`rfc/`), query index |
+| `checks/` | Checks that run on every build |
+| `tests/` | Synthetic three-runtime fixtures and expected output for `just test` |
+| `bin/` | The runner (`duck`) and the scripts behind `sync`, `build`, `check`, `forget` and `mine` |
+| `justfile` | `sync`, `build`, `check`, `forget`, `mine`, `review`, `interventions`, `stats`, `sql`, `lint`, `test`, `disk` |
 
-Toolchain: `mise install` provisions the pinned `duckdb` + `just` from
-`mise.toml`; every recipe assumes both are on PATH.
+`mise install` provisions the pinned `duckdb`, `just` and `yq` from `mise.toml`. A `duckdb` or `yq` on `PATH` is used only when it reports the pinned version.
 
-Lake data never lives in this repo. It lands at `~/.local/share/varve/lake/`
-(Parquet partitions) and `~/.local/share/varve/varve.duckdb` (rebuildable
-views/marts).
+To start, copy the examples into the data home, delete the `runtimes.toml` rows for tools you do not use, then sync and build. `just` must be on `PATH`, for example through `mise activate`.
+
+```
+mise install
+d=~/.local/share/varve; mkdir -p "$d"
+for f in runtimes.example.toml adapters/attribution.example.toml adapters/pricing.example.toml; do
+  cp "$f" "$d/$(basename "$f" .example.toml).toml"
+done
+just sync && just build
+```
+
+## Mining
+
+The repo's `mining/` holds example mines, one detector per file. To use them, copy
+`mining/[0-9]*.sql` into `mining/` in your data home, copy `patterns.example.toml`
+and `divergence_taxonomy.example.toml` there without the `.example`, and tune the
+patterns. `just mine` runs your files in filename order. Each saves one table under
+the lake: `NN-<table>[.<part>].sql` leaves its rows in `mine_out` and lands in
+`<table>/<part>.parquet`. A mine's version is the hash of its file. A failing mine
+keeps its last good file and the others still run. `just review` renders the
+adjudication document from the mined tables.
+
+Lake data never lives in this repo. It lands in `~/.local/share/varve/`, and so
+does your own data: attribution rules, adjudications, worksheets (ADR-0004). The
+instrument is public; the readings are not.
 
 ## Status
 
-PRD agreed 2026-07-06 (see `docs/prd.md`, pivot record inside). The lake
-foundation, correction mining, and cost analytics are live on the author's
-machines; adapters are validated to differing depths -- the pi adapter is the
-least exercised and documents its own status (`adapters/pi.sql`).
+The lake, correction mining and cost analytics are in use. The pi adapter is the
+least exercised and states its own status in `adapters/pi.sql`.
 
-Operator data — attribution rules, adjudications, worksheets — lives outside
-this repo by design (ADR-0004): the instrument is public, the readings are not.
+## Contributing
+
+GitLab is canonical; GitHub is a push mirror. A pull request on the mirror is
+ported to GitLab with authorship kept. Adapters for new runtimes are welcome and
+should follow ADR-0009.

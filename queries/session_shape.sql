@@ -11,7 +11,7 @@
 --   time. Cost/calls come from api_calls, wall from messages, joined per session; a
 --   session with messages but no priced calls shows cost 0. TEMP table is in-memory
 --   (no lake write; read-only safe).
--- W5. Run: just sql -f queries/session_shape.sql
+-- Run: just sql -f queries/session_shape.sql
 CREATE TEMP TABLE per_session AS
   SELECT
     s.session_id, s.runtime, s.estate, s.harness, s.campaign,

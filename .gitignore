@@ -3,8 +3,9 @@
 
 # Lake data never lives in git (see README). Belt and suspenders:
 lake/
-*.duckdb
-*.duckdb.wal
 *.parquet
 
 .DS_Store
+
+# CI artifact of the test recipe (compare with tests/golden).
+golden-out/

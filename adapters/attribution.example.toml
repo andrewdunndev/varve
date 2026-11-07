@@ -1,0 +1,41 @@
+# cwd -> estate / harness / campaign mapping (ADR-0005). Copy to
+# <data home>/attribution.toml and edit; the globs name real namespaces, so the
+# edited file stays out of the repo.
+#
+# The adapter picks the lowest-priority rule whose cwd_glob matches a session's
+# cwd ('*' is a wildcard). Tokens resolved from the cwd:
+#   {repo}     = repo dir (segment after gitlab.com/<ns>/ or github.com/<ns>/)
+#   {worktree} = worktree name (segment after /.claude/worktrees/), else NULL
+# Omit campaign for NULL. Keep the final '*' rule: it is the unknown bucket, and
+# unmatched sessions land there instead of vanishing.
+
+[[row]]
+priority = 10
+cwd_glob = "/home/me/gitlab.com/acme/*"
+estate = "work"
+harness = "{repo}"
+campaign = "{worktree}"
+note = "one forge namespace example"
+
+[[row]]
+priority = 20
+cwd_glob = "/home/me/gitlab.com/me-personal/*"
+estate = "personal"
+harness = "{repo}"
+campaign = "{worktree}"
+note = "personal namespace example"
+
+[[row]]
+priority = 30
+cwd_glob = "/home/me/github.com/*"
+estate = "personal"
+harness = "{repo}"
+campaign = "{worktree}"
+note = "personal github example"
+
+[[row]]
+priority = 9999
+cwd_glob = "*"
+estate = "unknown"
+harness = "unknown"
+note = "fallback for an unmatched cwd"
