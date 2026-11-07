@@ -58,7 +58,7 @@ invented:
 
 | Metric | Claude Code | pi | opencode |
 |--------|-------------|----|----------|
-| subagent | sidechain roots | not exposed: `--no-session` children write no transcript (ADR-0006), so always 0 | child sessions; `docs/queries.md` notes these mostly chain sessions rather than dispatch work, so the count reads high as a dispatch signal |
+| subagent | sidechain roots | not exposed: `--no-session` children write no transcript (ADR-0006), so always 0 | child sessions, which mostly chain sessions rather than dispatch work, so the count reads high as a dispatch signal |
 | prompt | `operator_messages`, minus sidechain rows | pi is absent from correction mining, so this falls back to `role='user'` messages with no injection filter | `operator_messages` in top-level sessions |
 | step | one per `(message.id, requestId)` | one per assistant entry | one per assistant message; per-step `step-finish` parts are not in the lake |
 | tokens | all four classes | all four classes | all four classes; `tokens.reasoning` is not in the lake |

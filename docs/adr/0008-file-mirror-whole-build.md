@@ -16,10 +16,10 @@
 - The lake is f(mirror, operator data, repo).
 - `sync` copies allowed files, parses nothing, and is the only scheduled step.
 - `build` runs one process per runtime into `lake.new`, then checks, then swaps. Mines run after the swap.
-- A runtime that fails keeps its last good partitions.
-- Nothing shrinks except by `just forget`.
-- The mirror never replaces a file with a shorter one.
-- A build that would lose a session or rows the published lake holds fails a check. The old lake stays, and after a swap it stays as `lake.old` until the next build starts.
+- A runtime that fails keeps its last good partitions. A runtime that built owns its partitions.
+- Nothing shrinks except by `just forget` and the replace set (see Consequences).
+- The mirror never replaces a file with a shorter one, except in the replace set.
+- A build that would lose a session, or net rows per runtime and table, that the published lake holds fails a check. The old lake stays, and after a swap it stays as `lake.old` until the next build starts. If a flagged count is right, move the lake aside, keep it, and rebuild.
 - `ingest`, `backfill`, the manifest, `sql/affected.sql` and `sql/stage.sql` go.
 - `varve.duckdb` goes. Startup generates one view per lake folder, so a mine's table appears on its own. `sql/views.sql` and the view step in `mine` go, and with them the single-writer risk.
 - `just test` is build over fixtures. The fixtures are a mirror and assertions are checks, so tests and real runs share one path.
@@ -40,12 +40,12 @@
 - A rewound file that later outgrows its old length overwrites the rewound tail. Accepted.
 - Rows deleted inside a SQLite source are not protected. `check` reports the loss.
 - Parquet footers are read on every query once no database holds the views. The cost is unmeasured.
-- The live SQLite copy in the mirror needs a lab check before the snapshot goes.
-- SQLite files are exempt from never-shorter: a stale database and journal pair corrupts, so they are replaced together or not at all. A source file reached through a symlink or `..`, or by an absolute path, is never copied.
+- CI reads a real SQLite WAL through the mirror: rows held only in a live store's `-wal` reach the mirror and read back through `sqlite_scan`, a clean close drops the `-wal` from the mirror, and a read leaves the mirror's database and non-empty `-wal` byte-identical, adding only an empty `-wal` and a `-shm`. A live opencode install is still untested.
+- SQLite files are exempt from never-shorter: a stale database and journal pair corrupts, so they are replaced together or not at all, and a member the source has dropped leaves the mirror with the set. A source file reached through a symlink or `..`, or by an absolute path, is never copied.
 
 **Neutral**
 - Whole-build time is unmeasured. If a capped build is too slow, build goes incremental by (runtime, month).
-- `messages` dominates lake size. `content` retires once the mirror holds the verbatim copy. No compression change until measured.
+- `messages` dominates lake size. `content` is retired; the mirror holds the verbatim copy. No compression change until measured.
 
 ## References
 

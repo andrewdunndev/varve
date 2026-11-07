@@ -142,7 +142,7 @@ not in `runtimes.toml`. Each published `runtime=` partition of those that
 `sql/prelude.sql` holds the attribution and pricing macros the adapters share.
 
 The opencode adapter reads the mirrored `opencode.db` and its `-wal` with
-`sqlite_scan`; the live store is never opened.
+`sqlite_scan`; the live store is never opened. CI proves this on a genuine SQLite WAL (rows held only in the `-wal` read back, and a read leaves the database and non-empty `-wal` unchanged); a live opencode install is still untested.
 
 ### Subagents
 

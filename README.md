@@ -14,7 +14,9 @@ for signal.
 It normalizes the on-disk session records of Claude Code, pi and opencode into
 Parquet partitions and queries them with DuckDB. Files are canonical; the engine
 is disposable. It runs no daemon, opens no port and sends nothing off the
-machine.
+machine. One exception: the opencode adapter's `INSTALL sqlite` downloads the
+extension from DuckDB's extension host when it is not already installed; no
+session data goes with it.
 
 The core answers efficiency questions from history: cost, cache use, dispatch
 shape. Layers over the same four tables ask whether corrections land once and
@@ -40,7 +42,7 @@ The mirror and your data home cannot be rebuilt.
 
 ![A new runtime adds an adapter, a fixture and a runtimes row.](docs/img/runtime.svg)
 
-A new runtime touches three files.
+A new runtime is meant to touch three files; none has been added that way yet.
 
 ![Every SQL file runs inside the bin/duck boundary.](docs/img/envelope.svg)
 
@@ -61,6 +63,17 @@ One wrapper bounds every DuckDB process.
 | `justfile` | `sync`, `build`, `check`, `forget`, `mine`, `review`, `interventions`, `stats`, `sql`, `lint`, `test`, `disk` |
 
 `mise install` provisions the pinned `duckdb`, `just` and `yq` from `mise.toml`. A `duckdb` or `yq` on `PATH` is used only when it reports the pinned version.
+
+To start, copy the examples into the data home, delete the `runtimes.toml` rows for tools you do not use, then sync and build. `just` must be on `PATH`, for example through `mise activate`.
+
+```
+mise install
+d=~/.local/share/varve; mkdir -p "$d"
+for f in runtimes.example.toml adapters/attribution.example.toml adapters/pricing.example.toml; do
+  cp "$f" "$d/$(basename "$f" .example.toml).toml"
+done
+just sync && just build
+```
 
 ## Mining
 

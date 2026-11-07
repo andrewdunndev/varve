@@ -27,14 +27,16 @@ Five invariants. Where one conflicts with a design choice, the invariant wins.
   `OTEL_LOG_*` content flag stays OFF and the pipe carries counts and metadata only.
 - **I2.** Content enters the system only via transcript ingest, only into the local
   Parquet lake, only from files already on this disk.
-- **I3.** No listeners in v1. Zero egress. No cloud or SaaS backend. Any future
-  listener (team stage) binds `127.0.0.1`.
+- **I3.** No listeners in v1. Zero egress of session data. No cloud or SaaS backend. Any future
+  listener (team stage) binds `127.0.0.1`. One exception: the opencode adapter's
+  `INSTALL sqlite` downloads the extension from DuckDB's extension host when it is not
+  already installed; no session data goes with it.
 - **I4.** The user's private estates and projects are never named in any committed
   or published artifact. Their identifiers live outside the repo, in the data home.
   Benchmark synthesis and any published correction-mining result are role-level
   abstractions with no identifying detail.
 - **I5.** Correction-event content (model drafts, user rewrites) is stored as
-  local-only pointers (`model_draft_ptr`, `operator_rewrite_ptr`) and is never
+  local-only pointers (`draft_ref`, `rewrite_ref`) and is never
   published verbatim.
 
 Two rulings on the correction-mining channel:
@@ -54,7 +56,7 @@ Two rulings on the correction-mining channel:
 **Positive**
 - No network attack surface in v1. The claim is testable and blunt: nothing is
   bound. Verifiable by network capture and by checking for a listening socket.
-- Rules, not trust: the invariants are mechanical checks.
+- Rules, not trust: the engine-name invariant is a lint; the others rest on review.
 
 **Negative**
 - Local embeddings add a dependency (`uv` plus cached model weights) when clustering

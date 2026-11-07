@@ -44,7 +44,7 @@ engine was server-shaped.
 
 **Positive**
 - Zero ops: no daemon to run, patch or auto-start; nothing bound (ADR-0004).
-- The Claude Code adapter is near-pure SQL: `read_json_auto` over raw JSONL into Parquet.
+- The Claude Code adapter is near-pure SQL: `read_json` with explicit columns over raw JSONL into Parquet.
 - Files plus a pinned binary, reproducible with `mise` and `just`.
 
 **Negative**
