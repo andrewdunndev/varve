@@ -268,6 +268,7 @@ test:
       echo "FAIL: the other runtimes were not rebuilt around the failure" >&2; fail=1
     fi
     rm -rf "$VARVE_DATA/adapters"
+    if [ ! -d "$lake.old" ]; then echo "FAIL: the previous lake was not kept as lake.old after a swap" >&2; fail=1; fi
 
     # A bound hit abandons the build and leaves the lake alone.
     before="$(sums "$lake")"
@@ -276,6 +277,19 @@ test:
     if [ -e "$lake.new" ] || [ "$(sums "$lake")" != "$before" ]; then
       echo "FAIL: a bound hit left lake.new behind or changed the lake" >&2; fail=1
     fi
+
+    # A build that drops messages inside a surviving session fails row_counts and leaves the lake alone.
+    pi_file="$VARVE_MIRROR/pi/testproj/20260801T000000_pi-session-1.jsonl"
+    cp "$pi_file" "$tmp/pi-session.jsonl"
+    sed -i.bak '$d' "$pi_file"; rm -f "$pi_file.bak"
+    rc=0; just build 2>"$tmp/build.err" || rc=$?
+    if [ "$rc" -ne 1 ] || ! grep -q 'check row_counts: messages rows for pi fell' "$tmp/build.err"; then
+      echo "FAIL: a build that loses messages should fail row_counts, got exit $rc" >&2; tail -5 "$tmp/build.err" >&2; fail=1
+    fi
+    if [ -e "$lake.new" ] || [ "$(sums "$lake")" != "$before" ]; then
+      echo "FAIL: a failed row_counts left lake.new behind or changed the lake" >&2; fail=1
+    fi
+    cp "$tmp/pi-session.jsonl" "$pi_file"
 
     # A lost session fails the build and leaves the lake alone; forget then passes.
     mv "$VARVE_MIRROR/claude-code/testproj/session-noise.jsonl" "$tmp/session-noise.jsonl"
@@ -332,8 +346,8 @@ test:
     bad="$tmp/badlake"
     mkdir -p "$bad/messages" "$bad/tool_calls"
     {{repo}}/bin/duck bad \
-      -c "COPY (SELECT 'm1' AS message_id, 'x' AS content, 'bogus' AS origin) TO '$bad/messages/part.parquet' (FORMAT parquet);" \
-      -c "COPY (SELECT 't1' AS tool_use_id, 'maybe' AS outcome) TO '$bad/tool_calls/part.parquet' (FORMAT parquet);"
+      -c "COPY (SELECT 'm1' AS message_id, 's1' AS session_id, 'rt' AS runtime, 'x' AS content, 'bogus' AS origin) TO '$bad/messages/part.parquet' (FORMAT parquet);" \
+      -c "COPY (SELECT 't1' AS tool_use_id, 's1' AS session_id, 'rt' AS runtime, 'maybe' AS outcome) TO '$bad/tool_calls/part.parquet' (FORMAT parquet);"
     rc=0; VARVE_LAKE="$bad" {{repo}}/bin/check 2>"$tmp/bad.err" || rc=$?
     if [ "$rc" -ne 1 ]; then echo "FAIL: the record checks should fail a bad lake, got exit $rc" >&2; fail=1; fi
     for want in 'messages.content is retired' 'messages.origin has 1 row' 'tool_calls.outcome has 1 row'; do

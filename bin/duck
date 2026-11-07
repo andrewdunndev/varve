@@ -125,8 +125,13 @@ for d in "$lake"/*/; do
   echo "CREATE VIEW $(qi "$(basename "$d")") AS SELECT * FROM read_parquet('$(qs "$d")/**/*.parquet', hive_partitioning=true, union_by_name=true);" >> "$init"
 done
 
-if [ -n "${VARVE_PUBLISHED:-}" ] && [ -n "$(find "$VARVE_PUBLISHED/sessions" -name '*.parquet' -print -quit 2>/dev/null)" ]; then
-  echo "CREATE VIEW published_sessions AS SELECT * FROM read_parquet('$(qs "$VARVE_PUBLISHED")/sessions/**/*.parquet', hive_partitioning=true, union_by_name=true);" >> "$init"
+# VARVE_PUBLISHED names the lake a build is about to replace: its core tables
+# appear as published_<table>, so a check can compare the two.
+if [ -n "${VARVE_PUBLISHED:-}" ]; then
+  for t in sessions messages api_calls tool_calls; do
+    [ -n "$(find "$VARVE_PUBLISHED/$t" -name '*.parquet' -print -quit 2>/dev/null)" ] || continue
+    echo "CREATE VIEW published_$t AS SELECT * FROM read_parquet('$(qs "$VARVE_PUBLISHED")/$t/**/*.parquet', hive_partitioning=true, union_by_name=true);" >> "$init"
+  done
 fi
 
 rss_mb() {

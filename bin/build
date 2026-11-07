@@ -7,7 +7,8 @@
 #      one with an empty mirror: every published runtime partition lake.new lacks
 #      is copied across, and so is every non-core folder (the mined tables)
 #   3. the checks read lake.new against the published lake
-#   4. lake.new replaces lake by rename, then the mines run
+#   4. lake.new replaces lake by rename, then the mines run; the previous lake
+#      stays as lake.old until the next build starts, so a bad swap can be undone
 # A bound hit (exit 1 from bin/duck) abandons the whole build. Exit 1 also means
 # a runtime failed or a check failed; the published lake is untouched then.
 set -euo pipefail
@@ -84,7 +85,6 @@ fi
 
 if [ -d "$lake" ]; then mv "$lake" "$old"; fi
 mv "$new" "$lake"
-rm -rf "$old"
 
 just --justfile "$repo/justfile" mine
 if [ -n "$failed" ]; then
