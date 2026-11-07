@@ -19,7 +19,7 @@
 - A runtime that fails keeps its last good partitions.
 - Nothing shrinks except by `just forget`.
 - The mirror never replaces a file with a shorter one.
-- A build that would lose a session the published lake holds fails a check. The old lake stays.
+- A build that would lose a session or rows the published lake holds fails a check. The old lake stays, and after a swap it stays as `lake.old` until the next build starts.
 - `ingest`, `backfill`, the manifest, `sql/affected.sql` and `sql/stage.sql` go.
 - `varve.duckdb` goes. Startup generates one view per lake folder, so a mine's table appears on its own. `sql/views.sql` and the view step in `mine` go, and with them the single-writer risk.
 - `just test` is build over fixtures. The fixtures are a mirror and assertions are checks, so tests and real runs share one path.
@@ -41,7 +41,7 @@
 - Rows deleted inside a SQLite source are not protected. `check` reports the loss.
 - Parquet footers are read on every query once no database holds the views. The cost is unmeasured.
 - The live SQLite copy in the mirror needs a lab check before the snapshot goes.
-- SQLite files are exempt from never-shorter: a stale database and journal pair corrupts, so they are replaced together or not at all.
+- SQLite files are exempt from never-shorter: a stale database and journal pair corrupts, so they are replaced together or not at all. A source file reached through a symlink or `..`, or by an absolute path, is never copied.
 
 **Neutral**
 - Whole-build time is unmeasured. If a capped build is too slow, build goes incremental by (runtime, month).
