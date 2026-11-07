@@ -1,80 +1,113 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 390" width="780" height="390" role="img" aria-labelledby="env-t">
-  <title id="env-t">Sync runs outside the bin/duck boundary. Inside it, in order: adapters write a new lake, checks grade it, a swap publishes it, and mines run after. Queries read the lake. Every DuckDB process runs under memory, thread, spill, time and lock limits.</title>
-    <style>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 736" width="720" height="736" role="img" aria-labelledby="env-t env-d">
+  <title id="env-t">Every SQL run passes through bin/duck, which caps it and reports one failure line</title>
+  <desc id="env-d">Callers (bin/build, bin/check, bin/mine, bin/forget, just sql) invoke bin/duck with a label and arguments. bin/duck takes the lock, writes init.sql with the memory, thread and spill limits and the generated views, starts the engine under nice, and watches wall-clock time and resident memory. A tripped bound stops the process and prints one line naming the bound and the variable to raise. Exit 0 is success, 1 is a bound hit or a held lock, 2 is any other failure. bin/sync sits outside the boundary and never opens the engine.</desc>
+  <style>
     svg { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
     .box { fill: #f4f4f4; stroke: #c4c4c4; stroke-width: 1; }
     .acc { fill: #4a6741; stroke: #4a6741; }
-    .dim { fill: none; stroke: #c4c4c4; stroke-width: 1; stroke-dasharray: 5 4; }
     .zone { fill: none; stroke: #4a6741; stroke-width: 1.5; stroke-dasharray: 6 4; }
-    .nm { font-size: 14px; font-weight: 600; fill: #0a0a0a; }
-    .sub { font-size: 12px; fill: #707070; }
-    .lbl { font-size: 12px; fill: #404040; }
-    .anm { font-size: 14px; font-weight: 600; fill: #ffffff; }
-    .asub { font-size: 12px; fill: #ffffff; }
-    .gnm { font-size: 14px; font-weight: 600; fill: #707070; }
+    .bad { fill: none; stroke: #b3412f; stroke-width: 1.5; }
+    .nm { font-size: 13px; font-weight: 600; fill: #0a0a0a; }
+    .sub { font-size: 11px; fill: #606060; }
+    .lbl { font-size: 11px; fill: #404040; }
+    .anm { font-size: 13px; font-weight: 600; fill: #ffffff; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; fill: #b3412f; }
+    .bt { font-size: 13px; font-weight: 600; fill: #b3412f; }
     .ln { fill: none; stroke: #404040; stroke-width: 1.5; }
     .ah { fill: #404040; }
     .zl { font-size: 12px; font-weight: 600; fill: #4a6741; }
     @media (prefers-color-scheme: dark) {
       .box { fill: #242426; stroke: #48484a; }
       .acc { fill: #6aaa58; stroke: #6aaa58; }
-      .dim { stroke: #48484a; }
       .zone { stroke: #6aaa58; }
+      .bad { stroke: #ff9a86; }
       .nm { fill: #f2f2f7; }
-      .sub { fill: #8e8e93; }
+      .sub { fill: #a0a0a6; }
       .lbl { fill: #aeaeb2; }
       .anm { fill: #1c1c1e; }
-      .asub { fill: #1c1c1e; }
-      .gnm { fill: #8e8e93; }
+      .mono { fill: #ff9a86; }
+      .bt { fill: #ff9a86; }
       .ln { stroke: #aeaeb2; }
       .ah { fill: #aeaeb2; }
       .zl { fill: #6aaa58; }
     }
   </style>
   <defs><marker id="env-ar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto"><path class="ah" d="M0,0 L10,4 L0,8 Z"/></marker></defs>
-  <rect class="zone" x="160" y="20" width="600" height="355" rx="8"/>
-  <text class="zl" x="180" y="44">bin/duck</text>
-  <text class="sub" x="250" y="44">memory, threads, spill, time, lock</text>
-  <path class="ln" d="M75,200 V140" marker-end="url(#env-ar)"/>
-  <path class="ln" d="M130,110 H180" marker-end="url(#env-ar)"/>
-  <path class="ln" d="M290,110 H330" marker-end="url(#env-ar)"/>
-  <path class="ln" d="M430,110 H470" marker-end="url(#env-ar)"/>
-  <path class="ln" d="M560,110 H600" marker-end="url(#env-ar)"/>
-  <path class="ln" d="M645,140 V200" marker-end="url(#env-ar)"/>
-  <path class="ln" d="M590,230 H540" marker-end="url(#env-ar)"/>
-  <path class="ln" d="M625,260 V300" marker-end="url(#env-ar)"/>
-  <path class="ln" d="M665,300 V260" marker-end="url(#env-ar)"/>
-  <text class="lbl" x="83" y="176">copy</text>
-  <text class="lbl" x="142" y="102" text-anchor="middle">read</text>
-  <text class="lbl" x="310" y="102" text-anchor="middle">rows</text>
-  <text class="lbl" x="450" y="102" text-anchor="middle">read</text>
-  <text class="lbl" x="580" y="102" text-anchor="middle">pass</text>
-  <text class="lbl" x="653" y="176">rename</text>
-  <text class="lbl" x="565" y="222" text-anchor="middle">read</text>
-  <text class="lbl" x="617" y="284" text-anchor="end">read</text>
-  <text class="lbl" x="673" y="284">saves</text>
-  <rect class="acc" x="20" y="80" width="110" height="60" rx="6"/>
-  <text class="anm" x="75" y="106" text-anchor="middle">mirror</text>
-  <text class="asub" x="75" y="124" text-anchor="middle">not rebuildable</text>
-  <rect class="box" x="20" y="200" width="110" height="50" rx="6"/>
-  <text class="nm" x="75" y="230" text-anchor="middle">sync</text>
-  <text class="sub" x="75" y="272" text-anchor="middle">never opens</text>
-  <text class="sub" x="75" y="288" text-anchor="middle">DuckDB</text>
-  <rect class="box" x="180" y="80" width="110" height="60" rx="6"/>
-  <text class="nm" x="235" y="106" text-anchor="middle">adapters</text>
-  <text class="sub" x="235" y="124" text-anchor="middle">1 process each</text>
-  <rect class="box" x="330" y="80" width="100" height="60" rx="6"/>
-  <text class="nm" x="380" y="116" text-anchor="middle">lake.new</text>
-  <rect class="box" x="470" y="80" width="90" height="60" rx="6"/>
-  <text class="nm" x="515" y="116" text-anchor="middle">checks</text>
-  <rect class="box" x="600" y="80" width="90" height="60" rx="6"/>
-  <text class="nm" x="645" y="116" text-anchor="middle">swap</text>
-  <rect class="box" x="590" y="200" width="110" height="60" rx="6"/>
-  <text class="nm" x="645" y="236" text-anchor="middle">lake</text>
-  <rect class="box" x="430" y="200" width="110" height="60" rx="6"/>
-  <text class="nm" x="485" y="236" text-anchor="middle">queries</text>
-  <rect class="box" x="590" y="300" width="110" height="55" rx="6"/>
-  <text class="nm" x="645" y="324" text-anchor="middle">mines</text>
-  <text class="sub" x="645" y="342" text-anchor="middle">after the swap</text>
-  <text class="sub" x="180" y="330">order: adapters, checks, swap, mines</text>
+
+  <!-- zone -->
+  <rect class="zone" x="190" y="100" width="518" height="525" rx="8"/>
+  <text class="zl" x="696" y="118" text-anchor="end">bin/duck: the one boundary</text>
+
+  <!-- sync, outside -->
+  <rect class="box" x="20" y="20" width="150" height="70" rx="6"/>
+  <text class="nm" x="95" y="42" text-anchor="middle">bin/sync</text>
+  <text class="sub" x="95" y="59" text-anchor="middle">outside the boundary</text>
+  <text class="sub" x="95" y="74" text-anchor="middle">never opens the engine</text>
+
+  <!-- callers -->
+  <rect class="box" x="206" y="20" width="490" height="44" rx="6"/>
+  <text class="nm" x="451" y="39" text-anchor="middle">bin/build, bin/check, bin/mine, bin/forget, just sql</text>
+  <text class="sub" x="451" y="55" text-anchor="middle">every SQL file runs as: bin/duck LABEL args</text>
+
+  <!-- arrows -->
+  <path class="ln" d="M286,64 V130" marker-end="url(#env-ar)"/>
+  <path class="ln" d="M286,204 V234" marker-end="url(#env-ar)"/>
+  <path class="ln" d="M286,323 V353" marker-end="url(#env-ar)"/>
+  <path class="ln" d="M286,412 V442" marker-end="url(#env-ar)"/>
+  <path class="ln" d="M286,516 V546" marker-end="url(#env-ar)"/>
+  <text class="lbl" x="294" y="92">label, args</text>
+  <text class="lbl" x="294" y="223">lock taken</text>
+  <text class="lbl" x="294" y="342">init.sql</text>
+  <text class="lbl" x="294" y="431">child pid</text>
+  <text class="lbl" x="294" y="535">exit status</text>
+
+  <!-- stage 1 -->
+  <rect class="acc" x="206" y="130" width="160" height="74" rx="6"/>
+  <text class="anm" x="286" y="172" text-anchor="middle">1 take the lock</text>
+  <rect class="box" x="386" y="130" width="310" height="74" rx="6"/>
+  <text class="lbl" x="396" y="150">lock dir holds the pid (VARVE_LOCK)</text>
+  <text class="lbl" x="396" y="165">live holder: blocked, exit 1</text>
+  <text class="lbl" x="396" y="180">dead holder: reclaimed, stranded run dirs swept</text>
+  <text class="lbl" x="396" y="195">bin/duck locked CMD: one lock for a whole build</text>
+
+  <!-- stage 2 -->
+  <rect class="acc" x="206" y="234" width="160" height="89" rx="6"/>
+  <text class="anm" x="286" y="283" text-anchor="middle">2 write init.sql</text>
+  <rect class="box" x="386" y="234" width="310" height="89" rx="6"/>
+  <text class="lbl" x="396" y="254">memory_limit 4GB (VARVE_MEMORY_LIMIT)</text>
+  <text class="lbl" x="396" y="269">threads 4 (VARVE_THREADS)</text>
+  <text class="lbl" x="396" y="284">max_temp_directory_size 20GB (VARVE_MAX_SPILL)</text>
+  <text class="lbl" x="396" y="299">views: data-home .toml and .jsonl, lake folders</text>
+  <text class="lbl" x="396" y="314">the engine enforces these; a trip is an error</text>
+
+  <!-- stage 3 -->
+  <rect class="acc" x="206" y="353" width="160" height="59" rx="6"/>
+  <text class="anm" x="286" y="387" text-anchor="middle">3 start the engine</text>
+  <rect class="box" x="386" y="353" width="310" height="59" rx="6"/>
+  <text class="lbl" x="396" y="373">nice 19 (VARVE_NICE)</text>
+  <text class="lbl" x="396" y="388">-bail: the first SQL error stops the run</text>
+  <text class="lbl" x="396" y="403">stderr is captured, then replayed</text>
+
+  <!-- stage 4 -->
+  <rect class="acc" x="206" y="442" width="160" height="74" rx="6"/>
+  <text class="anm" x="286" y="484" text-anchor="middle">4 watch it</text>
+  <rect class="box" x="386" y="442" width="310" height="74" rx="6"/>
+  <text class="lbl" x="396" y="462">wall clock 7200s (VARVE_WALL_SECONDS)</text>
+  <text class="lbl" x="396" y="477">resident memory 6144MB (VARVE_MAX_RSS_MB)</text>
+  <text class="lbl" x="396" y="492">polled every 0.1s, then 2s (VARVE_WATCH_SECONDS)</text>
+  <text class="lbl" x="396" y="507">a trip: TERM, then KILL; RSS unreadable: refuse</text>
+
+  <!-- stage 5 -->
+  <rect class="acc" x="206" y="546" width="160" height="59" rx="6"/>
+  <text class="anm" x="286" y="580" text-anchor="middle">5 report</text>
+  <rect class="box" x="386" y="546" width="310" height="59" rx="6"/>
+  <text class="lbl" x="396" y="566">exit 0: ok</text>
+  <text class="lbl" x="396" y="581">exit 1: a bound hit, or the lock was held</text>
+  <text class="lbl" x="396" y="596">exit 2: any other failure (SQL, bad .toml)</text>
+
+  <!-- failure line -->
+  <rect class="bad" x="20" y="645" width="680" height="72" rx="6"/>
+  <text class="bt" x="32" y="665">One failure line when a bound trips</text>
+  <text class="mono" x="32" y="684">varve: build hit spill 20GB after 41s; rerun with VARVE_MAX_SPILL=40GB on a host that has it</text>
+  <text class="sub" x="32" y="704">The suggested value is double. A caller treats exit 1 as abandon: a build leaves the lake untouched.</text>
 </svg>
