@@ -384,6 +384,7 @@ test:
     if [ "$rc" -ne 0 ] || [ "$n" = "0" ]; then
       echo "FAIL: an empty mirror should keep the runtime's partitions, got exit $rc and $n sessions" >&2; tail -5 "$tmp/build.err" >&2; fail=1
     fi
+    rm -f "$VARVE_DATA/checks/"{tool_pairing,record_columns}.sql
     for id in $(just sql -noheader -list -c "SELECT session_id FROM sessions WHERE runtime = 'opencode';"); do
       printf '\n[[row]]\nsession_id = "%s"\nruntime = "opencode"\nat = "2026-01-01"\n' "$id" >> "$VARVE_DATA/forgotten.toml"
     done
@@ -423,7 +424,7 @@ test:
       sums0="$(wal_sums)"
       got="$(wal_rows)"
       if [ "$got" != "main-1,wal-1,wal-2" ]; then echo "FAIL: rows held only in the -wal did not read back, got: $got" >&2; fail=1; fi
-      if [ "$(wal_sums)" != "$sums0" ]; then echo "FAIL: reading the live copy changed the mirror's database or -wal" >&2; fail=1; fi
+      if [ "$(wal_sums)" != "$sums0" ]; then echo "FAIL: reading the live copy changed the mirror: before [$sums0] after [$(wal_sums)]" >&2; fail=1; fi
       echo "  mirror after read: $(ls "$w/mirror/oc" | tr '\n' ' ')" >&2
 
       touch "$w/release"; wait "$holder" || true
@@ -433,7 +434,7 @@ test:
       sums0="$(wal_sums)"
       got="$(wal_rows)"
       if [ "$got" != "main-1,wal-1,wal-2" ]; then echo "FAIL: rows did not read back after a clean close, got: $got" >&2; fail=1; fi
-      if [ "$(wal_sums)" != "$sums0" ]; then echo "FAIL: reading the closed copy changed the mirror's database" >&2; fail=1; fi
+      if [ "$(wal_sums)" != "$sums0" ]; then echo "FAIL: reading the closed copy changed the mirror: before [$sums0] after [$(wal_sums)] files [$(ls -l "$w/mirror/oc" | tr "\n" ";")]" >&2; fail=1; fi
     fi
 
     exit $fail
