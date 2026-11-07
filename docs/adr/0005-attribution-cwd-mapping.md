@@ -1,6 +1,7 @@
-# ADR-0005: Attribution by ingest-time cwd mapping, not launch-time env
+# ADR-0005: Attribution by build-time cwd mapping, not launch-time env
 
 - **Status:** accepted
+- **Amended by:** ADR-0009 (config is TOML in the data home)
 - **Date:** 2026-07-06
 - **Deciders:** maintainer
 
@@ -16,7 +17,7 @@ Two channels could supply them:
 1. **Launch-time env.** Inject `OTEL_RESOURCE_ATTRIBUTES=harness=..,estate=..,campaign=..`
    into each session at launch, so the attributes propagate as labels. Whatever
    launches the session must set per-launch env, and no launcher in use does.
-2. **Ingest-time cwd mapping.** Derive the tags from the transcript itself, by
+2. **Build-time cwd mapping.** Derive the tags from the transcript itself, by
    mapping the recorded working directory onto a known directory layout. A session
    starts in its project's directory, so the recorded path is a deterministic key.
 
@@ -27,9 +28,9 @@ retroactive, and covers all history.
 
 ## Decision
 
-- Ingest-time cwd → harness/estate/campaign mapping is the primary channel, and in
+- Build-time cwd → harness/estate/campaign mapping is the primary channel, and in
   v1 the only one. The transcript adapter resolves each session's directory against
-  a user-maintained mapping (`adapters/attribution.example.csv` is the template) and
+  a user-maintained mapping (`adapters/attribution.example.toml` is the template) and
   writes `harness`, `estate`, `campaign` onto the `sessions` row.
 - The `OTEL_RESOURCE_ATTRIBUTES` env-injection design is deferred with the live
   plane. It blocks nothing in v1.

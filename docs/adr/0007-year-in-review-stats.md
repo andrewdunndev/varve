@@ -1,6 +1,7 @@
 # ADR-0007: Year-in-review stats, metric definitions for `just stats`
 
 - **Status:** accepted
+- **Amended by:** ADR-0008 (the lake is built from the mirror, not ingested)
 - **Date:** 2026-10-13
 - **Deciders:** maintainer
 
@@ -15,7 +16,7 @@ writes no child transcript at all. Without fixed definitions the summary would c
 differently each time it is read.
 
 Timestamps differ too. Claude Code and pi store UTC. opencode stores wall-clock time in the
-ingest run's TimeZone, because the adapter casts `to_timestamp(ms)` to `TIMESTAMP`.
+build's TimeZone, because the adapter casts `to_timestamp(ms)` to `TIMESTAMP`.
 
 ## Decision
 
@@ -32,8 +33,8 @@ text). `mining/stats_render.sql` only lays them out.
   rewritten.
 - **step**: one assistant turn: one `api_calls` row.
 - **tokens**: `input + output + cache_read + cache_write`.
-- **cost**: `sum(api_calls.cost_usd)`, as priced at ingest by the adapters and
-  `adapters/pricing.csv`. Nothing is re-priced.
+- **cost**: `sum(api_calls.cost_usd)`, as priced at build by the adapters and
+  `pricing.toml`. Nothing is re-priced.
 - **tool success**: tool results not marked as errors, divided by all tool results.
 - **active day**: a local day with at least one prompt.
 - **best streak**: the longest run of consecutive active days inside the window. A run that
@@ -74,9 +75,9 @@ invented:
 
 **Negative**
 - Prompts depend on `operator_messages`, so `just mine` must have run. It runs inside
-  every `ingest` and `backfill`.
-- opencode's wall-clock timestamps are correct only when the ingest ran in the user's own
-  time zone. Storing UTC there is an adapter change and needs a backfill, so it is not
+  every `just build`, after the swap.
+- opencode's wall-clock timestamps are correct only when the build ran in the user's own
+  time zone. Storing UTC there is an adapter change and needs a rebuild, so it is not
   made here.
 
 **Neutral**

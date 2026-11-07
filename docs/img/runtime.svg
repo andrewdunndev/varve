@@ -47,7 +47,7 @@
   <text class="anm" x="400" y="68" text-anchor="middle">adapters/&lt;rt&gt;.sql</text>
   <text class="asub" x="400" y="86" text-anchor="middle">one adapter file</text>
   <rect class="acc" x="260" y="124" width="280" height="56" rx="6"/>
-  <text class="anm" x="400" y="148" text-anchor="middle">tests/fixtures/&lt;rt&gt;/</text>
+  <text class="anm" x="400" y="148" text-anchor="middle">tests/fixtures/mirror/&lt;rt&gt;/</text>
   <text class="asub" x="400" y="166" text-anchor="middle">one fixture</text>
   <rect class="acc" x="260" y="204" width="280" height="56" rx="6"/>
   <text class="anm" x="400" y="228" text-anchor="middle">one runtimes row</text>

@@ -22,7 +22,7 @@ analysis feeds it, not the other way around.
 ## Motivation
 
 Does a correction land once and hold, or is it made again? Mining answers that
-from the full lake history (message content is inline, an RFC-0001 decision made
+from the full lake history (message `text` is a column, an RFC-0001 decision made
 for this) and keeps answering as the lake grows, with no per-event effort from
 the user. A hand-kept ledger records only what someone remembers to log, and
 that decays. The method is where the research novelty lives and where the
@@ -72,8 +72,8 @@ Output: `correction_candidates` in the lake, one row per (detector, locus):
 `detector`, `detector_version`, `features` (JSON: marker matched, overlap score,
 outcome value), `model_id` of the corrected draft, and `cwd`-derived attribution
 (estate and harness, from the attribution rules). Candidates derive purely from
-the lake, so the table is rebuilt deterministically on every mine with no manifest
-interaction. Candidates live only in the local lake; loci use the non-identifying
+the lake, so the table is rebuilt deterministically on every mine.
+Candidates live only in the local lake; loci use the non-identifying
 `lake:` form.
 
 ### Adjudication
@@ -119,9 +119,9 @@ embedding APIs stay excluded (ADR-0004). Nothing leaves the machine.
 
 Cluster adjudicated true-positive events using the phase-2 labels or embeddings,
 name the recurring divergence directions from what the clusters show, and version
-the result as `mining/divergence_taxonomy.csv` v1, the controlled vocabulary for
+the result as `mining/divergence_taxonomy.toml` v1, the controlled vocabulary for
 `correction_events.category`. Then test it against the prior: the list derived
-from the rulebook, kept in the same CSV and marked PRIOR. The comparison is itself
+from the rulebook, kept in the same file and marked PRIOR. The comparison is itself
 a result. Categories in the prior but not the mine are either already fixed or
 rule-worthy but rare; categories in the mine but not the prior are corrections
 being made without ever being distilled.
@@ -218,7 +218,7 @@ and CLAUDE.md distillation (manual, unmeasured; "Beyond the Prompt", 2025).
 
 - PRD sections: Architecture; Goals.
 - Related: ADR-0004 (confidentiality: local-only pointers I5, no-identifier rule
-  I4, embedding exclusion, LLM-labelling boundary), RFC-0001 (content inline, the
+  I4, embedding exclusion, LLM-labelling boundary), RFC-0001 (message text in the lake, the
   decision that makes mining possible; this RFC resolves its open
   `correction_events` DDL).
 - In this repo: the example mines `mining/[0-9]*.sql` (operator context, one file per

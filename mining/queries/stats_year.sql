@@ -28,7 +28,7 @@
 --   (default all), metric prompts|steps|tokens (default prompts), today (default
 --   current_date). Local time is the engine TimeZone setting (from TZ).
 -- CAVEATS: Claude Code and pi timestamps are UTC in the lake; opencode timestamps are
---   wall-clock in the TimeZone of the ingest run (to_timestamp cast to TIMESTAMP), so
+--   wall-clock in the TimeZone of the build (to_timestamp cast to TIMESTAMP), so
 --   they are taken as local as-is. A streak that runs across Jan 1 is cut at the window.
 -- Run: just stats [--year N] [--runtime R] [--metric M], or just sql -f mining/queries/stats_year.sql
 CREATE OR REPLACE TEMP MACRO stats_local_day(rt, ts) AS
