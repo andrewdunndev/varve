@@ -1,4 +1,5 @@
-# Copy to <data home>/patterns.toml and tune. The mines read it through the
+# Copy to <data home>/patterns.toml and tune: add the injected text of your own
+# harness as noise rows. The mines read it through the
 # patterns view. Rows are [[row]] with kind, name, pattern.
 #
 #   noise             ILIKE pattern with explicit % wildcards: injected text that
@@ -64,21 +65,6 @@ pattern = "%This session is being continued%"
 kind = "noise"
 name = "skill_body"
 pattern = "Base directory for this skill:%"
-
-[[row]]
-kind = "noise"
-name = "system_notification"
-pattern = "%[SYSTEM NOTIFICATION - NOT USER INPUT]%"
-
-[[row]]
-kind = "noise"
-name = "coordinator_message"
-pattern = "The coordinator sent a message while you were working:%"
-
-[[row]]
-kind = "noise"
-name = "loop_control"
-pattern = "%<<autonomous-loop%"
 
 [[row]]
 kind = "interrupt_prefix"
