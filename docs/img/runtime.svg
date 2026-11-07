@@ -51,7 +51,7 @@
   <text class="asub" x="400" y="166" text-anchor="middle">one fixture</text>
   <rect class="acc" x="260" y="204" width="280" height="56" rx="6"/>
   <text class="anm" x="400" y="228" text-anchor="middle">one runtimes row</text>
-  <text class="asub" x="400" y="246" text-anchor="middle">runtimes.example.csv in the repo</text>
+  <text class="asub" x="400" y="246" text-anchor="middle">runtimes.example.toml in the repo</text>
   <rect class="dim" x="600" y="44" width="240" height="44" rx="6"/>
   <text class="gnm" x="720" y="72" text-anchor="middle">justfile</text>
   <rect class="dim" x="600" y="108" width="240" height="44" rx="6"/>

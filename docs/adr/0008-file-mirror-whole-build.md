@@ -19,7 +19,7 @@
 - A runtime that fails keeps its last good partitions.
 - Nothing shrinks except by `just forget`.
 - The mirror never replaces a file with a shorter one.
-- A build that would lose a session the published lake holds fails `check`. The old lake stays.
+- A build that would lose a session the published lake holds fails a check. The old lake stays.
 - `ingest`, `backfill`, the manifest, `sql/affected.sql` and `sql/stage.sql` go.
 - `varve.duckdb` goes. Startup generates one view per lake folder, so a mine's table appears on its own. `sql/views.sql` and the view step in `mine` go, and with them the single-writer risk.
 - `just test` is build over fixtures. The fixtures are a mirror and assertions are checks, so tests and real runs share one path.
@@ -27,7 +27,7 @@
 
 **Rejected**
 - Line-grain capture into Parquet: no stable unit.
-- One Parquet part per source file: about 90,000 tiny files.
+- One Parquet part per source file: tens of thousands of tiny files.
 - Scoped incremental rewrites: nothing to save while parse is whole.
 
 ## Consequences
@@ -44,7 +44,7 @@
 
 **Neutral**
 - Whole-build time is unmeasured. If a capped build is too slow, build goes incremental by (runtime, month).
-- `messages` is 99% of the lake. `content` retires once the mirror holds the verbatim copy. No compression change until measured.
+- `messages` dominates lake size. `content` retires once the mirror holds the verbatim copy. No compression change until measured.
 
 ## References
 

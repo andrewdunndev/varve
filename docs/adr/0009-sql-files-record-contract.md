@@ -24,13 +24,13 @@ Three primitives: files, SQL files, one runner (`bin/duck`). Everything extensib
 
 - Fixed order: adapters, checks, swap, mines. Editing the SQL is the configuration.
 - The repo holds mechanisms and examples. The data home holds anything tuned to one user.
-- A runtime is one adapter, one fixture, one row in `runtimes.csv`. The data home holds `runtimes.csv`; the repo ships `runtimes.example.csv`. No row, no run.
+- A runtime is one adapter, one fixture, one row in `runtimes.toml`. The data home holds `runtimes.toml`; the repo ships `runtimes.example.toml`. No row, no run.
 - Adapters resolve from the data home first, then the repo. A contributor runs an adapter with no PR.
 - Checks are `checks/*.sql`, replacing the single check file. Each must return no rows, and each row names the next action. Users add their own. A check reports orphaned ledger rows.
-- `just mine` runs each `.sql` in the data home's `mining/` through `bin/duck`. No file, no mining. The repo's `mining/` holds one example detector per file and `patterns.example.csv`.
+- `just mine` runs each `.sql` in the data home's `mining/` through `bin/duck`. No file, no mining. The repo's `mining/` holds one example detector per file and `patterns.example.toml`.
 - Mines run after the swap. One failing mine does not stop the others or block publishing.
 - A mine's version is the hash of its file. Mines read the four tables, never raw formats, and key on source ids so adjudications survive.
-- Each CSV in the data home loads as a table named after it: attribution, pricing, patterns. The adjudication ledger is JSONL and gets the same treatment.
+- Config is TOML. Each TOML file in the data home loads as a table named after it: attribution, pricing, patterns. A pinned `yq` converts it, which is unproven here. The adjudication ledger is JSONL and gets the same treatment.
 - Personal queries stay out of the repo. Users run theirs with `just sql -f <path>`.
 - Four tables keep their names. `sql/record.sql` gives each column a written meaning.
 - Ids come from the source. Unknown is NULL, never zero or invented. Never re-mean a column; add a new name.
