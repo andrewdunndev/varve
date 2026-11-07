@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 300" width="860" height="300" role="img" aria-labelledby="rt-t">
-  <title id="rt-t">A new runtime adds an adapter file, a fixture directory, and a runtimes.csv row. The shared files are not touched.</title>
+  <title id="rt-t">A new runtime adds an adapter file, a fixture directory, and one runtimes row. All three can stay in your data home with no PR. The shared files are not touched.</title>
     <style>
     svg { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
     .box { fill: #f4f4f4; stroke: #c4c4c4; stroke-width: 1; }
@@ -50,8 +50,8 @@
   <text class="anm" x="400" y="148" text-anchor="middle">tests/fixtures/&lt;rt&gt;/</text>
   <text class="asub" x="400" y="166" text-anchor="middle">one fixture</text>
   <rect class="acc" x="260" y="204" width="280" height="56" rx="6"/>
-  <text class="anm" x="400" y="228" text-anchor="middle">runtimes.csv row</text>
-  <text class="asub" x="400" y="246" text-anchor="middle">runtime, root, glob</text>
+  <text class="anm" x="400" y="228" text-anchor="middle">one runtimes row</text>
+  <text class="asub" x="400" y="246" text-anchor="middle">runtimes.example.csv in the repo</text>
   <rect class="dim" x="600" y="44" width="240" height="44" rx="6"/>
   <text class="gnm" x="720" y="72" text-anchor="middle">justfile</text>
   <rect class="dim" x="600" y="108" width="240" height="44" rx="6"/>
@@ -60,4 +60,5 @@
   <text class="gnm" x="720" y="200" text-anchor="middle">queries/</text>
   <rect class="dim" x="600" y="236" width="240" height="44" rx="6"/>
   <text class="gnm" x="720" y="264" text-anchor="middle">other adapters</text>
+  <text class="lbl" x="400" y="284" text-anchor="middle">All three can stay in your data home, no PR</text>
 </svg>

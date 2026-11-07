@@ -13,7 +13,7 @@
 
 ## Decision
 
-- One wrapper, `bin/duck`, is the only path to DuckDB.
+- One wrapper, `bin/duck`, is the only path to DuckDB. It runs every SQL file of all four kinds: adapters, checks, mines and queries.
 - It sets memory, threads, spill cap, low priority, a wall-clock limit, and a lock. Runs never stack.
 - DuckDB does not promise `memory_limit` as a whole-process cap, so the wrapper also watches resident memory and kills the run over its cap.
 - `just lint` fails on DuckDB anywhere else. `just test` goes through the wrapper.

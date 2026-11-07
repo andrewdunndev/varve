@@ -25,19 +25,30 @@ It serves a goal ladder:
 4. **Supporting:** the historic record as simulation evidence and leak-free
    benchmark synthesis.
 
+Only the first rung needs the core. The rest are layers over the four tables.
+
 ## Architecture
 
 Target design (ADR-0008 to ADR-0010, proposed). `just ingest` still runs until it is built.
 
-![Runtime stores are copied into a mirror, built into a new lake, checked, and swapped in.](docs/img/tiers.svg)
+Three primitives: files, SQL files, and one runner, `bin/duck`. Every extensible piece is a SQL file, run in a fixed order: adapters, checks, swap, mines.
 
-Only the mirror and operator data cannot be rebuilt.
+| Kind | Reads | Rows become |
+|------|-------|-------------|
+| adapter | the mirror | the four tables |
+| check | the tables | failures |
+| mine | the tables | a saved table |
+| query | the tables | printed output |
 
-![A new runtime adds an adapter, a fixture and a runtimes.csv row.](docs/img/runtime.svg)
+![Runtime stores are copied into a mirror, built into a new lake, checked, and swapped in. Mines run after the swap.](docs/img/tiers.svg)
+
+The mirror and your data home cannot be rebuilt.
+
+![A new runtime adds an adapter, a fixture and a runtimes row.](docs/img/runtime.svg)
 
 A new runtime touches three files.
 
-![Every DuckDB process runs inside the bin/duck boundary.](docs/img/envelope.svg)
+![Every SQL file runs inside the bin/duck boundary.](docs/img/envelope.svg)
 
 One wrapper bounds every DuckDB process.
 

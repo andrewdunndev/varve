@@ -15,12 +15,15 @@
 
 - The lake is f(mirror, operator data, repo).
 - `sync` copies allowed files, parses nothing, and is the only scheduled step.
-- `build` runs one process per runtime into `lake.new`, then mines, checks, swaps.
+- `build` runs one process per runtime into `lake.new`, then checks, then swaps. Mines run after the swap.
 - A runtime that fails keeps its last good partitions.
 - Nothing shrinks except by `just forget`.
 - The mirror never replaces a file with a shorter one.
 - A build that would lose a session the published lake holds fails `check`. The old lake stays.
 - `ingest`, `backfill`, the manifest, `sql/affected.sql` and `sql/stage.sql` go.
+- `varve.duckdb` goes. Startup generates one view per lake folder, so a mine's table appears on its own. `sql/views.sql` and the view step in `mine` go, and with them the single-writer risk.
+- `just test` is build over fixtures. The fixtures are a mirror and assertions are checks, so tests and real runs share one path.
+- `build` reads the mirrored opencode database. The temporary snapshot in `_pipeline` goes.
 
 **Rejected**
 - Line-grain capture into Parquet: no stable unit.
@@ -36,6 +39,8 @@
 - The mirror adds a tier and widens the confidentiality surface. It is an allow-list.
 - A rewound file that later outgrows its old length overwrites the rewound tail. Accepted.
 - Rows deleted inside a SQLite source are not protected. `check` reports the loss.
+- Parquet footers are read on every query once no database holds the views. The cost is to be measured.
+- The live SQLite copy in the mirror needs a lab check before the snapshot goes.
 
 **Neutral**
 - Whole-build time is unmeasured. If a capped build is too slow, build goes incremental by (runtime, month).

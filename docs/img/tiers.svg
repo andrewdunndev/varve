@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 350" width="860" height="350" role="img" aria-labelledby="tiers-t">
-  <title id="tiers-t">Runtime stores are copied into a mirror. A build reads the mirror and operator data, writes a new lake, checks it, and swaps it in. SQL questions read the lake.</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 390" width="860" height="390" role="img" aria-labelledby="tiers-t">
+  <title id="tiers-t">Runtime stores are copied into a mirror. Adapters read the mirror into a new lake, checks grade it, and a swap publishes it. Queries read the lake. Mines run after the swap and save tables back to the lake. A data home feeds adapters, mines and queries.</title>
   <style>
     svg { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
     .box { fill: #f4f4f4; stroke: #c4c4c4; stroke-width: 1; }
@@ -33,54 +33,59 @@
   </style>
   <defs><marker id="tiers-ar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto"><path class="ah" d="M0,0 L10,4 L0,8 Z"/></marker></defs>
   <!-- arrows -->
-  <path class="ln" d="M140,95 H200" marker-end="url(#tiers-ar)"/>
-  <path class="ln" d="M280,95 H340" marker-end="url(#tiers-ar)"/>
-  <path class="ln" d="M460,85 H560" marker-end="url(#tiers-ar)"/>
-  <path class="ln" d="M460,165 H560" marker-end="url(#tiers-ar)"/>
-  <path class="ln" d="M725,176 V260" marker-end="url(#tiers-ar)"/>
-  <path class="ln" d="M670,290 H600" marker-end="url(#tiers-ar)"/>
-  <path class="ln" d="M520,290 H450" marker-end="url(#tiers-ar)"/>
-  <path class="ln" d="M370,290 H300" marker-end="url(#tiers-ar)"/>
-  <path class="ln" d="M220,290 H150" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M130,80 H170" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M240,80 H280" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M390,80 H430" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M560,80 H600" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M700,80 H740" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M790,110 V200" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M740,230 H690" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M580,230 H530" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M615,260 V310" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M655,310 V260" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M95,200 V155 H495 V110" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M170,230 H420" marker-end="url(#tiers-ar)"/>
+  <path class="ln" d="M95,260 V340 H580" marker-end="url(#tiers-ar)"/>
   <!-- arrow labels -->
-  <text class="lbl" x="170" y="86" text-anchor="middle">copy</text>
-  <text class="lbl" x="310" y="86" text-anchor="middle">files</text>
-  <text class="lbl" x="510" y="76" text-anchor="middle">read</text>
-  <text class="lbl" x="510" y="156" text-anchor="middle">read</text>
-  <text class="lbl" x="735" y="224">write</text>
-  <text class="lbl" x="635" y="281" text-anchor="middle">mine</text>
-  <text class="lbl" x="485" y="281" text-anchor="middle">pass</text>
-  <text class="lbl" x="335" y="281" text-anchor="middle">rename</text>
-  <text class="lbl" x="185" y="281" text-anchor="middle">query</text>
+  <text class="lbl" x="150" y="72" text-anchor="middle">copy</text>
+  <text class="lbl" x="260" y="72" text-anchor="middle">files</text>
+  <text class="lbl" x="410" y="72" text-anchor="middle">read</text>
+  <text class="lbl" x="580" y="72" text-anchor="middle">rows</text>
+  <text class="lbl" x="720" y="72" text-anchor="middle">read</text>
+  <text class="lbl" x="798" y="160">pass</text>
+  <text class="lbl" x="715" y="222" text-anchor="middle">swap</text>
+  <text class="lbl" x="555" y="222" text-anchor="middle">read</text>
+  <text class="lbl" x="607" y="290" text-anchor="end">read</text>
+  <text class="lbl" x="663" y="290">saves</text>
+  <text class="lbl" x="300" y="147" text-anchor="middle">reads</text>
+  <text class="lbl" x="295" y="222" text-anchor="middle">reads</text>
+  <text class="lbl" x="330" y="332" text-anchor="middle">reads</text>
   <!-- nodes -->
-  <rect class="box" x="20" y="60" width="120" height="70" rx="6"/>
-  <text class="nm" x="80" y="92" text-anchor="middle">runtime</text>
-  <text class="nm" x="80" y="110" text-anchor="middle">stores</text>
-  <rect class="box" x="200" y="60" width="80" height="70" rx="6"/>
-  <text class="nm" x="240" y="100" text-anchor="middle">sync</text>
-  <rect class="acc" x="340" y="60" width="120" height="50" rx="6"/>
-  <text class="anm" x="400" y="82" text-anchor="middle">mirror</text>
-  <text class="asub" x="400" y="99" text-anchor="middle">not rebuildable</text>
-  <rect class="acc" x="340" y="140" width="120" height="50" rx="6"/>
-  <text class="anm" x="400" y="162" text-anchor="middle">operator data</text>
-  <text class="asub" x="400" y="179" text-anchor="middle">not rebuildable</text>
-  <rect class="box" x="560" y="40" width="280" height="136" rx="6"/>
-  <text class="nm" x="700" y="64" text-anchor="middle">build</text>
-  <rect class="dim" x="580" y="76" width="240" height="26" rx="4"/>
-  <text class="sub" x="700" y="94" text-anchor="middle">runtime A</text>
-  <rect class="dim" x="580" y="106" width="240" height="26" rx="4"/>
-  <text class="sub" x="700" y="124" text-anchor="middle">runtime B</text>
-  <rect class="dim" x="580" y="136" width="240" height="26" rx="4"/>
-  <text class="sub" x="700" y="154" text-anchor="middle">runtime C</text>
-  <rect class="box" x="670" y="260" width="110" height="60" rx="6"/>
-  <text class="nm" x="725" y="296" text-anchor="middle">lake.new</text>
-  <rect class="box" x="520" y="260" width="80" height="60" rx="6"/>
-  <text class="nm" x="560" y="296" text-anchor="middle">check</text>
-  <rect class="box" x="370" y="260" width="80" height="60" rx="6"/>
-  <text class="nm" x="410" y="296" text-anchor="middle">swap</text>
-  <rect class="box" x="220" y="260" width="80" height="60" rx="6"/>
-  <text class="nm" x="260" y="296" text-anchor="middle">lake</text>
-  <rect class="box" x="20" y="260" width="130" height="60" rx="6"/>
-  <text class="nm" x="85" y="288" text-anchor="middle">SQL</text>
-  <text class="nm" x="85" y="306" text-anchor="middle">questions</text>
+  <rect class="box" x="20" y="50" width="110" height="60" rx="6"/>
+  <text class="nm" x="75" y="77" text-anchor="middle">runtime</text>
+  <text class="nm" x="75" y="95" text-anchor="middle">stores</text>
+  <rect class="box" x="170" y="50" width="70" height="60" rx="6"/>
+  <text class="nm" x="205" y="86" text-anchor="middle">sync</text>
+  <rect class="acc" x="280" y="50" width="110" height="60" rx="6"/>
+  <text class="anm" x="335" y="76" text-anchor="middle">mirror</text>
+  <text class="asub" x="335" y="94" text-anchor="middle">not rebuildable</text>
+  <rect class="box" x="430" y="50" width="130" height="60" rx="6"/>
+  <text class="nm" x="495" y="76" text-anchor="middle">adapters</text>
+  <text class="sub" x="495" y="94" text-anchor="middle">per runtime</text>
+  <rect class="box" x="600" y="50" width="100" height="60" rx="6"/>
+  <text class="nm" x="650" y="86" text-anchor="middle">lake.new</text>
+  <rect class="box" x="740" y="50" width="100" height="60" rx="6"/>
+  <text class="nm" x="790" y="86" text-anchor="middle">checks</text>
+  <rect class="box" x="740" y="200" width="100" height="60" rx="6"/>
+  <text class="nm" x="790" y="236" text-anchor="middle">swap</text>
+  <rect class="box" x="580" y="200" width="110" height="60" rx="6"/>
+  <text class="nm" x="635" y="236" text-anchor="middle">lake</text>
+  <rect class="box" x="420" y="200" width="110" height="60" rx="6"/>
+  <text class="nm" x="475" y="236" text-anchor="middle">queries</text>
+  <rect class="box" x="580" y="310" width="110" height="60" rx="6"/>
+  <text class="nm" x="635" y="336" text-anchor="middle">mines</text>
+  <text class="sub" x="635" y="354" text-anchor="middle">after the swap</text>
+  <rect class="acc" x="20" y="200" width="150" height="60" rx="6"/>
+  <text class="anm" x="95" y="226" text-anchor="middle">data home</text>
+  <text class="asub" x="95" y="244" text-anchor="middle">not rebuildable</text>
 </svg>

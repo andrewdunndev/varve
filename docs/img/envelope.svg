@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 380" width="860" height="380" role="img" aria-labelledby="env-t">
-  <title id="env-t">Sync runs outside the bin/duck boundary. Every DuckDB process runs inside it under memory, thread, spill, time and lock limits.</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 390" width="780" height="390" role="img" aria-labelledby="env-t">
+  <title id="env-t">Sync runs outside the bin/duck boundary. Inside it, in order: adapters write a new lake, checks grade it, a swap publishes it, and mines run after. Queries read the lake. Every DuckDB process runs under memory, thread, spill, time and lock limits.</title>
     <style>
     svg { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
     .box { fill: #f4f4f4; stroke: #c4c4c4; stroke-width: 1; }
@@ -32,38 +32,49 @@
     }
   </style>
   <defs><marker id="env-ar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto"><path class="ah" d="M0,0 L10,4 L0,8 Z"/></marker></defs>
-  <rect class="zone" x="180" y="20" width="660" height="340" rx="8"/>
-  <text class="zl" x="200" y="44">bin/duck</text>
-  <text class="sub" x="270" y="44">memory, threads, spill, time, lock</text>
-  <path class="ln" d="M140,180 H200" marker-end="url(#env-ar)"/>
-  <path class="ln" d="M380,180 H440" marker-end="url(#env-ar)"/>
-  <path class="ln" d="M540,180 H600" marker-end="url(#env-ar)"/>
-  <path class="ln" d="M680,180 H740" marker-end="url(#env-ar)"/>
-  <path class="ln" d="M140,322 H240" marker-end="url(#env-ar)"/>
-  <text class="lbl" x="160" y="170" text-anchor="middle">files</text>
-  <text class="lbl" x="410" y="170" text-anchor="middle">write</text>
-  <text class="lbl" x="570" y="170" text-anchor="middle">read</text>
-  <text class="lbl" x="710" y="170" text-anchor="middle">rows</text>
-  <text class="lbl" x="212" y="312" text-anchor="middle">read</text>
-  <rect class="box" x="20" y="150" width="120" height="60" rx="6"/>
-  <text class="nm" x="80" y="186" text-anchor="middle">sync</text>
-  <text class="sub" x="80" y="230" text-anchor="middle">never opens DuckDB</text>
-  <rect class="box" x="200" y="70" width="180" height="190" rx="6"/>
-  <text class="nm" x="290" y="94" text-anchor="middle">build</text>
-  <rect class="dim" x="212" y="110" width="156" height="40" rx="4"/>
-  <text class="lbl" x="290" y="135" text-anchor="middle">process: runtime A</text>
-  <rect class="dim" x="212" y="160" width="156" height="40" rx="4"/>
-  <text class="lbl" x="290" y="185" text-anchor="middle">process: runtime B</text>
-  <rect class="dim" x="212" y="210" width="156" height="40" rx="4"/>
-  <text class="lbl" x="290" y="235" text-anchor="middle">process: runtime C</text>
-  <rect class="box" x="440" y="150" width="100" height="60" rx="6"/>
-  <text class="nm" x="490" y="186" text-anchor="middle">lake.new</text>
-  <rect class="box" x="600" y="150" width="80" height="60" rx="6"/>
-  <text class="nm" x="640" y="186" text-anchor="middle">mine</text>
-  <rect class="box" x="740" y="150" width="80" height="60" rx="6"/>
-  <text class="nm" x="780" y="186" text-anchor="middle">check</text>
-  <rect class="box" x="20" y="300" width="120" height="44" rx="6"/>
-  <text class="nm" x="80" y="327" text-anchor="middle">lake</text>
-  <rect class="box" x="240" y="300" width="160" height="44" rx="6"/>
-  <text class="nm" x="320" y="327" text-anchor="middle">SQL questions</text>
+  <rect class="zone" x="160" y="20" width="600" height="355" rx="8"/>
+  <text class="zl" x="180" y="44">bin/duck</text>
+  <text class="sub" x="250" y="44">memory, threads, spill, time, lock</text>
+  <path class="ln" d="M75,200 V140" marker-end="url(#env-ar)"/>
+  <path class="ln" d="M130,110 H180" marker-end="url(#env-ar)"/>
+  <path class="ln" d="M290,110 H330" marker-end="url(#env-ar)"/>
+  <path class="ln" d="M430,110 H470" marker-end="url(#env-ar)"/>
+  <path class="ln" d="M560,110 H600" marker-end="url(#env-ar)"/>
+  <path class="ln" d="M645,140 V200" marker-end="url(#env-ar)"/>
+  <path class="ln" d="M590,230 H540" marker-end="url(#env-ar)"/>
+  <path class="ln" d="M625,260 V300" marker-end="url(#env-ar)"/>
+  <path class="ln" d="M665,300 V260" marker-end="url(#env-ar)"/>
+  <text class="lbl" x="83" y="176">copy</text>
+  <text class="lbl" x="142" y="102" text-anchor="middle">read</text>
+  <text class="lbl" x="310" y="102" text-anchor="middle">rows</text>
+  <text class="lbl" x="450" y="102" text-anchor="middle">read</text>
+  <text class="lbl" x="580" y="102" text-anchor="middle">pass</text>
+  <text class="lbl" x="653" y="176">rename</text>
+  <text class="lbl" x="565" y="222" text-anchor="middle">read</text>
+  <text class="lbl" x="617" y="284" text-anchor="end">read</text>
+  <text class="lbl" x="673" y="284">saves</text>
+  <rect class="acc" x="20" y="80" width="110" height="60" rx="6"/>
+  <text class="anm" x="75" y="106" text-anchor="middle">mirror</text>
+  <text class="asub" x="75" y="124" text-anchor="middle">not rebuildable</text>
+  <rect class="box" x="20" y="200" width="110" height="50" rx="6"/>
+  <text class="nm" x="75" y="230" text-anchor="middle">sync</text>
+  <text class="sub" x="75" y="272" text-anchor="middle">never opens</text>
+  <text class="sub" x="75" y="288" text-anchor="middle">DuckDB</text>
+  <rect class="box" x="180" y="80" width="110" height="60" rx="6"/>
+  <text class="nm" x="235" y="106" text-anchor="middle">adapters</text>
+  <text class="sub" x="235" y="124" text-anchor="middle">1 process each</text>
+  <rect class="box" x="330" y="80" width="100" height="60" rx="6"/>
+  <text class="nm" x="380" y="116" text-anchor="middle">lake.new</text>
+  <rect class="box" x="470" y="80" width="90" height="60" rx="6"/>
+  <text class="nm" x="515" y="116" text-anchor="middle">checks</text>
+  <rect class="box" x="600" y="80" width="90" height="60" rx="6"/>
+  <text class="nm" x="645" y="116" text-anchor="middle">swap</text>
+  <rect class="box" x="590" y="200" width="110" height="60" rx="6"/>
+  <text class="nm" x="645" y="236" text-anchor="middle">lake</text>
+  <rect class="box" x="430" y="200" width="110" height="60" rx="6"/>
+  <text class="nm" x="485" y="236" text-anchor="middle">queries</text>
+  <rect class="box" x="590" y="300" width="110" height="55" rx="6"/>
+  <text class="nm" x="645" y="324" text-anchor="middle">mines</text>
+  <text class="sub" x="645" y="342" text-anchor="middle">after the swap</text>
+  <text class="sub" x="180" y="330">order: adapters, checks, swap, mines</text>
 </svg>
