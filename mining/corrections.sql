@@ -112,36 +112,9 @@ SELECT * FROM read_csv(getvariable('repo_dir') || '/mining/divergence_taxonomy.c
   header = true, comment = '#', auto_detect = true);
 CREATE OR REPLACE TABLE _corr_known AS SELECT list(category) AS known FROM _corr_taxonomy;
 
--- -------------------------------------------------------------------------------------
--- Operator-text extraction. Runtime-aware: Claude Code stores message.content as JSON
--- (a block array, or a bare quoted string); opencode stores content as already-aggregated
--- plain text. The json[] cast MUST bind only to array rows (the planner otherwise hoists
--- it above a CASE type-guard and errors on string content -- see adapters/claude_code.sql
--- _cc_asst_blocks), so CC array rows are materialized first. Blocks are joined with
--- per-row list functions in array order, so text concatenation (hence first-token
--- matching) is DETERMINISTIC and streams; a correlated string_agg here does not spill.
-CREATE OR REPLACE TABLE _cc_user_arr AS
-SELECT message_id, session_id, timestamp AS ts, content
-FROM _lk_messages
-WHERE runtime = 'claude-code' AND role = 'user' AND json_type(content) = 'ARRAY';
-
--- string_agg semantics over a list: NULL elements skipped, NULL when none remain.
-CREATE OR REPLACE MACRO _join_blocks(l) AS
-  CASE WHEN len(list_filter(l, lambda x: x IS NOT NULL)) > 0 THEN array_to_string(l, '\n') END;
-CREATE OR REPLACE MACRO _block_type(j) AS json_extract_string(j, '$.type');
-
-CREATE OR REPLACE TABLE _cc_user_arr_x AS
-SELECT
-  message_id, session_id, ts,
-  _join_blocks(list_transform(list_filter(blocks, lambda j: _block_type(j) = 'text'),
-                              lambda j: json_extract_string(j, '$.text')))     AS raw_txt,
-  len(list_filter(blocks, lambda j: _block_type(j) = 'tool_result')) > 0      AS has_tool_result,
-  _join_blocks(list_transform(list_filter(blocks, lambda j: _block_type(j) = 'tool_result'),
-                              lambda j: (j -> 'content')::varchar))           AS tool_result_txt
-FROM (SELECT message_id, session_id, ts, cast(content AS json[]) AS blocks FROM _cc_user_arr);
-DROP TABLE _cc_user_arr;
-
--- Unified raw user-message text across runtimes + shapes.
+-- Operator-text extraction. messages.text is the joined text of a row for every runtime
+-- (the adapters did the block walk), so the user rows read straight off it. origin says
+-- whether a row carries a tool result; interrupted is the adapter's interrupt fact.
 -- pi is DELIBERATELY absent from _um -- and so from every detector and the
 -- recall-floor denominator: the pi adapter is the least-validated of the three
 -- (adapters/pi.sql STATUS) and its message content shape is unverified against
@@ -149,20 +122,11 @@ DROP TABLE _cc_user_arr;
 -- excluding pi beats guessing. Add
 -- pi here once the adapter is validated.
 CREATE OR REPLACE TABLE _um AS
-  SELECT message_id, session_id, timestamp AS ts, 'claude-code' AS runtime,
-         json_extract_string(content, '$') AS raw_txt,
-         false AS has_tool_result, NULL::varchar AS tool_result_txt
+  SELECT message_id, session_id, timestamp AS ts, runtime,
+         text AS raw_txt, (origin = 'tool_result') AS has_tool_result, interrupted
   FROM _lk_messages
-  WHERE runtime = 'claude-code' AND role = 'user' AND json_type(content) = 'VARCHAR'
-  UNION ALL BY NAME
-  SELECT message_id, session_id, ts, 'claude-code' AS runtime,
-         raw_txt, has_tool_result, tool_result_txt
-  FROM _cc_user_arr_x
-  UNION ALL BY NAME
-  SELECT message_id, session_id, timestamp AS ts, 'opencode' AS runtime,
-         content AS raw_txt, false AS has_tool_result, NULL::varchar AS tool_result_txt
-  FROM _lk_messages
-  WHERE runtime = 'opencode' AND role = 'user' AND content IS NOT NULL;
+  WHERE role = 'user'
+    AND (runtime = 'claude-code' OR (runtime = 'opencode' AND text IS NOT NULL));
 
 -- Operator body (interrupt marker stripped) + the noise flag (the NOISE EXCLUSION list
 -- documented in the header). `is_operator` = genuine typed operator speech.
@@ -185,22 +149,11 @@ SELECT
 FROM _um;
 DROP TABLE _um;
 
--- Assistant text (the corrected DRAFT), same materialize-then-index discipline for CC.
-CREATE OR REPLACE TABLE _cc_asst_arr AS
-SELECT message_id, session_id, timestamp AS ts, content
-FROM _lk_messages
-WHERE runtime = 'claude-code' AND role = 'assistant' AND json_type(content) = 'ARRAY';
-
+-- Assistant text (the corrected DRAFT).
 CREATE OR REPLACE TABLE _asst AS
-  SELECT message_id, session_id, ts, 'claude-code' AS runtime,
-    _join_blocks(list_transform(list_filter(cast(content AS json[]), lambda j: _block_type(j) = 'text'),
-                                lambda j: json_extract_string(j, '$.text'))) AS atxt
-  FROM _cc_asst_arr
-  UNION ALL BY NAME
-  SELECT message_id, session_id, timestamp AS ts, 'opencode' AS runtime, content AS atxt
+  SELECT message_id, session_id, timestamp AS ts, runtime, text AS atxt
   FROM _lk_messages
-  WHERE runtime = 'opencode' AND role = 'assistant' AND content IS NOT NULL;
-DROP TABLE _cc_asst_arr;
+  WHERE role = 'assistant' AND runtime IN ('claude-code', 'opencode') AND text IS NOT NULL;
 
 -- Draft context per user message: nearest PRECEDING assistant message that carries text
 -- (the draft being corrected) + the model that produced the draft (nearest api_call at or
@@ -260,32 +213,36 @@ CREATE OR REPLACE MACRO _tok(s) AS
 --   rejection literal, but it is the operator engaging with a question the model asked,
 --   not a correction of work (round 0: 8/8 of D1's suggested FPs were exactly this).
 --   Latent risk still open: a tool_result QUOTING the boilerplate as data (this corpus is
---   agent transcripts) -- not observed firing yet; revisit if adjudication surfaces it.
---   opencode: its native tool `decision` column (state.status). The V1 store records only
+--   opencode: its native tool outcome (state.status). The V1 store records only
 --   EXECUTION status {completed|error|running|pending} -- there is NO user-verdict value
 --   in this corpus (the `permission` table is empty), so the opencode branch is written
---   forward-compatibly (fires iff a rejection-like status ever appears) and yields 0 today.
+--   forward-compatibly (fires iff a refusal status ever appears, which the adapter maps
+--   to outcome denied) and yields 0 today.
+--   Claude Code matches the result text of the carrier row, not outcome: outcome is the
+--   fact that the call was refused, "clarify" is a judgment this detector makes.
 CREATE OR REPLACE TABLE _d1 AS
   SELECT
     x.runtime, x.session_id, x.message_id AS message_uuid, x.prior_asst_uuid, x.ts,
     'tool_reject' AS detector, 'v2' AS detector_version,
     json_object('marker', 'tool_use_rejected', 'source', 'tool_result') AS features,
     x.model_id
-  FROM _cc_user_arr_x cc
+  FROM (SELECT runtime, session_id, result_message_id, string_agg(result_text, chr(10)) AS result_txt
+        FROM _lk_tool_calls
+        WHERE runtime = 'claude-code' AND result_message_id IS NOT NULL
+        GROUP BY runtime, session_id, result_message_id) cc
   JOIN _op_ctx x ON x.runtime = 'claude-code' AND x.session_id = cc.session_id
-                AND x.message_id = cc.message_id
-  WHERE cc.tool_result_txt ILIKE '%The user doesn''t want to proceed with this tool use%'
-    AND cc.tool_result_txt NOT ILIKE '%The user wants to clarify these questions%'
+                AND x.message_id = cc.result_message_id
+  WHERE cc.result_txt ILIKE '%The user doesn''t want to proceed with this tool use%'
+    AND cc.result_txt NOT ILIKE '%The user wants to clarify these questions%'
   UNION ALL BY NAME
   SELECT
     tc.runtime, tc.session_id, tc.message_id AS message_uuid,
     tc.message_id AS prior_asst_uuid, tc.started_at AS ts,
     'tool_reject' AS detector, 'v2' AS detector_version,
-    json_object('marker', 'decision_' || tc.decision, 'source', 'decision_column') AS features,
+    json_object('marker', 'outcome_' || tc.outcome, 'source', 'outcome_column') AS features,
     NULL::varchar AS model_id
   FROM _lk_tool_calls tc
-  WHERE tc.runtime = 'opencode'
-    AND lower(coalesce(tc.decision, '')) IN ('rejected', 'denied', 'declined', 'reject', 'deny');
+  WHERE tc.runtime = 'opencode' AND tc.outcome = 'denied';
 
 -- D2 -- interrupt-then-redirect (Claude Code only; opencode records no interrupt marker).
 --   An interrupt marker followed by an operator redirect. Two shapes, both precise:
@@ -300,8 +257,7 @@ SELECT
   ((NOT ctx.is_noise) AND length(trim(ctx.body)) > 20) AS has_inline_redirect
 FROM _op_ctx ctx
 WHERE ctx.runtime = 'claude-code'
-  AND (ctx.raw_txt ILIKE '%[Request interrupted by user%'
-    OR ctx.tool_result_txt ILIKE '%Request interrupted by user%');
+  AND ctx.interrupted;
 
 CREATE OR REPLACE TABLE _op_operator AS SELECT * FROM _op_ctx WHERE is_operator;
 

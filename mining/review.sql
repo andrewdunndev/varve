@@ -54,34 +54,31 @@ CREATE OR REPLACE TABLE _rv_ledger_msgs AS
 CREATE OR REPLACE TABLE _rv_worksheet AS
   SELECT * FROM read_json_auto(getvariable('worksheet'));
 
--- Full operator/corrective text extraction (runtime-aware), reused verbatim in spirit from
--- mining/queries/adjudication_sample.sql but NOT truncated -- the whole point of the review doc.
--- CC user rows: text blocks joined; else the tool_result `content` path with the harness
--- "the user said:" prefix stripped. Interrupt marker stripped. opencode: content is plain.
-CREATE OR REPLACE MACRO _rv_usertext(rt, content) AS
-  trim(regexp_replace(
-    CASE
-      WHEN rt = 'claude-code' AND json_type(content) = 'VARCHAR'
-        THEN json_extract_string(content, '$')
-      WHEN rt = 'claude-code' AND json_type(content) = 'ARRAY'
-        THEN coalesce(
-               nullif(array_to_string(json_extract(content, '$[*].text')::varchar[], chr(10)), ''),
-               regexp_replace(array_to_string(json_extract(content, '$[*].content')::varchar[], chr(10)),
-                              '^.*?the user said:\s*', ''))
-      ELSE content
-    END, '^\[Request interrupted by user[^\]]*\]', ''));
+-- Tool results by carrier row, for a rejected tool call whose corrective "message" is the
+-- carrier of the result.
+CREATE OR REPLACE VIEW _rv_tool_calls AS
+  SELECT * FROM read_parquet(getvariable('lake') || '/tool_calls/**/*.parquet',
+    hive_partitioning = true, union_by_name = true);
+CREATE OR REPLACE TABLE _rv_carriers AS
+  SELECT runtime, session_id, result_message_id AS message_id,
+         string_agg(result_text, chr(10)) AS result_txt
+  FROM _rv_tool_calls WHERE runtime = 'claude-code' AND result_message_id IS NOT NULL
+  GROUP BY runtime, session_id, result_message_id;
 
--- Full assistant-draft text extraction. CC assistant content is a block array (text blocks);
--- opencode assistant content is plain. NULL when there is no prior draft (handled gracefully
+-- Full operator/corrective text, not truncated -- the whole point of the review doc.
+-- The row's own text, else the text of the tool result it carries with the harness
+-- "the user said:" prefix stripped. Interrupt marker stripped. The adapters join text
+-- blocks with a literal backslash-n; shown here as a line break.
+CREATE OR REPLACE MACRO _rv_usertext(txt, carried) AS
+  trim(regexp_replace(
+    replace(coalesce(nullif(txt, ''),
+                     regexp_replace(carried, '^.*?the user said:\s*', ''),
+                     txt), '\n', chr(10)),
+    '^\[Request interrupted by user[^\]]*\]', ''));
+
+-- Full assistant-draft text. NULL when there is no prior draft (handled gracefully
 -- downstream -- D1 tool-decision loci structurally reference a tool result, not a text draft).
-CREATE OR REPLACE MACRO _rv_assttext(rt, content) AS
-  CASE
-    WHEN rt = 'claude-code' AND json_type(content) = 'ARRAY'
-      THEN nullif(array_to_string(json_extract(content, '$[*].text')::varchar[], chr(10)), '')
-    WHEN rt = 'claude-code' AND json_type(content) = 'VARCHAR'
-      THEN json_extract_string(content, '$')
-    ELSE content
-  END;
+CREATE OR REPLACE MACRO _rv_assttext(txt) AS replace(txt, '\n', chr(10));
 
 -- -------------------------------------------------------------------------------------
 -- PART 1 -- flagged candidates. One row per candidate NOT yet in the ledger, enriched with
@@ -90,14 +87,16 @@ CREATE OR REPLACE TABLE _rv_cand AS
 SELECT
   c.candidate_id, c.detector, c.runtime, c.session_id, c.message_uuid, c.prior_assistant_uuid,
   c.model_id, c.estate, c.harness, c.campaign, c.features,
-  _rv_usertext(c.runtime, cm.content)                     AS corrective_txt,
-  _rv_assttext(c.runtime, am.content)                     AS draft_txt,
+  _rv_usertext(cm.text, cc.result_txt)                     AS corrective_txt,
+  _rv_assttext(am.text)                                    AS draft_txt,
   w.suggested_verdict, w.suggested_context_judgment, w.rationale, w.suggested_by, w.suggested_at
 FROM _rv_candidates c
 LEFT JOIN _rv_messages cm
   ON cm.runtime = c.runtime AND cm.session_id = c.session_id AND cm.message_id = c.message_uuid
 LEFT JOIN _rv_messages am
   ON am.runtime = c.runtime AND am.session_id = c.session_id AND am.message_id = c.prior_assistant_uuid
+LEFT JOIN _rv_carriers cc
+  ON cc.runtime = c.runtime AND cc.session_id = c.session_id AND cc.message_id = c.message_uuid
 LEFT JOIN _rv_worksheet w
   ON w.candidate_id = c.candidate_id
 WHERE c.candidate_id NOT IN (SELECT candidate_id FROM _rv_ledger_cands);
@@ -114,7 +113,7 @@ WITH f50 AS (
 )
 SELECT
   f.runtime, f.session_id, f.message_uuid, f.estate, f.harness, f.campaign,
-  _rv_usertext(f.runtime, m.content)                      AS operator_txt
+  _rv_usertext(m.text, NULL)                            AS operator_txt
 FROM f50 f
 LEFT JOIN _rv_messages m
   ON m.runtime = f.runtime AND m.session_id = f.session_id AND m.message_id = f.message_uuid

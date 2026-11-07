@@ -43,19 +43,14 @@ SELECT
   s.features,
   'lake:' || s.session_id || '/' || s.message_uuid                    AS locus,          -- corrective msg
   'lake:' || s.session_id || '/' || coalesce(s.prior_assistant_uuid, '') AS draft_locus, -- corrected draft
-  -- truncated, whitespace-collapsed excerpt of the corrective message (LAKE-LOCAL ONLY).
+  -- truncated, whitespace-collapsed excerpt of the corrective message (LAKE-LOCAL ONLY):
+  -- the row's own text, else the text of the tool result it carries.
   left(regexp_replace(
     trim(regexp_replace(
-      CASE
-        WHEN s.runtime = 'claude-code' AND json_type(m.content) = 'VARCHAR'
-          THEN json_extract_string(m.content, '$')
-        WHEN s.runtime = 'claude-code' AND json_type(m.content) = 'ARRAY'
-          THEN coalesce(
-                 nullif(array_to_string(json_extract(m.content, '$[*].text')::varchar[], ' '), ''),
-                 regexp_replace(array_to_string(json_extract(m.content, '$[*].content')::varchar[], ' '),
-                                '^.*?the user said:\s*', ''))
-        ELSE m.content
-      END, '^\[Request interrupted by user[^\]]*\]', '')),
+      coalesce(nullif(m.text, ''),
+               regexp_replace(c.result_txt, '^.*?the user said:\s*', ''),
+               m.text),
+      '^\[Request interrupted by user[^\]]*\]', '')),
     '[[:space:]]+', ' ', 'g'), 240)                                    AS excerpt,
   -- copy-paste, fill verdict + context_judgment (+ optional note = role-level gloss only)
   '{"candidate_id":"' || s.candidate_id
@@ -63,4 +58,8 @@ SELECT
 FROM _sample s
 JOIN messages m
   ON m.runtime = s.runtime AND m.session_id = s.session_id AND m.message_id = s.message_uuid
+LEFT JOIN (SELECT runtime, session_id, result_message_id, string_agg(result_text, chr(10)) AS result_txt
+           FROM tool_calls WHERE runtime = 'claude-code' AND result_message_id IS NOT NULL
+           GROUP BY runtime, session_id, result_message_id) c
+  ON c.runtime = s.runtime AND c.session_id = s.session_id AND c.result_message_id = s.message_uuid
 ORDER BY s.detector, s.candidate_id;

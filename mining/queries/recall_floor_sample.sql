@@ -42,17 +42,7 @@ SELECT
   'lake:' || s.session_id || '/' || s.message_uuid                    AS locus,
   -- truncated, whitespace-collapsed excerpt of the operator message (LAKE-LOCAL ONLY).
   left(regexp_replace(
-    trim(regexp_replace(
-      CASE
-        WHEN s.runtime = 'claude-code' AND json_type(m.content) = 'VARCHAR'
-          THEN json_extract_string(m.content, '$')
-        WHEN s.runtime = 'claude-code' AND json_type(m.content) = 'ARRAY'
-          THEN coalesce(
-                 nullif(array_to_string(json_extract(m.content, '$[*].text')::varchar[], ' '), ''),
-                 regexp_replace(array_to_string(json_extract(m.content, '$[*].content')::varchar[], ' '),
-                                '^.*?the user said:\s*', ''))
-        ELSE m.content
-      END, '^\[Request interrupted by user[^\]]*\]', '')),
+    trim(regexp_replace(m.text, '^\[Request interrupted by user[^\]]*\]', '')),
     '[[:space:]]+', ' ', 'g'), 240)                                   AS excerpt,
   -- copy-paste, fill verdict + context_judgment (+ optional note = role-level gloss only)
   '{"message_uuid":"' || s.message_uuid

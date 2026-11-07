@@ -25,3 +25,11 @@ CREATE OR REPLACE MACRO varve_campaign(cwd, tok) AS
        THEN nullif(regexp_extract(cwd, '/\.claude/worktrees/([^/]+)', 1), '')
        WHEN tok IS NULL OR tok = '' THEN NULL
        ELSE tok END;
+
+-- Block-array text helpers shared by the adapters. _join_blocks has string_agg
+-- semantics over a list: NULL elements are skipped, NULL when none remain. The
+-- separator is the two characters backslash and n, not a newline; changing it
+-- moves every token set built from joined text.
+CREATE OR REPLACE MACRO _join_blocks(l) AS
+  CASE WHEN len(list_filter(l, lambda x: x IS NOT NULL)) > 0 THEN array_to_string(l, '\n') END;
+CREATE OR REPLACE MACRO _block_type(j) AS json_extract_string(j, '$.type');

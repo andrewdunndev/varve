@@ -28,10 +28,12 @@ INSERT INTO oc.message VALUES
 INSERT INTO oc.part VALUES
   ('oc-part-1', 'oc-msg-1', 'oc-session-1', 1785715200000,
    '{"type":"text","text":"please write a hello function"}'),
+  ('oc-part-1r', 'oc-msg-2', 'oc-session-1', 1785715201400,
+   '{"type":"reasoning","text":"The request is small."}'),
   ('oc-part-2', 'oc-msg-2', 'oc-session-1', 1785715201500,
    '{"type":"text","text":"Sure thing."}'),
   ('oc-part-3', 'oc-msg-2', 'oc-session-1', 1785715201600,
-   '{"type":"tool","callID":"call-1","tool":"bash","state":{"status":"completed","time":{"start":1785715201600,"end":1785715201700}}}');
+   '{"type":"tool","callID":"call-1","tool":"bash","state":{"status":"completed","input":{"command":"echo hi"},"output":"hi","time":{"start":1785715201600,"end":1785715201700}}}');
 
 -- Detector coverage (2023, outside every stats window): a rejected tool part
 -- (D1's forward-compatible branch), an errored one, and a lexical opener (D3).
@@ -53,8 +55,8 @@ INSERT INTO oc.part VALUES
   ('oc-part-5', 'oc-msg-4', 'oc-session-2023', 1685577601500,
    '{"type":"text","text":"Here are the project files in the repository."}'),
   ('oc-part-6', 'oc-msg-4', 'oc-session-2023', 1685577601600,
-   '{"type":"tool","callID":"call-2","tool":"bash","state":{"status":"rejected","time":{"start":1685577601600,"end":1685577601700}}}'),
+   '{"type":"tool","callID":"call-2","tool":"bash","state":{"status":"rejected","input":{"command":"rm -r build"},"time":{"start":1685577601600,"end":1685577601700}}}'),
   ('oc-part-7', 'oc-msg-4', 'oc-session-2023', 1685577601700,
-   '{"type":"tool","callID":"call-3","tool":"bash","state":{"status":"error","time":{"start":1685577601700,"end":1685577601800}}}'),
+   '{"type":"tool","callID":"call-3","tool":"bash","state":{"status":"error","input":{"command":"false"},"error":"exit 1","time":{"start":1685577601700,"end":1685577601800}}}'),
   ('oc-part-8', 'oc-msg-5', 'oc-session-2023', 1685577605000,
    '{"type":"text","text":"no, use the other directory instead"}');

@@ -15,11 +15,11 @@
 --                 pi, absent from operator_messages, counts its role='user' messages.
 --   step        = one assistant turn: one api_calls row.
 --   tokens      = input + output + cache_read + cache_write over api_calls.
---   cost_usd    = sum(api_calls.cost_usd), priced at ingest (adapters, pricing.csv).
+--   cost_usd    = sum(api_calls.cost_usd), priced at build (adapters, pricing.toml).
 --   tool success= tool results not marked as errors / all tool results. Claude Code:
---                 tool_result blocks in user messages, error = is_error, one per
---                 tool_use_id. opencode: tool_calls with decision completed|error.
---                 pi: tool_calls (from toolResult), error = decision 'error'.
+--                 tool_calls with a result, one per tool_use_id, an error when its outcome
+--                 is error, denied or cancelled, dated by the result's carrier message.
+--                 opencode and pi: tool_calls with outcome ok or error.
 --   active day  = a local day with at least one prompt.
 --   best streak = the longest run of consecutive active days inside the window.
 --   level       = heatmap intensity of an active day: 1..4 by the `metric` value
@@ -50,12 +50,6 @@ SELECT
   least(make_date(y, 12, 31), today)                          AS last_day
 FROM p, (SELECT coalesce(try_cast(getvariable('year') AS INTEGER), year(today)) AS y FROM p);
 
-CREATE OR REPLACE TEMP TABLE stats_cc_tool_carriers AS
-SELECT runtime, timestamp, content
-FROM messages
-WHERE runtime = 'claude-code' AND role = 'user'
-  AND json_type(content) = 'ARRAY' AND content LIKE '%tool_result%';
-
 CREATE OR REPLACE TEMP TABLE stats_events AS
 SELECT runtime, stats_local_day(runtime, started_at) AS day, 'session' AS kind, 1::double AS n
 FROM sessions WHERE parent_session_id IS NULL
@@ -84,21 +78,20 @@ SELECT runtime, stats_local_day(runtime, timestamp), unnest(['step', 'tokens', '
 FROM api_calls
 UNION ALL
 SELECT runtime, stats_local_day(runtime, started_at), unnest(['tool_result', 'tool_error']),
-       unnest([1, (decision IS NOT DISTINCT FROM 'error')::int])
+       unnest([1, (outcome = 'error')::int])
 FROM tool_calls
-WHERE runtime = 'pi' OR (runtime = 'opencode' AND decision IN ('completed', 'error'))
+WHERE runtime IN ('pi', 'opencode') AND outcome IN ('ok', 'error')
 UNION ALL
 SELECT runtime, min(day), unnest(['tool_result', 'tool_error']), unnest([1, max(is_error)::int])
 FROM (
-  SELECT runtime, stats_local_day(runtime, timestamp) AS day,
-         blk ->> 'tool_use_id' AS tool_use_id,
-         coalesce(try_cast(blk ->> 'is_error' AS BOOLEAN), false) AS is_error
-  FROM (SELECT runtime, timestamp, unnest(cast(content AS json[])) AS blk FROM stats_cc_tool_carriers)
-  WHERE blk ->> 'type' = 'tool_result'
+  SELECT tc.runtime, stats_local_day(tc.runtime, m.timestamp) AS day, tc.tool_use_id,
+         tc.outcome IN ('error', 'denied', 'cancelled') AS is_error
+  FROM tool_calls tc
+  JOIN messages m ON m.runtime = tc.runtime AND m.session_id = tc.session_id
+                 AND m.message_id = tc.result_message_id
+  WHERE tc.runtime = 'claude-code'
 )
 GROUP BY runtime, tool_use_id;
-
-DROP TABLE stats_cc_tool_carriers;
 
 CREATE OR REPLACE TEMP TABLE stats_days AS
 WITH days AS (

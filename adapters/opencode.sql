@@ -20,7 +20,8 @@
 --     "reasoning","cache":{"read","write"}},...}.
 --   * part(id, message_id, session_id, time_created ms, data JSON). data.type in
 --     {tool, step-start, step-finish, text, patch, reasoning, ...}. Tool parts:
---     {"type":"tool","callID","tool","state":{"status","time":{"start","end"}}}.
+--     {"type":"tool","callID","tool","state":{"status","input","output","error",
+--     "time":{"start","end"}}}.
 --     step-finish parts carry PER-STEP cost/tokens -- deliberately NOT read for
 --     api_calls (the assistant MESSAGE already sums them; reading step-finish too
 --     would double-count). See RFC-0001 (opencode api_calls grain).
@@ -77,14 +78,17 @@ SELECT
 FROM matched;
 
 -- ---------------------------------------------------------------------------
--- messages: one row per message (all roles). Content inlined from the text/
--- reasoning parts (RFC-0001: inline content enables full-text and vector search; opencode stores
--- text in `part`, not on the message). is_sidechain is false -- opencode has no
--- sidechain flag; its parent/child structure lives at SESSION grain (parent_id).
+-- messages: one row per message (all roles). opencode keeps text in `part`, not
+-- on the message, so text is the message's text and reasoning parts joined in
+-- part order. Reasoning parts stay in: dropping them would move the prior-draft
+-- token sets the rewrite detector compares. is_sidechain is false -- opencode
+-- has no sidechain flag; its parent/child structure lives at SESSION grain
+-- (parent_id). interrupted is NULL: opencode records no interrupt signal that a
+-- query reads.
 CREATE OR REPLACE TABLE stg_messages AS
 WITH txt AS (
   SELECT message_id,
-         string_agg(json_extract_string(data, '$.text'), '\n') AS content
+         string_agg(json_extract_string(data, '$.text'), '\n' ORDER BY time_created, id) AS text
   FROM oc_part
   WHERE json_extract_string(data, '$.type') IN ('text','reasoning')
     AND json_extract_string(data, '$.text') IS NOT NULL
@@ -99,7 +103,11 @@ SELECT
   to_timestamp(m.time_created/1000.0)::timestamp   AS timestamp,
   json_extract_string(m.data, '$.role')            AS record_type,
   NULL::varchar                                    AS api_message_id,
-  txt.content                                      AS content,
+  CASE json_extract_string(m.data, '$.role')
+    WHEN 'user' THEN 'operator'
+    WHEN 'assistant' THEN 'model' END              AS origin,
+  txt.text                                         AS text,
+  NULL::boolean                                    AS interrupted,
   'opencode'                                       AS runtime,
   ss.date                                          AS date
 FROM oc_message m
@@ -157,8 +165,10 @@ JOIN stg_sessions ss    ON a.session_id = ss.session_id;
 -- ---------------------------------------------------------------------------
 -- tool_calls: one row per tool part. opencode is the ONLY runtime with real
 -- tool timing -- started_at/ended_at from state.time.{start,end} (epoch ms),
--- duration_ms their delta (NULL when either endpoint is absent), decision =
--- state.status {completed | error | running | ...}.
+-- duration_ms their delta (NULL when either endpoint is absent). outcome maps
+-- state.status: completed is ok, error is error, running and pending are
+-- running, a refusal status is denied, anything else NULL. arguments is
+-- state.input; result_text is state.output, else state.error.
 CREATE OR REPLACE TABLE stg_tool_calls AS
 WITH tool AS (
   SELECT
@@ -168,7 +178,10 @@ WITH tool AS (
     json_extract_string(data,'$.tool')                     AS tool_name,
     json_extract(data,'$.state.time.start')::bigint        AS t_start,
     json_extract(data,'$.state.time.end')::bigint          AS t_end,
-    json_extract_string(data,'$.state.status')             AS decision
+    lower(json_extract_string(data,'$.state.status'))      AS status,
+    json_extract(data,'$.state.input')::varchar            AS arguments,
+    coalesce(json_extract_string(data,'$.state.output'),
+             json_extract_string(data,'$.state.error'))    AS result_text
   FROM oc_part
   WHERE json_extract_string(data,'$.type') = 'tool'
 )
@@ -181,7 +194,17 @@ SELECT
   to_timestamp(t.t_end/1000.0)::timestamp                  AS ended_at,
   CASE WHEN t.t_start IS NOT NULL AND t.t_end IS NOT NULL
        THEN (t.t_end - t.t_start)::bigint END              AS duration_ms,
-  t.decision,
+  CASE
+    WHEN t.status = 'completed' THEN 'ok'
+    WHEN t.status = 'error' THEN 'error'
+    WHEN t.status IN ('running', 'pending') THEN 'running'
+    WHEN t.status IN ('rejected', 'denied', 'declined', 'reject', 'deny') THEN 'denied'
+  END                                                      AS outcome,
+  t.arguments,
+  t.result_text,
+  NULL::varchar                                            AS mcp_server,
+  NULL::varchar                                            AS mcp_tool,
+  t.message_id                                             AS result_message_id,
   'opencode'                                               AS runtime,
   ss.date                                                  AS date
 FROM tool t

@@ -110,24 +110,66 @@ JOIN (SELECT path, session_id, strftime(started_at,'%Y-%m-%d') AS date FROM _pi_
 WHERE e.type IS DISTINCT FROM 'session' AND e.id IS NOT NULL;
 
 -- ---------------------------------------------------------------------------
--- messages: one row per user/assistant/toolResult entry. Content inlined
--- (RFC-0001). is_sidechain false -- pi has no sidechain flag; branching is the
--- parent_id tree.
+-- messages: one row per user/assistant/toolResult entry. is_sidechain is false:
+-- pi has no sidechain flag; branching is the parent_id tree.
+--
+-- Entry content is a string or an array of blocks. The array rows are
+-- materialized before the json[] cast, as in the Claude Code adapter. text is
+-- the string or the joined text blocks; a toolResult entry carries no text, its
+-- body is the tool_calls result_text. interrupted is NULL: pi records no
+-- interrupt signal that a query reads.
+CREATE OR REPLACE TABLE _pi_msg AS
+SELECT message_id, session_id, parent_id, record_type, timestamp, date,
+       json_extract_string(mj, '$.role')            AS role,
+       json_extract(mj, '$.content')                AS cj,
+       json_extract_string(mj, '$.toolCallId')      AS tool_use_id,
+       json_extract_string(mj, '$.toolName')        AS tool_name,
+       json_extract(mj, '$.isError')::boolean       AS is_error
+FROM _pi_entries
+WHERE json_extract_string(mj, '$.role') IN ('user','assistant','toolResult');
+
+CREATE OR REPLACE TABLE _pi_arr_raw AS
+SELECT * FROM _pi_msg WHERE json_type(cj) = 'ARRAY';
+
+CREATE OR REPLACE TABLE _pi_msg_x AS
+SELECT message_id, session_id, parent_id, record_type, timestamp, date, role,
+       tool_use_id, tool_name, is_error,
+       _join_blocks(list_transform(list_filter(blocks, lambda j: _block_type(j) = 'text'),
+                                   lambda j: json_extract_string(j, '$.text'))) AS txt
+FROM (SELECT *, cast(cj AS json[]) AS blocks FROM _pi_arr_raw)
+UNION ALL
+SELECT message_id, session_id, parent_id, record_type, timestamp, date, role,
+       tool_use_id, tool_name, is_error,
+       CASE WHEN json_type(cj) = 'VARCHAR' THEN json_extract_string(cj, '$') END
+FROM _pi_msg WHERE json_type(cj) IS DISTINCT FROM 'ARRAY';
+
+-- Arguments of each tool call, from the assistant entry's toolCall blocks.
+CREATE OR REPLACE TABLE _pi_calls AS
+SELECT session_id, blk ->> 'id' AS tool_use_id, min((blk -> 'arguments')::varchar) AS arguments
+FROM (SELECT session_id, unnest(cast(cj AS json[])) AS blk
+      FROM _pi_arr_raw WHERE role = 'assistant')
+WHERE blk ->> 'type' = 'toolCall'
+GROUP BY session_id, blk ->> 'id';
+DROP TABLE _pi_arr_raw;
+
 CREATE OR REPLACE TABLE stg_messages AS
 SELECT
   message_id,
   session_id,
-  json_extract_string(mj, '$.role')       AS role,
+  role,
   parent_id,
   false                                    AS is_sidechain,
   timestamp,
   record_type,
   NULL::varchar                            AS api_message_id,
-  json_extract_string(mj, '$.content')     AS content,
+  CASE role WHEN 'toolResult' THEN 'tool_result'
+            WHEN 'user' THEN 'operator'
+            WHEN 'assistant' THEN 'model' END AS origin,
+  CASE WHEN role <> 'toolResult' THEN txt END AS text,
+  NULL::boolean                            AS interrupted,
   'pi'                                     AS runtime,
   date
-FROM _pi_entries
-WHERE json_extract_string(mj, '$.role') IN ('user','assistant','toolResult');
+FROM _pi_msg_x;
 
 -- ---------------------------------------------------------------------------
 -- api_calls: assistant entries. usage -> tokens; cost.total is pi's inline cost.
@@ -176,21 +218,27 @@ FROM asst a
 LEFT JOIN _pricing p ON a.model = p.model;
 
 -- ---------------------------------------------------------------------------
--- tool_calls: derived from toolResult entries (the documented, reliable source;
--- the assistant content-array block shape is not spec'd). pi has no tool timing,
--- so ended_at/duration_ms are NULL (like Claude Code); decision carries the
--- isError status when present.
+-- tool_calls: one row per toolResult entry (the documented, reliable source).
+-- pi has no tool timing, so ended_at and duration_ms are NULL. outcome is error
+-- when isError is set, else ok. arguments come from the assistant entry's
+-- toolCall block with the same id, NULL when none is found.
 CREATE OR REPLACE TABLE stg_tool_calls AS
 SELECT
-  session_id,
-  message_id,
-  json_extract_string(mj, '$.toolCallId')                   AS tool_use_id,
-  json_extract_string(mj, '$.toolName')                     AS tool_name,
-  timestamp                                                 AS started_at,
+  t.session_id,
+  t.message_id,
+  t.tool_use_id,
+  t.tool_name,
+  t.timestamp                                               AS started_at,
   NULL::timestamp                                           AS ended_at,
   NULL::bigint                                              AS duration_ms,
-  CASE WHEN json_extract(mj, '$.isError')::boolean THEN 'error' END AS decision,
+  CASE WHEN t.is_error THEN 'error' ELSE 'ok' END           AS outcome,
+  c.arguments,
+  t.txt                                                     AS result_text,
+  NULL::varchar                                             AS mcp_server,
+  NULL::varchar                                             AS mcp_tool,
+  t.message_id                                              AS result_message_id,
   'pi'                                                      AS runtime,
-  date
-FROM _pi_entries
-WHERE json_extract_string(mj, '$.role') = 'toolResult';
+  t.date
+FROM _pi_msg_x t
+LEFT JOIN _pi_calls c ON c.session_id = t.session_id AND c.tool_use_id = t.tool_use_id
+WHERE t.role = 'toolResult';
