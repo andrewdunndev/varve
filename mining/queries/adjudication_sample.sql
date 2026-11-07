@@ -1,17 +1,17 @@
 -- QUESTION: Give the operator a stratified sample of correction candidates to adjudicate,
 --   with everything needed to label each one (true/false positive + the context confound)
---   without hand-dereferencing every locus. This is the deliverable for G-precision
---   (RFC-0002): mining does NOT feed analysis until precision is measured on labels the
+--   without hand-dereferencing every locus. This is the deliverable for the precision
+--   measurement: mining does not feed analysis until precision is measured on labels the
 --   operator produces from THIS sample. It fabricates no precision numbers.
--- METRIC: up to 50 candidates per detector ("50 or all, whichever is smaller", RFC-0002),
+-- METRIC: up to 50 candidates per detector ("50 or all, whichever is smaller"),
 --   stratified by detector. Sampling is deterministic (ORDER BY md5(candidate_id)) so the
 --   same sample reproduces run to run and adjudications stay joinable.
 -- OUTPUT per row: candidate_id (write it into the adjudication line), detector loci
---   (non-identifying `lake:` form -- I5), model_id (the non-stationarity covariate),
+--   (non-identifying `lake:` form), model_id (the non-stationarity covariate),
 --   estate/harness/campaign, features, a truncated EXCERPT, and a ready-to-fill JSONL
 --   skeleton.
 --
--- EXCERPT CHOICE (builder decision; RFC-0002 open question "excerpt vs dereference").
+-- EXCERPT CHOICE.
 --   This query emits a truncated content excerpt of the CORRECTIVE message (the operator's
 --   own utterance; for tool_reject, the operator's rejection reason). Rationale: an
 --   adjudicator labelling 50+ loci per detector needs the correction at a glance; live-
@@ -24,7 +24,7 @@
 --   the corrective message is excerpted (operator speech); the corrected DRAFT is left as
 --   a locus (draft_locus) to dereference live when judging context, minimising model/work
 --   content in the output. Excerpt is capped at 240 chars, whitespace-collapsed.
--- W7. Run: just sql -f mining/queries/adjudication_sample.sql
+-- Run: just sql -f mining/queries/adjudication_sample.sql
 --   (or one detector: just sql -c "SET VARIABLE det='lexical'" -f mining/queries/adjudication_sample.sql)
 
 CREATE TEMP TABLE _sample AS

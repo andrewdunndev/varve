@@ -1,14 +1,14 @@
 -- QUESTION: Of operator messages mining did NOT flag, how many are correction misses --
---   the RFC-0002 G-recall floor. Mining is tuned precision-over-recall (G-precision), so
+--   the recall floor. Mining is tuned precision-over-recall, so
 --   this measures the blind spot once rather than assuming it away: adjudicate a random
 --   sample of unflagged operator messages and report detected/undetected. This sample is
---   also the RFC-0002 selection-bias denominator arm -- every event carries `selection`
+--   also the selection-bias denominator arm -- every event carries `selection`
 --   {organic|sampled}; mined promotions are organic, this population is sampled.
 -- METRIC: adjudicated missed-correction rate = (rows from THIS sample labelled
 --   verdict=true_positive) / (rows sampled here) -- a recall FLOOR, not the true recall
 --   (only this sample is adjudicated, not the full flagged=false population). Read
---   alongside G-precision's per-detector precision to bound overall recall from both sides.
--- SAMPLE: 50 rows from `operator_messages` WHERE flagged=false (RFC-0002 "random sample of
+--   alongside per-detector precision to bound overall recall from both sides.
+-- SAMPLE: 50 rows from `operator_messages` WHERE flagged=false ("random sample of
 --   user-after-assistant messages NOT flagged by any detector"), deterministic
 --   (ORDER BY md5(message_uuid)) so the sample reproduces run to run. By construction
 --   (flagged is defined as "also a correction_candidates locus"), zero rows here overlap
@@ -20,13 +20,13 @@
 --   so recall-floor labels are distinguishable from precision-sample labels once both
 --   land in the same adjudication ledger.
 --
--- EXCERPT + CONFIDENTIALITY (copied verbatim in spirit from adjudication_sample.sql;
+-- EXCERPT + CONFIDENTIALITY (as in adjudication_sample.sql;
 --   ADR-0004): the excerpt is a truncated (240-char, whitespace-collapsed) rendering of
 --   the operator message, computed at query time from lake content and printed to the
 --   operator's terminal. It is LAKE-LOCAL ONLY -- NEVER written to a repo-committed file
 --   (this .sql contains zero transcript content) and NEVER exported. Do not redirect this
 --   query's output into the repo or off ~/.local/share/varve.
--- W7. Run: just sql -f mining/queries/recall_floor_sample.sql
+-- Run: just sql -f mining/queries/recall_floor_sample.sql
 
 CREATE TEMP TABLE _floor_sample AS
 SELECT om.*

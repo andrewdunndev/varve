@@ -9,7 +9,7 @@
 --   subagent    = one child transcript or sidechain: a Claude Code sidechain root
 --                 (is_sidechain message with no parent_id), or an opencode session with
 --                 parent_session_id set. pi writes no child transcript: always 0.
---   prompt      = one human-authored user turn: an operator_messages row (the W7
+--   prompt      = one human-authored user turn: an operator_messages row (the
 --                 is_operator predicate: tool results and harness injections excluded)
 --                 that is neither a sidechain message nor in an opencode child session;
 --                 pi, absent from operator_messages, counts its role='user' messages.

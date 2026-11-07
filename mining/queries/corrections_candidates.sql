@@ -2,12 +2,12 @@
 --   runtime, day, and estate/harness -- and does any detector's volume look wrong?
 -- METRIC: count of correction_candidates rows (one row per detector+locus). day =
 --   `ts::date` (the correction's row timestamp, not the partition). The lexical %-of-user
---   -messages check is the RFC-0002 volume-sanity gate: if lexical > 5% of a runtime's
+--   -messages check is the volume-sanity gate: if lexical > 5% of a runtime's
 --   user messages the marker list is too loose.
 -- CAVEATS: candidates are PRE-adjudication -- volume is not precision. tool_reject +
 --   interrupt_redirect are Claude Code only (opencode records no user-verdict/interrupt);
 --   opencode contributes lexical + rewrite only. Counts move as the lake grows.
--- W7. Run: just sql -f mining/queries/corrections_candidates.sql
+-- Run: just sql -f mining/queries/corrections_candidates.sql
 CREATE TEMP TABLE _cc AS SELECT * FROM correction_candidates;
 
 -- (1) per detector x runtime
