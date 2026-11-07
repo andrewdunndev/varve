@@ -1,6 +1,8 @@
 -- The record contract: what each column of the four tables means.
 --
--- Ids come from the source. Unknown is NULL, never zero or invented. A column's
+-- Ids come from the source. Unknown is NULL, never zero or invented, except the
+-- summed measures: tokens read 0 when the source records no usage, and cost_usd
+-- reads 0 for an unpriced model (unpriced_model says so). A column's
 -- meaning never changes; a new meaning gets a new name. Parsers report facts and
 -- mining judges them. <rt>_* columns are nullable extensions a runtime may add.
 -- Load this file to read the contract: SELECT * FROM record.
@@ -41,11 +43,11 @@ SELECT * FROM (VALUES
   ('api_calls', 'timestamp', 'TIMESTAMP', 'When the call was made, UTC.'),
   ('api_calls', 'model', 'VARCHAR', 'The model id the source records.'),
   ('api_calls', 'provider', 'VARCHAR', 'The provider the source records.'),
-  ('api_calls', 'input', 'BIGINT', 'Input tokens, excluding cache reads and writes.'),
-  ('api_calls', 'output', 'BIGINT', 'Output tokens.'),
-  ('api_calls', 'cache_read', 'BIGINT', 'Input tokens served from cache.'),
-  ('api_calls', 'cache_write', 'BIGINT', 'Input tokens written to cache.'),
-  ('api_calls', 'cost_usd', 'DOUBLE', 'The runtime''s inline cost when it is above zero, else tokens times pricing.toml, else zero.'),
+  ('api_calls', 'input', 'BIGINT', 'Input tokens, excluding cache reads and writes. 0 when the source records no usage.'),
+  ('api_calls', 'output', 'BIGINT', 'Output tokens. 0 when the source records no usage.'),
+  ('api_calls', 'cache_read', 'BIGINT', 'Input tokens served from cache. 0 when the source records no usage.'),
+  ('api_calls', 'cache_write', 'BIGINT', 'Input tokens written to cache. 0 when the source records no usage.'),
+  ('api_calls', 'cost_usd', 'DOUBLE', 'The runtime''s inline cost when it is above zero, else tokens times pricing.toml, else zero with unpriced_model true.'),
   ('api_calls', 'unpriced_model', 'BOOLEAN', 'The model has no row in pricing.toml.'),
   ('api_calls', 'runtime', 'VARCHAR', 'The runtimes.toml name. Partition key.'),
   ('api_calls', 'date', 'DATE', 'UTC day of the session''s started_at. Partition key.'),

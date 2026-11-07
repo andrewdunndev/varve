@@ -33,7 +33,9 @@ INSERT INTO oc.part VALUES
   ('oc-part-2', 'oc-msg-2', 'oc-session-1', 1785715201500,
    '{"type":"text","text":"Sure thing."}'),
   ('oc-part-3', 'oc-msg-2', 'oc-session-1', 1785715201600,
-   '{"type":"tool","callID":"call-1","tool":"bash","state":{"status":"completed","input":{"command":"echo hi"},"output":"hi","time":{"start":1785715201600,"end":1785715201700}}}');
+   '{"type":"tool","callID":"call-1","tool":"bash","state":{"status":"completed","input":{"command":"echo hi"},"output":"hi","time":{"start":1785715201600,"end":1785715201700}}}'),
+  ('oc-part-4', 'oc-msg-2', 'oc-session-1', 1785715201800,
+   '{"type":"tool","callID":"call-4","tool":"bash","state":{"status":"running","input":{"command":"sleep 9"},"time":{"start":1785715201800}}}');
 
 -- Detector coverage (2023, outside every stats window): a rejected tool part
 -- (D1's forward-compatible branch), an errored one, and a lexical opener (D3).

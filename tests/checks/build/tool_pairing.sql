@@ -36,6 +36,9 @@ want(label, n) AS (
   ('opencode completed is ok with input and output',
    (SELECT count(*) FROM t WHERE runtime = 'opencode' AND tool_use_id = 'call-1' AND outcome = 'ok'
       AND arguments LIKE '%echo hi%' AND result_text = 'hi' AND result_message_id = message_id)),
+  ('opencode running has no result message',
+   (SELECT count(*) FROM t WHERE runtime = 'opencode' AND tool_use_id = 'call-4' AND outcome = 'running'
+      AND result_message_id IS NULL AND ended_at IS NULL AND result_text IS NULL)),
   ('opencode rejected is denied',
    (SELECT count(*) FROM t WHERE runtime = 'opencode' AND tool_use_id = 'call-2' AND outcome = 'denied')),
   ('opencode error reads state.error',

@@ -1,4 +1,5 @@
 oc-session-1,oc-msg-2,call-1,bash,2026-08-03 00:00:01.6,2026-08-03 00:00:01.7,100,ok,"{""command"":""echo hi""}",hi,NULL,NULL,oc-msg-2,2026-08-03,opencode
+oc-session-1,oc-msg-2,call-4,bash,2026-08-03 00:00:01.8,NULL,NULL,running,"{""command"":""sleep 9""}",NULL,NULL,NULL,NULL,2026-08-03,opencode
 oc-session-2023,oc-msg-4,call-2,bash,2023-06-01 00:00:01.6,2023-06-01 00:00:01.7,100,denied,"{""command"":""rm -r build""}",NULL,NULL,NULL,oc-msg-4,2023-06-01,opencode
 oc-session-2023,oc-msg-4,call-3,bash,2023-06-01 00:00:01.7,2023-06-01 00:00:01.8,100,error,"{""command"":""false""}",exit 1,NULL,NULL,oc-msg-4,2023-06-01,opencode
 pi-session-1,e3,call-1,bash,2026-08-01 00:00:01.5,NULL,NULL,ok,"{""command"":""echo hi""}",ok,NULL,NULL,e3,2026-08-01,pi

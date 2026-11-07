@@ -33,11 +33,10 @@ Three primitives: files, SQL files, one runner (`bin/duck`). Everything extensib
 - Config is TOML. Each TOML file in the data home loads as a table named after it: attribution, pricing, patterns. A pinned `yq` converts it, which is unproven here. The adjudication ledger is JSONL and gets the same treatment.
 - Personal queries stay out of the repo. Users run theirs with `just sql -f <path>`.
 - Four tables keep their names. `sql/record.sql` gives each column a written meaning.
-- Ids come from the source. Unknown is NULL, never zero or invented. Never re-mean a column; add a new name.
-- A column arrives with the query that reads it. Every JSON read lists explicit columns.
+- Ids come from the source. Unknown is NULL, never zero or invented. Never re-mean a column; add a new name. The exception is the summed measures: a call with no recorded usage reads 0 tokens and a model with no price reads 0 `cost_usd`, because every consumer sums them; `unpriced_model` carries the signal.
+- A column arrives with the query that reads it. Every JSON read of source data lists explicit columns. The exception is a config table: its columns are whatever the user's TOML rows name, so `bin/duck` reads them with inferred types over the whole file.
 - Parsers report facts. Judgment stays in mining. Analysis never parses content or raw formats. `<rt>_*` nullable columns are the extension point.
 - New columns: messages `origin`, `text`, `interrupted`; tool_calls `outcome` (ok, error, denied, cancelled, running), `arguments`, `result_text`, `mcp_server`, `mcp_tool`. `outcome` replaces `decision`.
-- Splitting `corrections.sql` waits for messages `text`, `origin` and `interrupted`.
 
 **Rejected:** an ext table, semver, renamed fact tables, a banned runtime literal in queries, a pluggable non-SQL parser (one real consumer), a dependency graph, a general overlay, option flags, plugin hooks.
 

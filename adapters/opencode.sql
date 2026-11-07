@@ -168,7 +168,8 @@ JOIN stg_sessions ss    ON a.session_id = ss.session_id;
 -- duration_ms their delta (NULL when either endpoint is absent). outcome maps
 -- state.status: completed is ok, error is error, running and pending are
 -- running, a refusal status is denied, anything else NULL. arguments is
--- state.input; result_text is state.output, else state.error.
+-- state.input; result_text is state.output, else state.error. result_message_id
+-- is the call's message once a result exists, NULL while running or unknown.
 CREATE OR REPLACE TABLE stg_tool_calls AS
 WITH tool AS (
   SELECT
@@ -178,7 +179,17 @@ WITH tool AS (
     json_extract_string(data,'$.tool')                     AS tool_name,
     json_extract(data,'$.state.time.start')::bigint        AS t_start,
     json_extract(data,'$.state.time.end')::bigint          AS t_end,
-    lower(json_extract_string(data,'$.state.status'))      AS status,
+    CASE lower(json_extract_string(data,'$.state.status'))
+      WHEN 'completed' THEN 'ok'
+      WHEN 'error' THEN 'error'
+      WHEN 'running' THEN 'running'
+      WHEN 'pending' THEN 'running'
+      WHEN 'rejected' THEN 'denied'
+      WHEN 'denied' THEN 'denied'
+      WHEN 'declined' THEN 'denied'
+      WHEN 'reject' THEN 'denied'
+      WHEN 'deny' THEN 'denied'
+    END                                                    AS outcome,
     json_extract(data,'$.state.input')::varchar            AS arguments,
     coalesce(json_extract_string(data,'$.state.output'),
              json_extract_string(data,'$.state.error'))    AS result_text
@@ -194,17 +205,12 @@ SELECT
   to_timestamp(t.t_end/1000.0)::timestamp                  AS ended_at,
   CASE WHEN t.t_start IS NOT NULL AND t.t_end IS NOT NULL
        THEN (t.t_end - t.t_start)::bigint END              AS duration_ms,
-  CASE
-    WHEN t.status = 'completed' THEN 'ok'
-    WHEN t.status = 'error' THEN 'error'
-    WHEN t.status IN ('running', 'pending') THEN 'running'
-    WHEN t.status IN ('rejected', 'denied', 'declined', 'reject', 'deny') THEN 'denied'
-  END                                                      AS outcome,
+  t.outcome,
   t.arguments,
   t.result_text,
   NULL::varchar                                            AS mcp_server,
   NULL::varchar                                            AS mcp_tool,
-  t.message_id                                             AS result_message_id,
+  CASE WHEN t.outcome IS NOT NULL AND t.outcome <> 'running' THEN t.message_id END AS result_message_id,
   'opencode'                                               AS runtime,
   ss.date                                                  AS date
 FROM tool t
