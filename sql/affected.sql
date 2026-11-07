@@ -1,5 +1,5 @@
--- varve incremental delta detection (W1; W2 keys on the unified _files map so
--- all runtimes share one manifest). Runs after prelude + adapters + stage.sql,
+-- varve incremental delta detection. Keys on the unified _files map so
+-- all runtimes share one manifest. Runs after prelude + adapters + stage.sql,
 -- before the COPY-to-lake statements. Computes _affected (date partitions to
 -- rewrite) and _inventory (current per-file high-water mark) to persist as the
 -- new manifest.

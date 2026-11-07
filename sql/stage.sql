@@ -1,4 +1,4 @@
--- varve staging assembly (W2). Runs after prelude + whichever runtime adapters
+-- varve staging assembly. Runs after prelude + whichever runtime adapters
 -- were included this cycle, before sql/affected.sql. Unions the per-runtime
 -- staging tables (_cc_*, _pi_*, _oc_*) into the shared stg_* that the pipeline
 -- COPYs to the lake, and the per-runtime file maps into _files.
@@ -12,7 +12,7 @@
 --
 -- UNION ALL BY NAME reconciles differing column sets across runtimes: each
 -- runtime's rows keep their own columns and get NULL for the others, which is the
--- nullable-runtime-specific-fields contract (RFC-0001). Empty stubs contribute
+-- nullable-runtime-specific-fields contract. Empty stubs contribute
 -- zero rows.
 
 CREATE TABLE IF NOT EXISTS _cc_sessions   (session_id VARCHAR, runtime VARCHAR, date VARCHAR);

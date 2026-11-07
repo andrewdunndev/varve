@@ -1,11 +1,10 @@
--- varve shared adapter prelude (W2). Loaded once, before every runtime adapter,
+-- varve shared adapter prelude. Loaded once, before every runtime adapter,
 -- so all three (claude_code / pi / opencode) resolve attribution and pricing the
--- same way. Extracted from the W1 Claude Code adapter when pi + opencode landed
--- (RFC-0001: attribution logic is shared, not replicated per adapter).
+-- same way.
 --
 -- Variables (set by the justfile): repo_dir (to read the versioned CSV seeds);
 -- attribution (path to the OPERATOR's rule CSV -- operator data, lives outside
--- the repo at a configured path per the public-instrument rule; the justfile
+-- the repo at a configured path; the justfile
 -- fails loudly when it is absent; format = adapters/attribution.example.csv).
 
 -- Attribution rules (operator data, configured path). Pricing stays a repo seed.
