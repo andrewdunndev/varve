@@ -60,7 +60,7 @@ One wrapper bounds every DuckDB process.
 | `bin/` | The runner (`duck`) and the scripts behind `sync`, `build`, `check`, `forget` and `mine` |
 | `justfile` | `sync`, `build`, `check`, `forget`, `mine`, `review`, `interventions`, `stats`, `sql`, `lint`, `test`, `disk` |
 
-`mise install` provisions the pinned `duckdb`, `just` and `yq` from `mise.toml`. A copy of either on `PATH` is used only when it reports the pinned version.
+`mise install` provisions the pinned `duckdb`, `just` and `yq` from `mise.toml`. A `duckdb` or `yq` on `PATH` is used only when it reports the pinned version.
 
 ## Mining
 
