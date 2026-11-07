@@ -31,7 +31,7 @@ Only the first rung needs the core. The rest are layers over the four tables.
 
 Target design (ADR-0008 to ADR-0010, proposed). `just ingest` still runs until it is built.
 
-Three primitives: files, SQL files, and one runner, `bin/duck`. Every extensible piece is a SQL file, run in a fixed order: adapters, checks, swap, mines.
+Three primitives: files, SQL files, one runner (`bin/duck`). Everything extensible is a SQL file, run in a fixed order: adapters, checks, swap, mines.
 
 | Kind | Reads | Rows become |
 |------|-------|-------------|

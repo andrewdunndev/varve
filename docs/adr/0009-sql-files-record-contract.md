@@ -7,13 +7,13 @@
 ## Context
 
 - First outside contribution: three adapters.
-- They needed only the normalized tables. Each still edited five or six shared files.
+- Each needed only the normalized tables, and each edited five or six shared files.
 - Analysis parses raw `content` per runtime, and column meanings are unwritten.
 - `input`, api_calls grain and unpaired tools each came back different ways. Whole-corpus JSON inference builds a giant struct.
 
 ## Decision
 
-Three primitives: files, SQL files, one runner (`bin/duck`). Everything extensible is a SQL file. Files differ in what they read and what happens to their rows.
+Three primitives: files, SQL files, one runner (`bin/duck`). Everything extensible is a SQL file.
 
 | Kind | Reads | Rows become |
 |------|-------|-------------|
@@ -22,7 +22,7 @@ Three primitives: files, SQL files, one runner (`bin/duck`). Everything extensib
 | mine | the tables | a saved table |
 | query | the tables | printed output |
 
-- Fixed order: adapters, checks, swap, mines. No dependency graph, no general overlay, no option flags, no plugin hooks. Editing the SQL is the configuration.
+- Fixed order: adapters, checks, swap, mines. Editing the SQL is the configuration.
 - The repo holds mechanisms and examples. The data home holds anything tuned to one user.
 - A runtime is one adapter, one fixture, one row in `runtimes.csv`. The data home holds `runtimes.csv`; the repo ships `runtimes.example.csv`. No row, no run.
 - Adapters resolve from the data home first, then the repo. A contributor runs an adapter with no PR.

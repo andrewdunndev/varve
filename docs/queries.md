@@ -1,6 +1,6 @@
 # Queries
 
-Each file in `queries/` answers one question. Its header holds the metric definition and the caveats.
+Each file in `queries/` answers one question. Its header defines the metric and its caveats.
 
 | File | Question |
 |------|----------|

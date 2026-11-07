@@ -39,7 +39,7 @@
 - The mirror adds a tier and widens the confidentiality surface. It is an allow-list.
 - A rewound file that later outgrows its old length overwrites the rewound tail. Accepted.
 - Rows deleted inside a SQLite source are not protected. `check` reports the loss.
-- Parquet footers are read on every query once no database holds the views. The cost is to be measured.
+- Parquet footers are read on every query once no database holds the views. The cost is unmeasured.
 - The live SQLite copy in the mirror needs a lab check before the snapshot goes.
 
 **Neutral**
