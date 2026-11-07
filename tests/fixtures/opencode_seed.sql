@@ -1,10 +1,8 @@
--- varve CI fixture: minimal opencode V1-contract SQLite store (session/message/
--- part), matching the shape adapters/opencode.sql documents. Run with the target
--- sqlite file already ATTACHed read-write as schema `oc` (see justfile `test`
--- recipe -- ATTACH needs a literal path, same constraint noted in
--- adapters/opencode.sql, so it happens in the recipe, not here). One session,
--- one user + one assistant message, one text part and one tool part -- enough to
--- exercise every column adapters/opencode.sql reads.
+-- CI fixture: a minimal opencode V1-contract SQLite store (session/message/
+-- part), matching the shape adapters/opencode.sql reads. Run with the target
+-- sqlite file already attached read-write as schema `oc` (see the justfile
+-- `test` recipe). One session, one user and one assistant message, one text
+-- part and one tool part: enough to exercise every column the adapter reads.
 
 CREATE TABLE oc.session (
   id VARCHAR, parent_id VARCHAR, directory VARCHAR, version VARCHAR,

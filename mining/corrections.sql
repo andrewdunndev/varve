@@ -72,7 +72,7 @@
 
 -- -------------------------------------------------------------------------------------
 -- Lake-local read views over the freshly-written core Parquet (same read_parquet shape
--- as sql/views.sql; local to this mining session so `mine` needs no attached db).
+-- as the views bin/duck generates; local to this mining session).
 CREATE OR REPLACE VIEW _lk_messages AS
   SELECT * FROM read_parquet(getvariable('lake') || '/messages/**/*.parquet',
     hive_partitioning = true, union_by_name = true);

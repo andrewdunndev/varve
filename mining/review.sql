@@ -26,7 +26,7 @@
 -- data home.
 -- =====================================================================================
 
--- Lake-local read views (same read_parquet shape as sql/views.sql; local to this session).
+-- Lake-local read views (the same read_parquet shape bin/duck generates; local to this session).
 CREATE OR REPLACE VIEW _rv_messages AS
   SELECT * FROM read_parquet(getvariable('lake') || '/messages/**/*.parquet',
     hive_partitioning = true, union_by_name = true);

@@ -23,7 +23,7 @@ can serve as simulation evidence and leak-free benchmark material.
 
 ## Architecture
 
-Target design (ADR-0008 to ADR-0010, proposed). `just ingest` runs until it is built.
+Design: ADR-0008 to ADR-0010. `just sync` copies sources into a mirror, `just build` rebuilds the lake from it.
 
 Three primitives: files, SQL files, one runner (`bin/duck`). Everything extensible is a SQL file, run in a fixed order: adapters, checks, swap, mines.
 
@@ -49,14 +49,15 @@ One wrapper bounds every DuckDB process.
 ## Layout
 
 | Path | What |
-|------|------|
-| `adapters/` | One normalizer per runtime (Claude Code, pi, opencode), plus the pricing and attribution seeds |
+| `adapters/` | One normalizer per runtime (Claude Code, pi, opencode), plus example pricing and attribution tables |
+| `sql/` | Shared adapter prelude |
 | `sql/` | Shared prelude, staging, delta detection and lake views |
 | `queries/` | The versioned SQL query library |
 | `mining/` | Correction mining, review rendering, year-in-review stats and their queries |
 | `docs/` | PRD, ADRs (`adr/`), RFCs (`rfc/`), query index |
+| `checks/` | Checks that run on every build |
 | `tests/` | Synthetic three-runtime fixtures and expected output for `just test` |
-| `justfile` | `backfill`, `ingest`, `mine`, `review`, `interventions`, `stats`, `sql`, `lint`, `test`, `disk` |
+| `justfile` | `sync`, `build`, `check`, `forget`, `mine`, `review`, `interventions`, `stats`, `sql`, `lint`, `test`, `disk` |
 
 `mise install` provisions the pinned `duckdb`, `just` and `yq` from `mise.toml`.
 

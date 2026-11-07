@@ -1,0 +1,13 @@
+# Test runtimes: the build reads the mirror in place, so no source or include.
+
+[[row]]
+name = "claude-code"
+adapter = "claude_code.sql"
+
+[[row]]
+name = "pi"
+adapter = "pi.sql"
+
+[[row]]
+name = "opencode"
+adapter = "opencode.sql"

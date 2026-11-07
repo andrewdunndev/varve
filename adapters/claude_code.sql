@@ -1,14 +1,11 @@
--- varve Claude Code adapter. Near-pure
--- DuckDB SQL, per ADR-0002. Reads raw Claude Code JSONL in place and derives the
--- four normalized per-runtime staging tables (_cc_sessions, _cc_messages,
--- _cc_api_calls, _cc_tool_calls) plus a file->session->date map (_cc_files) used
--- for incremental delta detection. sql/stage.sql unions the per-runtime staging
--- into the shared stg_* the pipeline COPYs to the lake.
+-- varve Claude Code adapter. Near-pure SQL, per ADR-0002. Reads the mirrored
+-- Claude Code JSONL and derives the four normalized tables stg_sessions,
+-- stg_messages, stg_api_calls and stg_tool_calls; the build copies them to the
+-- lake.
 --
 -- Depends on sql/prelude.sql (run first): _attr_rules, _pricing, varve_harness(),
--- varve_campaign(). Variables (set by the justfile via `-c "SET VARIABLE ..."`):
---   cc_source : glob of source JSONL (recursive; MUST include subagent files)
---   repo_dir  : this repo root (to read the versioned CSV seeds)
+-- varve_campaign(). Variable set by the build:
+--   mirror_dir : this runtime's mirror folder (no trailing slash)
 --
 -- Source shape (Claude Code v2.1.x):
 --   * ~/.claude/projects/<dashed-cwd>/<session_id>.jsonl  = main session
@@ -19,23 +16,45 @@
 --   * message.usage = {input_tokens, output_tokens, cache_read_input_tokens,
 --     cache_creation_input_tokens} -- exactly the ccusage UsageEntry grain.
 --   * costUSD is ABSENT from every record in this corpus -> cost is computed
---     from tokens x pricing.csv (LiteLLM rates), never read from the record.
+--     from tokens x pricing.toml (LiteLLM rates), never read from the record.
 --   * Streaming writes multiple lines sharing (message.id, requestId) with
 --     identical input/cache but GROWING output_tokens; the final line holds the
 --     complete usage. Dedup keeps MAX(output_tokens) per (message.id,requestId).
 --   * model '<synthetic>' rows (zero tokens) are excluded, matching ccusage.
 
 -- ---------------------------------------------------------------------------
--- Raw read. ignore_errors=true tolerates schema drift across CC versions
--- (2.1.114 .. 2.1.201 seen); union_by_name=true unions column presence.
+-- Raw read with an explicit schema: inference over the whole corpus collapses
+-- to a single MAP column once rare top-level keys accumulate. Only main session
+-- files (<project>/<id>.jsonl) and subagent transcripts are read; other JSONL
+-- (workflow journals, tool output) is skipped. Values that do not fit the
+-- schema read as NULL (ignore_errors).
 CREATE OR REPLACE TABLE _cc_raw AS
 SELECT * FROM read_json(
-  getvariable('cc_source'),
-  format             = 'newline_delimited',
-  union_by_name      = true,
-  ignore_errors      = true,
-  filename           = true,
-  maximum_object_size = 100000000
+  getvariable('mirror_dir') || '/**/*.jsonl',
+  format              = 'newline_delimited',
+  records             = true,
+  ignore_errors       = true,
+  filename            = true,
+  maximum_object_size = 100000000,
+  columns = {
+    sessionId:   'VARCHAR',
+    cwd:         'VARCHAR',
+    timestamp:   'TIMESTAMP',
+    version:     'VARCHAR',
+    uuid:        'VARCHAR',
+    parentUuid:  'VARCHAR',
+    isSidechain: 'BOOLEAN',
+    type:        'VARCHAR',
+    requestId:   'VARCHAR',
+    message:     'STRUCT(role VARCHAR, id VARCHAR, model VARCHAR, content JSON,
+                  usage STRUCT(input_tokens BIGINT, output_tokens BIGINT,
+                               cache_read_input_tokens BIGINT,
+                               cache_creation_input_tokens BIGINT))'
+  }
+)
+WHERE regexp_matches(
+  ltrim(filename[length(getvariable('mirror_dir')) + 1:], '/'),
+  '^[^/]+/[^/]+\.jsonl$|^[^/]+/[^/]+/subagents/(.+/)?agent-[^/]+\.jsonl$'
 );
 
 -- ---------------------------------------------------------------------------
@@ -43,7 +62,7 @@ SELECT * FROM read_json(
 -- session spans the main file + its subagents). parent_session_id is NULL for
 -- Claude Code -- CC has no session->session parent chain in these records; the
 -- subagent linkage is carried at message grain via is_sidechain, not here.
-CREATE OR REPLACE TABLE _cc_sessions AS
+CREATE OR REPLACE TABLE stg_sessions AS
 WITH base AS (
   SELECT sessionId::varchar          AS session_id,
          any_value(cwd)              AS cwd,
@@ -75,6 +94,9 @@ SELECT
   started_at,
   NULL::varchar                                                    AS parent_session_id,
   cc_version,
+  NULL::varchar                                                    AS pi_version,
+  NULL::varchar                                                    AS oc_version,
+  NULL::varchar                                                    AS agent,
   strftime(started_at, '%Y-%m-%d')                                 AS date
 FROM matched;
 
@@ -84,7 +106,7 @@ FROM matched;
 -- stored INLINE (the lake is local-only per ADR-0004; inline
 -- content enables full-text and vector search). Other record types (system/mode/snapshot/...)
 -- are not messages and are skipped -- the raw JSONL remains the source of truth.
-CREATE OR REPLACE TABLE _cc_messages AS
+CREATE OR REPLACE TABLE stg_messages AS
 SELECT
   r.uuid::varchar               AS message_id,
   r.sessionId::varchar          AS session_id,
@@ -98,14 +120,14 @@ SELECT
   'claude-code'                 AS runtime,
   ss.date                       AS date
 FROM _cc_raw r
-JOIN _cc_sessions ss ON r.sessionId::varchar = ss.session_id
+JOIN stg_sessions ss ON r.sessionId::varchar = ss.session_id
 WHERE r.type IN ('user','assistant') AND r.uuid IS NOT NULL;
 
 -- ---------------------------------------------------------------------------
 -- api_calls: the ccusage UsageEntry spine. Dedup per (message.id, requestId)
 -- taking MAX(output_tokens) (streaming final); input/cache are constant in a
--- group so MAX == the value. cost_usd computed from pricing.csv.
-CREATE OR REPLACE TABLE _cc_api_calls AS
+-- group so MAX == the value. cost_usd computed from pricing.toml.
+CREATE OR REPLACE TABLE stg_api_calls AS
 WITH asst AS (
   SELECT
     r.sessionId::varchar                        AS session_id,
@@ -157,7 +179,7 @@ SELECT
   ss.date       AS date
 FROM dedup d
 LEFT JOIN _pricing p  ON d.model = p.model
-JOIN _cc_sessions ss  ON d.session_id = ss.session_id;
+JOIN stg_sessions ss  ON d.session_id = ss.session_id;
 
 -- ---------------------------------------------------------------------------
 -- tool_calls: one row per assistant tool_use block. duration_ms / ended_at /
@@ -174,7 +196,7 @@ SELECT sessionId::varchar AS session_id, uuid::varchar AS message_id,
 FROM _cc_raw
 WHERE type = 'assistant' AND json_type(message.content::json) = 'ARRAY';
 
-CREATE OR REPLACE TABLE _cc_tool_calls AS
+CREATE OR REPLACE TABLE stg_tool_calls AS
 SELECT
   b.session_id,
   b.message_id,
@@ -187,15 +209,6 @@ SELECT
   'claude-code'   AS runtime,
   ss.date         AS date
 FROM _cc_asst_blocks b
-JOIN _cc_sessions ss ON b.session_id = ss.session_id,
+JOIN stg_sessions ss ON b.session_id = ss.session_id,
 LATERAL (SELECT unnest(cast(b.content_json AS json[])) AS blk)
 WHERE blk ->> 'type' = 'tool_use';
-
--- ---------------------------------------------------------------------------
--- file -> session -> date map for incremental delta detection. A change to any
--- file (main or subagent) marks its session's date partition for rewrite.
-CREATE OR REPLACE TABLE _cc_files AS
-SELECT DISTINCT r.filename AS path, r.sessionId::varchar AS session_id, ss.date
-FROM _cc_raw r
-JOIN _cc_sessions ss ON r.sessionId::varchar = ss.session_id
-WHERE r.filename IS NOT NULL;

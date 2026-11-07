@@ -1,23 +1,19 @@
--- varve pi adapter. Reads pi's append-only JSONL session files and derives
--- the four normalized per-runtime staging tables (_pi_sessions, _pi_messages,
--- _pi_api_calls, _pi_tool_calls) plus a file->session->date map (_pi_files).
--- sql/stage.sql unions these into the shared stg_*.
+-- varve pi adapter. Reads the mirrored pi JSONL session files and derives the
+-- four normalized tables stg_sessions, stg_messages, stg_api_calls and
+-- stg_tool_calls; the build copies them to the lake.
 --
--- STATUS: correct-by-construction against the pi v3 session-format spec
--- (earendil-works/pi, packages/coding-agent/docs/session-format.md). There is NO
--- pi install on the build machine, so it only runs where a pi corpus exists
--- (the justfile skips it cleanly when no pi JSONL is present); so far it has
--- executed against a single-session real corpus only. Validate row counts +
--- reconcile inline vs computed cost before trusting it at scale.
+-- STATUS: correct by construction against the pi v3 session-format spec
+-- (earendil-works/pi, packages/coding-agent/docs/session-format.md); so far it
+-- has executed against a single-session real corpus only. Validate row counts
+-- and reconcile inline against computed cost before trusting it at scale.
 -- (RFC-0001 records this as a coverage limitation.)
 --
 -- Depends on sql/prelude.sql (run first): _attr_rules, _pricing, varve_harness(),
--- varve_campaign(). Variables (set by the justfile):
---   pi_source : recursive glob of pi JSONL (~/.pi/agent/sessions/**/*.jsonl)
---   repo_dir  : this repo root.
+-- varve_campaign(). Variable set by the build:
+--   mirror_dir : this runtime's mirror folder (no trailing slash)
 --
 -- Source shape (pi v3 spec):
---   * Path: ~/.pi/agent/sessions/<dir-encoded-cwd>/<timestamp>_<id>.jsonl.
+--   * Path: <dir-encoded-cwd>/<timestamp>_<id>.jsonl.
 --   * Line 1 header: {"type":"session","version":3,"id":<uuid>,
 --     "timestamp":<ISO>,"cwd":<path>}. The session id + cwd live ONLY here;
 --     entries carry no sessionId, so entries link to their session by FILENAME.
@@ -36,17 +32,26 @@
 -- rows -- the subagent's cost folds into the parent's rolled-up usage if pi
 -- writes one, else it is simply absent.
 --
--- Nested camelCase fields (usage.cacheRead, cost.total) are read via CAST(message
--- AS JSON) + json_extract so struct-inference casing cannot silently miss them.
+-- Nested camelCase fields (usage.cacheRead, cost.total) are read with json_extract on
+-- the message JSON, so struct-inference casing cannot silently miss them.
 
 CREATE OR REPLACE TABLE _pi_raw AS
 SELECT * FROM read_json(
-  getvariable('pi_source'),
+  getvariable('mirror_dir') || '/**/*.jsonl',
   format              = 'newline_delimited',
-  union_by_name       = true,
+  records             = true,
   ignore_errors       = true,
   filename            = true,
-  maximum_object_size = 100000000
+  maximum_object_size = 100000000,
+  columns = {
+    type:      'VARCHAR',
+    id:        'VARCHAR',
+    parentId:  'VARCHAR',
+    timestamp: 'TIMESTAMP',
+    version:   'VARCHAR',
+    cwd:       'VARCHAR',
+    message:   'JSON'
+  }
 );
 
 -- Header line per file: the only place carrying session id + cwd + version.
@@ -65,7 +70,7 @@ WHERE type = 'session' AND id IS NOT NULL;
 -- parent_session_id is NULL (pi branches WITHIN a session via message parentId;
 -- there is no session->session parent chain, and --no-session children write no
 -- transcript -- see coverage hole above).
-CREATE OR REPLACE TABLE _pi_sessions AS
+CREATE OR REPLACE TABLE stg_sessions AS
 WITH matched AS (
   SELECT h.*, r.estate, r.harness AS harness_tok, r.campaign AS campaign_tok
   FROM _pi_headers h
@@ -82,7 +87,10 @@ SELECT
   varve_campaign(cwd, campaign_tok) AS campaign,
   started_at,
   NULL::varchar                     AS parent_session_id,
+  NULL::varchar                     AS cc_version,
   pi_version,
+  NULL::varchar                     AS oc_version,
+  NULL::varchar                     AS agent,
   strftime(started_at, '%Y-%m-%d')  AS date
 FROM matched;
 
@@ -105,7 +113,7 @@ WHERE e.type IS DISTINCT FROM 'session' AND e.id IS NOT NULL;
 -- messages: one row per user/assistant/toolResult entry. Content inlined
 -- (RFC-0001). is_sidechain false -- pi has no sidechain flag; branching is the
 -- parent_id tree.
-CREATE OR REPLACE TABLE _pi_messages AS
+CREATE OR REPLACE TABLE stg_messages AS
 SELECT
   message_id,
   session_id,
@@ -124,10 +132,10 @@ WHERE json_extract_string(mj, '$.role') IN ('user','assistant','toolResult');
 -- ---------------------------------------------------------------------------
 -- api_calls: assistant entries. usage -> tokens; cost.total is pi's inline cost.
 -- Cost policy (RFC-0001): prefer the runtime's inline cost.total when present;
--- else compute from tokens x seed. unpriced_model flags a model absent from the
--- seed. The inline-vs-computed reconciliation delta is a query-time concern
+-- else compute from tokens x pricing table. unpriced_model flags a model absent from the
+-- pricing table. The inline-vs-computed reconciliation delta is a query-time concern
 -- (queries/reconcile_pi_cost.sql), not a stored column.
-CREATE OR REPLACE TABLE _pi_api_calls AS
+CREATE OR REPLACE TABLE stg_api_calls AS
 WITH asst AS (
   SELECT
     session_id,
@@ -172,7 +180,7 @@ LEFT JOIN _pricing p ON a.model = p.model;
 -- the assistant content-array block shape is not spec'd). pi has no tool timing,
 -- so ended_at/duration_ms are NULL (like Claude Code); decision carries the
 -- isError status when present.
-CREATE OR REPLACE TABLE _pi_tool_calls AS
+CREATE OR REPLACE TABLE stg_tool_calls AS
 SELECT
   session_id,
   message_id,
@@ -186,11 +194,3 @@ SELECT
   date
 FROM _pi_entries
 WHERE json_extract_string(mj, '$.role') = 'toolResult';
-
--- ---------------------------------------------------------------------------
--- file -> session -> date map. One file per session; a grown (appended) file
--- changes size+mtime -> its date partition rebuilds from full content -> live
--- pi-session appends counted exactly once (same model as Claude Code).
-CREATE OR REPLACE TABLE _pi_files AS
-SELECT DISTINCT path, session_id, strftime(started_at,'%Y-%m-%d') AS date
-FROM _pi_headers;

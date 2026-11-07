@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Run every check: checks/*.sql in the repo, then checks/*.sql in the data home.
+# A check is a SQL file whose one column, action, names the next step; each row
+# is a failure. A check that errors is a failure. The lake it reads comes from
+# the generated views; VARVE_LAKE and VARVE_PUBLISHED choose which.
+set -euo pipefail
+
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+data="${VARVE_DATA:-$HOME/.local/share/varve}"
+
+fail=0
+for f in "$repo"/checks/*.sql "$data"/checks/*.sql; do
+  [ -f "$f" ] || continue
+  stem="$(basename "$f" .sql)"
+  rc=0
+  out="$("$repo/bin/duck" "check $stem" -noheader -list -f "$f")" || rc=$?
+  if [ "$rc" -ne 0 ]; then fail=1; continue; fi
+  if [ -n "$out" ]; then
+    while IFS= read -r line; do echo "varve: check $stem: $line" >&2; done <<< "$out"
+    fail=1
+  fi
+done
+exit "$fail"

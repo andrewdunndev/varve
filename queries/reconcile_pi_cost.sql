@@ -1,13 +1,12 @@
 -- pi inline-cost vs computed-cost reconciliation (ADR-0006). pi records an
 -- inline-computed cost per assistant message; the adapter stores that as cost_usd
 -- (preferring the runtime's inline value, RFC-0001). This query recomputes cost
--- from the stored tokens x the pricing seed and reports the per-model delta where
--- the model overlaps the seed -- so a divergence between pi's inline cost and our
--- seed is visible without a second stored column. Empty until a pi corpus exists.
--- Run: just sql -c "SET VARIABLE repo='$PWD';" -f queries/reconcile_pi_cost.sql
+-- from the stored tokens x the pricing table and reports the per-model delta where
+-- the model overlaps it, so a divergence between pi's inline cost and our
+-- pricing is visible without a second stored column. Empty until a pi corpus exists.
+-- Run: just sql -f queries/reconcile_pi_cost.sql
 WITH seed AS (
-  SELECT * FROM read_csv(getvariable('repo') || '/adapters/pricing.csv',
-    header = true, comment = '#', auto_detect = true)
+  SELECT * FROM pricing
 ),
 pi AS (
   SELECT model,

@@ -1,25 +1,18 @@
--- varve shared adapter prelude. Loaded once, before every runtime adapter,
--- so all three (claude_code / pi / opencode) resolve attribution and pricing the
--- same way.
+-- Shared adapter prelude, loaded before each runtime adapter so all three
+-- resolve attribution and pricing the same way.
 --
--- Variables (set by the justfile): repo_dir (to read the versioned CSV seeds);
--- attribution (path to the OPERATOR's rule CSV -- operator data, lives outside
--- the repo at a configured path; the justfile
--- fails loudly when it is absent; format = adapters/attribution.example.csv).
+-- attribution and pricing are the data home's attribution.toml and
+-- pricing.toml, exposed as views by bin/duck. forgotten is the data home's
+-- forgotten.toml when it exists, else empty.
 
--- Attribution rules (operator data, configured path). Pricing stays a repo seed.
-CREATE OR REPLACE TABLE _attr_rules AS
-SELECT * FROM read_csv(getvariable('attribution'),
-  header = true, comment = '#', auto_detect = true);
+CREATE OR REPLACE TABLE _attr_rules AS SELECT * FROM attribution;
+CREATE OR REPLACE TABLE _pricing AS SELECT * FROM pricing;
 
-CREATE OR REPLACE TABLE _pricing AS
-SELECT * FROM read_csv(getvariable('repo_dir') || '/adapters/pricing.csv',
-  header = true, comment = '#', auto_detect = true);
+CREATE VIEW IF NOT EXISTS forgotten AS SELECT NULL::VARCHAR AS session_id WHERE false;
 
 -- Attribution structural-token resolution (ADR-0005). Every adapter matches its
 -- session cwd against _attr_rules (lowest-priority glob wins), then resolves the
--- {repo}/{worktree} tokens from the cwd via these macros -- identical logic for
--- all runtimes so the estate/harness/campaign columns mean the same thing.
+-- {repo}/{worktree} tokens from the cwd via these macros.
 --   {repo}     -> repo dir after gitlab.com/<ns>/ or github.com/<ns>/
 --   {worktree} -> segment after /.claude/worktrees/, else NULL; empty tok -> NULL
 CREATE OR REPLACE MACRO varve_harness(cwd, tok) AS

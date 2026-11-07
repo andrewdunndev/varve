@@ -1,19 +1,11 @@
--- varve opencode adapter. Reads opencode's SQLite store via DuckDB's sqlite
--- extension and derives the four normalized per-runtime staging tables
--- (_oc_sessions, _oc_messages, _oc_api_calls, _oc_tool_calls) plus a
--- file->session->date map (_oc_files). sql/stage.sql unions these into stg_*.
---
--- The justfile ATTACHes the read-only snapshot as schema `oc` BEFORE running this
--- file (ATTACH needs a literal path, which the justfile holds): it clones
--- opencode.db (+ -wal/-shm) with an APFS copy-on-write clone (`cp -c`, instant,
--- no extra space) so ATTACH READ_ONLY can neither write nor lock the operator's
--- live opencode session -- the live store is provably untouched.
+-- varve opencode adapter. Reads the mirrored opencode SQLite store through the
+-- sqlite extension and derives the four normalized tables stg_sessions,
+-- stg_messages, stg_api_calls and stg_tool_calls; the build copies them to the
+-- lake.
 --
 -- Depends on sql/prelude.sql (run first): _attr_rules, _pricing, varve_harness(),
--- varve_campaign(). Variables (set by the justfile):
---   opencode_db : path to the LIVE db, recorded verbatim in _oc_files so the
---                 manifest change-detection keys on the real file (not the clone).
---   repo_dir    : this repo root.
+-- varve_campaign(). Variable set by the build:
+--   mirror_dir : this runtime's mirror folder; opencode.db sits directly in it
 --
 -- Source shape (opencode V1 tables):
 --   * V1 contract tables: session / message / part (ADR-0006 -- pinned; the V2
@@ -36,17 +28,21 @@
 -- Cost (cost:0 defense, ADR-0006). Assistant data.cost is authoritative when
 -- present and > 0 -> use it. Some rows record cost 0 (the historic opencode
 -- discrepancy, and subscription-billed models with no per-token price). When
--- the inline cost is 0/absent AND the model is in the pricing seed, compute from
--- tokens x seed. When 0/absent AND unpriced (subscription/gpt/gemini not in the seed),
+-- the inline cost is 0/absent AND the model is in the pricing table, compute from
+-- tokens x pricing table. When 0/absent AND unpriced (subscription/gpt/gemini not in the pricing table),
 -- keep 0 and flag unpriced_model -- fabricating a per-token cost for a
 -- subscription model would be wrong. (RFC-0001 records this.)
 --
--- (`oc` is ATTACHed read-only by the justfile before this file runs.)
+INSTALL sqlite;
+LOAD sqlite;
+CREATE OR REPLACE VIEW oc_session AS SELECT * FROM sqlite_scan(getvariable('mirror_dir') || '/opencode.db', 'session');
+CREATE OR REPLACE VIEW oc_message AS SELECT * FROM sqlite_scan(getvariable('mirror_dir') || '/opencode.db', 'message');
+CREATE OR REPLACE VIEW oc_part    AS SELECT * FROM sqlite_scan(getvariable('mirror_dir') || '/opencode.db', 'part');
 
 -- ---------------------------------------------------------------------------
 -- sessions: one row per session. cwd = directory; attribution via the shared
 -- rules/macros. parent_session_id populated from the session parent chain.
-CREATE OR REPLACE TABLE _oc_sessions AS
+CREATE OR REPLACE TABLE stg_sessions AS
 WITH base AS (
   SELECT id::varchar                       AS session_id,
          directory                         AS cwd,
@@ -54,7 +50,7 @@ WITH base AS (
          parent_id::varchar                AS parent_session_id,
          version                           AS oc_version,
          agent                             AS agent
-  FROM oc.session
+  FROM oc_session
   WHERE time_created IS NOT NULL
 ),
 matched AS (
@@ -73,6 +69,8 @@ SELECT
   varve_campaign(cwd, campaign_tok)     AS campaign,
   started_at::timestamp                 AS started_at,
   parent_session_id,
+  NULL::varchar                         AS cc_version,
+  NULL::varchar                         AS pi_version,
   oc_version,
   agent,
   strftime(started_at, '%Y-%m-%d')      AS date
@@ -83,11 +81,11 @@ FROM matched;
 -- reasoning parts (RFC-0001: inline content enables full-text and vector search; opencode stores
 -- text in `part`, not on the message). is_sidechain is false -- opencode has no
 -- sidechain flag; its parent/child structure lives at SESSION grain (parent_id).
-CREATE OR REPLACE TABLE _oc_messages AS
+CREATE OR REPLACE TABLE stg_messages AS
 WITH txt AS (
   SELECT message_id,
          string_agg(json_extract_string(data, '$.text'), '\n') AS content
-  FROM oc.part
+  FROM oc_part
   WHERE json_extract_string(data, '$.type') IN ('text','reasoning')
     AND json_extract_string(data, '$.text') IS NOT NULL
   GROUP BY message_id
@@ -104,8 +102,8 @@ SELECT
   txt.content                                      AS content,
   'opencode'                                       AS runtime,
   ss.date                                          AS date
-FROM oc.message m
-JOIN _oc_sessions ss ON m.session_id::varchar = ss.session_id
+FROM oc_message m
+JOIN stg_sessions ss ON m.session_id::varchar = ss.session_id
 LEFT JOIN txt ON txt.message_id = m.id;
 
 -- ---------------------------------------------------------------------------
@@ -113,7 +111,7 @@ LEFT JOIN txt ON txt.message_id = m.id;
 -- rolled-up cost/tokens live there; per-step step-finish parts are not read to
 -- avoid double counting -- RFC-0001). cache read/write map to the nested
 -- tokens.cache.{read,write}.
-CREATE OR REPLACE TABLE _oc_api_calls AS
+CREATE OR REPLACE TABLE stg_api_calls AS
 WITH asst AS (
   SELECT
     m.session_id::varchar                                        AS session_id,
@@ -126,7 +124,7 @@ WITH asst AS (
     coalesce(json_extract(m.data,'$.tokens.cache.read')::bigint,0)   AS cache_read,
     coalesce(json_extract(m.data,'$.tokens.cache.write')::bigint,0)  AS cache_write,
     try_cast(json_extract(m.data,'$.cost') AS double)            AS inline_cost
-  FROM oc.message m
+  FROM oc_message m
   WHERE json_extract_string(m.data,'$.role') = 'assistant'
 )
 SELECT
@@ -138,7 +136,7 @@ SELECT
   a.model,
   a.provider,
   a.input, a.output, a.cache_read, a.cache_write,
-  -- cost:0 defense: trust inline cost when > 0; else compute from seed if the
+  -- cost:0 defense: trust inline cost when > 0; else compute from pricing table if the
   -- model is priced; else keep the runtime's 0 (unpriced/subscription).
   CASE
     WHEN a.inline_cost IS NOT NULL AND a.inline_cost > 0 THEN a.inline_cost
@@ -154,14 +152,14 @@ SELECT
   ss.date                                    AS date
 FROM asst a
 LEFT JOIN _pricing p    ON a.model = p.model
-JOIN _oc_sessions ss    ON a.session_id = ss.session_id;
+JOIN stg_sessions ss    ON a.session_id = ss.session_id;
 
 -- ---------------------------------------------------------------------------
 -- tool_calls: one row per tool part. opencode is the ONLY runtime with real
 -- tool timing -- started_at/ended_at from state.time.{start,end} (epoch ms),
 -- duration_ms their delta (NULL when either endpoint is absent), decision =
 -- state.status {completed | error | running | ...}.
-CREATE OR REPLACE TABLE _oc_tool_calls AS
+CREATE OR REPLACE TABLE stg_tool_calls AS
 WITH tool AS (
   SELECT
     session_id::varchar                                    AS session_id,
@@ -171,7 +169,7 @@ WITH tool AS (
     json_extract(data,'$.state.time.start')::bigint        AS t_start,
     json_extract(data,'$.state.time.end')::bigint          AS t_end,
     json_extract_string(data,'$.state.status')             AS decision
-  FROM oc.part
+  FROM oc_part
   WHERE json_extract_string(data,'$.type') = 'tool'
 )
 SELECT
@@ -187,13 +185,4 @@ SELECT
   'opencode'                                               AS runtime,
   ss.date                                                  AS date
 FROM tool t
-JOIN _oc_sessions ss ON t.session_id = ss.session_id;
-
--- ---------------------------------------------------------------------------
--- file -> session -> date map. opencode is a single db file, so the LIVE db path
--- (not the snapshot clone) maps to EVERY opencode session's date: a change to
--- the db marks all opencode date partitions for rewrite. The manifest keys on
--- opencode_db so change-detection tracks the real file.
-CREATE OR REPLACE TABLE _oc_files AS
-SELECT DISTINCT getvariable('opencode_db') AS path, session_id, date
-FROM _oc_sessions;
+JOIN stg_sessions ss ON t.session_id = ss.session_id;
