@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 830" width="720" height="830" role="img" aria-labelledby="rec-t rec-d">
+  <title id="rec-t">Four tables, one record contract, and the rules every adapter keeps</title>
+  <desc id="rec-d">The four tables sessions, api_calls, messages and tool_calls with their columns grouped by meaning. Every table joins sessions on session_id. api_calls.message_id and tool_calls.message_id point at messages.message_id, and tool_calls.result_message_id points at the messages row that carries the result. Adapters copy ids from the source, write NULL for unknown, and sum measures to 0 only for tokens and cost. They may add nullable runtime-prefixed columns. They may not invent ids, write zero for unknown, change what a column means, or judge.</desc>
+  <style>
+    svg { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .box { fill: #f4f4f4; stroke: #c4c4c4; stroke-width: 1; }
+    .good { fill: none; stroke: #4a6741; stroke-width: 1.5; }
+    .bad { fill: none; stroke: #b3412f; stroke-width: 1.5; }
+    .nm { font-size: 13px; font-weight: 600; fill: #0a0a0a; }
+    .sub { font-size: 11px; fill: #606060; }
+    .lbl { font-size: 11px; fill: #404040; }
+    .grp { font-size: 11px; font-weight: 600; fill: #606060; }
+    .col { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; fill: #0a0a0a; }
+    .hl { font-weight: 700; fill: #4a6741; }
+    .gt { font-size: 13px; font-weight: 600; fill: #4a6741; }
+    .bt { font-size: 13px; font-weight: 600; fill: #b3412f; }
+    .ln { fill: none; stroke: #404040; stroke-width: 1.5; }
+    .ah { fill: #404040; }
+    @media (prefers-color-scheme: dark) {
+      .box { fill: #242426; stroke: #48484a; }
+      .good { stroke: #6aaa58; }
+      .bad { stroke: #ff9a86; }
+      .nm { fill: #f2f2f7; }
+      .sub { fill: #a0a0a6; }
+      .lbl { fill: #aeaeb2; }
+      .grp { fill: #a0a0a6; }
+      .col { fill: #f2f2f7; }
+      .hl { fill: #8cc97a; }
+      .gt { fill: #6aaa58; }
+      .bt { fill: #ff9a86; }
+      .ln { stroke: #aeaeb2; }
+      .ah { fill: #aeaeb2; }
+    }
+  </style>
+  <defs><marker id="rec-ar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto"><path class="ah" d="M0,0 L10,4 L0,8 Z"/></marker></defs>
+
+  <!-- join arrows -->
+  <path class="ln" d="M600,600 V81 H524" marker-end="url(#rec-ar)"/>
+  <path class="ln" d="M520,247 H600" marker-end="url(#rec-ar)"/>
+  <path class="ln" d="M520,420 H600" marker-end="url(#rec-ar)"/>
+  <path class="ln" d="M520,596 H600"/>
+  <path class="ln" d="M270,308 V352" marker-end="url(#rec-ar)"/>
+  <path class="ln" d="M150,536 V494" marker-end="url(#rec-ar)"/>
+  <path class="ln" d="M360,536 V494" marker-end="url(#rec-ar)"/>
+  <text class="lbl" x="560" y="241" text-anchor="middle">session_id</text>
+  <text class="lbl" x="560" y="414" text-anchor="middle">session_id</text>
+  <text class="lbl" x="560" y="590" text-anchor="middle">session_id</text>
+  <text class="lbl" x="278" y="335">message_id</text>
+  <text class="lbl" x="158" y="519">message_id</text>
+  <text class="lbl" x="368" y="519">result_message_id</text>
+  <text class="sub" x="610" y="200">Every table joins</text>
+  <text class="sub" x="610" y="214">sessions on</text>
+  <text class="sub" x="610" y="228">session_id.</text>
+
+  <!-- sessions -->
+  <rect class="box" x="20" y="20" width="500" height="122" rx="6"/>
+  <text class="nm" x="32" y="40">sessions</text>
+  <text class="sub" x="508" y="40" text-anchor="end">one row per session</text>
+  <text class="grp" x="32" y="60">identity</text><text class="col" x="122" y="60">session_id, runtime, date</text>
+  <text class="grp" x="32" y="78">attribution</text><text class="col" x="122" y="78">cwd, harness, estate, campaign</text>
+  <text class="grp" x="32" y="96">time, chain</text><text class="col" x="122" y="96">started_at, parent_session_id</text>
+  <text class="grp" x="32" y="114">extensions</text><text class="col" x="122" y="114">cc_version, pi_version, oc_version, agent</text>
+  <text class="grp" x="32" y="132">partition</text><text class="col" x="122" y="132">runtime, date</text>
+
+  <!-- api_calls -->
+  <rect class="box" x="20" y="186" width="500" height="122" rx="6"/>
+  <text class="nm" x="32" y="206">api_calls</text>
+  <text class="sub" x="508" y="206" text-anchor="end">one row per provider call</text>
+  <text class="grp" x="32" y="226">keys</text><text class="col" x="122" y="226">session_id, message_id, api_message_id, request_id</text>
+  <text class="grp" x="32" y="244">what, when</text><text class="col" x="122" y="244">timestamp, model, provider</text>
+  <text class="grp" x="32" y="262">measures</text><text class="col" x="122" y="262">input, output, cache_read, cache_write</text>
+  <text class="grp" x="32" y="280">cost</text><text class="col" x="122" y="280">cost_usd, unpriced_model</text>
+  <text class="grp" x="32" y="298">partition</text><text class="col" x="122" y="298">runtime, date</text>
+
+  <!-- messages -->
+  <rect class="box" x="20" y="352" width="500" height="140" rx="6"/>
+  <text class="nm" x="32" y="372">messages</text>
+  <text class="sub" x="508" y="372" text-anchor="end">one row per source line or entry</text>
+  <text class="grp" x="32" y="392">keys</text><text class="col" x="122" y="392">message_id, session_id, parent_id, api_message_id</text>
+  <text class="grp" x="32" y="410">kind</text><text class="col" x="122" y="410">role, origin, record_type, is_sidechain</text>
+  <text class="grp" x="32" y="428">when</text><text class="col" x="122" y="428">timestamp</text>
+  <text class="grp" x="32" y="446">content</text><text class="col" x="122" y="446">text, interrupted</text>
+  <text class="grp" x="32" y="464">partition</text><text class="col" x="122" y="464">runtime, date</text>
+  <text class="grp" x="32" y="482">tool results</text><text class="col" x="122" y="482">origin = tool_result carries the result</text>
+
+  <!-- tool_calls -->
+  <rect class="box" x="20" y="536" width="500" height="122" rx="6"/>
+  <text class="nm" x="32" y="556">tool_calls</text>
+  <text class="sub" x="508" y="556" text-anchor="end">one row per tool use</text>
+  <text class="grp" x="32" y="576">keys</text><text class="col" x="122" y="576">session_id, message_id, tool_use_id, <tspan class="hl">result_message_id</tspan></text>
+  <text class="grp" x="32" y="594">call</text><text class="col" x="122" y="594">tool_name, mcp_server, mcp_tool, arguments</text>
+  <text class="grp" x="32" y="612">when</text><text class="col" x="122" y="612">started_at, ended_at, duration_ms</text>
+  <text class="grp" x="32" y="630">result</text><text class="col" x="122" y="630">outcome, result_text</text>
+  <text class="grp" x="32" y="648">partition</text><text class="col" x="122" y="648">runtime, date</text>
+
+  <text class="sub" x="20" y="680">message_id repeats across sessions (a resumed session copies lines): join on session_id and message_id.</text>
+
+  <!-- rules -->
+  <rect class="good" x="20" y="696" width="330" height="120" rx="6"/>
+  <text class="gt" x="32" y="716">adapters may</text>
+  <text class="lbl" x="32" y="737">copy ids from the source as they are</text>
+  <text class="lbl" x="32" y="754">add nullable runtime-prefixed columns</text>
+  <text class="lbl" x="32" y="771">sum tokens to 0 when no usage is recorded</text>
+  <text class="lbl" x="32" y="788">sum cost_usd to 0 for an unpriced model,</text>
+  <text class="lbl" x="32" y="805">and set unpriced_model</text>
+  <rect class="bad" x="370" y="696" width="330" height="120" rx="6"/>
+  <text class="bt" x="382" y="716">adapters may not</text>
+  <text class="lbl" x="382" y="737">invent an id or a join key</text>
+  <text class="lbl" x="382" y="754">write 0 or an empty string for unknown:</text>
+  <text class="lbl" x="382" y="771">unknown is NULL</text>
+  <text class="lbl" x="382" y="788">change what a column means: a new</text>
+  <text class="lbl" x="382" y="805">meaning gets a new name; mining judges</text>
+</svg>
