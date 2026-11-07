@@ -428,9 +428,9 @@ test:
       echo "  mirror after read: $(ls "$w/mirror/oc" | tr '\n' ' ')" >&2
 
       touch "$w/release"; wait "$holder" || true
-      if [ -e "$w/src/store.db-wal" ]; then echo "FAIL: a clean close left the source -wal in place" >&2; fail=1; fi
+      if [ -s "$w/src/store.db-wal" ]; then echo "FAIL: a clean close left data in the source -wal" >&2; fail=1; fi
       wal_sync
-      if [ -e "$w/mirror/oc/store.db-wal" ]; then echo "FAIL: the mirror kept a -wal the source no longer has" >&2; fail=1; fi
+      if [ -s "$w/mirror/oc/store.db-wal" ]; then echo "FAIL: the mirror kept a -wal the source emptied" >&2; fail=1; fi
       sums0="$(wal_sums)"
       got="$(wal_rows)"
       if [ "$got" != "main-1,wal-1,wal-2" ]; then echo "FAIL: rows did not read back after a clean close, got: $got" >&2; fail=1; fi

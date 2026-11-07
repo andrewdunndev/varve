@@ -76,9 +76,11 @@ child_nice() {
   if [ -r "/proc/$c/stat" ]; then sed 's/^.*) //' "/proc/$c/stat" | awk '{print $17}'
   else ps -o ni= -p "$c" | tr -d ' '; fi
 }
-for want in 10 0; do
+base="$(child_nice $$)"
+for add in 10 0; do
+  want=$((base + add))
   rm -f "$VARVE_LOCK/child"
-  VARVE_NICE=$want VARVE_THREADS=1 "$duck" priority -c "$SPIN" >/dev/null 2>&1 &
+  VARVE_NICE=$add VARVE_THREADS=1 "$duck" priority -c "$SPIN" >/dev/null 2>&1 &
   bg=$!
   i=0; while [ ! -s "$VARVE_LOCK/child" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
   sleep 1
