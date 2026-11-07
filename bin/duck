@@ -74,6 +74,17 @@ qs() { printf '%s' "$1" | sed "s/'/''/g"; }
 qi() { printf '"%s"' "$(printf '%s' "$1" | sed 's/"/""/g')"; }
 
 mkdir -p "$data/state"
+# A SIGKILL or power loss skips the EXIT trap and strands a run dir with its
+# spill. Holding the lock means no other run is live, so a dir whose pid is dead
+# is leftover.
+if [ "$owned" = 1 ]; then
+  for d in "$data"/state/run.*; do
+    [ -d "$d" ] || continue
+    pid="${d##*/run.}"
+    case "$pid" in ''|*[!0-9]*) continue ;; esac
+    kill -0 "$pid" 2>/dev/null || rm -rf "$d"
+  done
+fi
 run="$data/state/run.$$"
 mkdir -p "$run/spill"
 init="$run/init.sql"

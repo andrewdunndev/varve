@@ -4,7 +4,8 @@
 #
 # A mine is a SQL file named NN-<table>[.<part>].sql that leaves its rows in a
 # table called mine_out. They are saved to <lake>/<table>/<part>.parquet, part
-# being "part" when the name has none. A failing mine keeps its last good file
+# being "part" when the name has none; sessions, messages, api_calls and
+# tool_calls are refused as targets. A failing mine keeps its last good file
 # and the others still run. Exit 1 when a mine or a check failed. No mining/
 # files, no mining.
 set -euo pipefail
@@ -31,6 +32,12 @@ for f in "$data"/mining/*.sql; do
   table="${name%%.*}"
   part="${name#*.}"
   if [ "$part" = "$name" ]; then part=part; fi
+  case "$table" in
+    sessions|messages|api_calls|tool_calls)
+      echo "varve: mine $stem refused: $table is a core table the adapters write" >&2
+      failed="$failed $stem"
+      continue ;;
+  esac
   mkdir -p "$lake/$table"
   tmp="$lake/$table/.$part.tmp"
   rc=0

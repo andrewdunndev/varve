@@ -1,4 +1,4 @@
-# varve -- local agent-session record lake (Parquet + DuckDB).
+# varve -- local agent-session record lake (Parquet + SQL).
 # Data home: ~/.local/share/varve (never in this repo; VARVE_DATA overrides).
 # Zero resident processes: every target is invoke-and-exit. Every SQL run goes
 # through bin/duck, which bounds it and serializes writers.
@@ -134,7 +134,7 @@ disk:
 # CI/local lint. `just --evaluate` parses every recipe body and evaluates the
 # top-level assignments, so a broken interpolation or recipe declaration fails
 # here. Scripts under bin/ must parse. The engine's name appears nowhere
-# outside the runner, the toolchain pin and prose: every run goes through
+# outside the runner, the toolchain pin and docs: every run goes through
 # bin/duck, which owns the bounds.
 lint:
     #!/usr/bin/env bash
@@ -142,7 +142,7 @@ lint:
     just --evaluate > /dev/null
     for s in bin/* tests/*.sh; do bash -n "$s"; done
     word="duck""db"
-    hits="$(find . -type f -not -path './.git/*' -not -path './docs/*' -not -path './golden-out/*' -not -path './bin/duck' -not -name mise.toml -not -name '*.md' -not -name '*.svg' -not -name '*.png' -exec grep -Ilw "$word" {} + || true)"
+    hits="$(find . -type f -not -path './.git/*' -not -path './docs/*' -not -path './golden-out/*' -not -path './bin/duck' -not -path './mise.toml' -not -name '*.md' -not -name '*.svg' -not -name '*.png' -exec grep -Ilwi "$word" {} + || true)"
     if [ -n "$hits" ]; then
       echo "varve lint: the engine is named outside bin/duck:" >&2
       echo "$hits" >&2
@@ -319,6 +319,14 @@ test:
     fi
     cp "$tmp/lexical.sql" "$lex"
     if ! just mine 2>"$tmp/mine.err"; then echo "FAIL: just mine did not pass once the mine was restored" >&2; tail -5 "$tmp/mine.err" >&2; fail=1; fi
+
+    # A mine named for a core table is refused, so it cannot write into the published record.
+    echo "CREATE TABLE mine_out AS SELECT 1 AS x;" > "$VARVE_DATA/mining/99-messages.sql"
+    rc=0; just mine 2>"$tmp/mine.err" || rc=$?
+    if [ "$rc" -ne 1 ] || ! grep -q 'mine 99-messages refused' "$tmp/mine.err" || [ -e "$lake/messages/part.parquet" ]; then
+      echo "FAIL: a mine named for a core table should be refused and write nothing, got exit $rc" >&2; fail=1
+    fi
+    rm -f "$VARVE_DATA/mining/99-messages.sql" "$lake/messages/part.parquet"
 
     # The record checks have teeth: a retired column and a value outside a closed set fail.
     bad="$tmp/badlake"

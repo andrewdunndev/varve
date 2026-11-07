@@ -88,11 +88,27 @@ for want in 10 0; do
   verdict "nice $want" 0 "^$want\$" 0 "$got"
 done
 
-# lint probe: the word in a new file must fail lint
-word="$(printf 'duck%s' db)"
-echo "$word" > "$repo/bin/.lint-probe"
-rc=0; (cd "$repo" && just lint) >/dev/null 2>&1 || rc=$?
-rm -f "$repo/bin/.lint-probe"
-if [ "$rc" = 0 ]; then echo "FAIL: lint accepted the probe" >&2; fail=1; else echo "  ok: lint probe" >&2; fi
+# a run dir stranded by a SIGKILL is swept at the next lock; a live one is not
+sleep 0 & gone=$!; wait "$gone"
+mkdir -p "$VARVE_DATA/state/run.$gone/spill" "$VARVE_DATA/state/run.$$/spill"
+echo spill > "$VARVE_DATA/state/run.$gone/spill/tmp"
+rc=0; out="$("$duck" sweep -c "SELECT 1" 2>&1)" || rc=$?
+verdict "sweep run" 0 "" "$rc" "$out"
+verdict "sweep dead pid dir" 0 "^gone\$" 0 "$([ -e "$VARVE_DATA/state/run.$gone" ] && echo kept || echo gone)"
+verdict "sweep live pid dir" 0 "^kept\$" 0 "$([ -e "$VARVE_DATA/state/run.$$" ] && echo kept || echo gone)"
+rm -rf "$VARVE_DATA/state/run.$$"
+
+# lint probe: the engine's name in a new code file must fail lint for that
+# reason, in any case, and name the file
+for word in "$(printf 'duck%s' db)" "$(printf 'Duck%s' DB)" "$(printf 'DUCK%s' DB)"; do
+  echo "SELECT 1; -- $word" > "$repo/bin/.lint-probe"
+  rc=0; err="$(cd "$repo" && just lint 2>&1 >/dev/null)" || rc=$?
+  rm -f "$repo/bin/.lint-probe"
+  if [ "$rc" = 0 ] || ! printf '%s' "$err" | grep -q 'the engine is named outside bin/duck' || ! printf '%s' "$err" | grep -q 'bin/.lint-probe'; then
+    echo "FAIL: lint did not reject $word for naming the engine (exit $rc):" >&2; printf '%s\n' "$err" | tail -5 >&2; fail=1
+  else
+    echo "  ok: lint probe $word" >&2
+  fi
+done
 
 exit $fail

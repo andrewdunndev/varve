@@ -2,7 +2,7 @@
 # Hand-rolled: varve is SQL + a justfile, not a language stack a dunn.dev/pipeline catalog component targets.
 # lint: justfile parses, scripts parse, no engine name outside bin/duck.
 # test: just test runs the pipeline on the synthetic fixture under an isolated
-#       VARVE_DATA and executes every SQL file against DuckDB.
+#       VARVE_DATA and executes every SQL file against the engine.
 # Runs on the untagged shared runner. The jobs only fetch the pinned tools.
 
 default:
