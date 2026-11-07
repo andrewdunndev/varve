@@ -1,20 +1,18 @@
 -- QUESTION: For Claude Code specifically, what do subagents (sidechain traffic)
---   cost vs the main thread over time -- is the coordinate-by-default posture
---   actually cheap, or is it moving real spend?
+--   cost vs the main thread over time -- is dispatching to subagents
+--   cheap, or is it moving real spend?
 -- METRIC: claude-code only. A call is sidechain if its message has is_sidechain=true
 --   (api_calls JOIN messages on session_id+message_id). Per week
 --   (date_trunc('week', timestamp)): main_cost / sub_cost = sum(cost_usd) by role;
 --   sub_cost_share = sub_cost / total; sub_call_share likewise; tokens = sum of all
 --   four token classes by role. A totals row (week = NULL via ROLLUP) closes it.
--- PRIOR ART: W1's first recorded result -- cache_read outnumbers fresh input ~2000:1
---   on the primary model (cost structure is cache-read-dominated). This query carries
---   the same cache_read:input ratio per role so that result is visible per week.
+-- This query also carries the cache_read:input ratio per role, per week.
 -- CAVEATS: claude-code sidechain is the CLEAN dispatch signal (subagents write real
 --   transcripts under <session>/subagents/, RFC-0001); opencode/pi are excluded here
 --   (opencode chains sessions, pi writes no child transcript). "Savings" is a
 --   comparison of where cost lands, not a counterfactual -- re-pricing the same work
---   inline is W6's job.
--- W5. Run: just sql -f queries/subagent_economics.sql
+--   inline is out of scope.
+-- Run: just sql -f queries/subagent_economics.sql
 WITH cc AS (
   SELECT
     date_trunc('week', a.timestamp)::date                         AS week,

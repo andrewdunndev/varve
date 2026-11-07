@@ -1,4 +1,4 @@
--- pi inline-cost vs computed-cost reconciliation (W2, ADR-0006). pi records an
+-- pi inline-cost vs computed-cost reconciliation (ADR-0006). pi records an
 -- inline-computed cost per assistant message; the adapter stores that as cost_usd
 -- (preferring the runtime's inline value, RFC-0001). This query recomputes cost
 -- from the stored tokens x the pricing seed and reports the per-model delta where

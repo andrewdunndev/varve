@@ -14,7 +14,7 @@
 --   cost_per_session mixes multi-model sessions (a session using opus and
 --   haiku counts toward both). Console authoritative on absolute cost. TEMP table is
 --   in-memory (no lake write; read-only safe).
--- W5. Run: just sql -f queries/model_economics.sql
+-- Run: just sql -f queries/model_economics.sql
 CREATE TEMP TABLE tiered AS
   SELECT a.*,
     CASE

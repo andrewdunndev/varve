@@ -7,8 +7,8 @@
 --   calls but drop out of the share denominator -- a week that is all-subscription shows near-zero
 --   cost and an unstable share. Weeks with tiny total cost make shares noisy; read
 --   alongside the week_total_cost column. Model tier economics differ (fable-5 is
---   priced ABOVE opus per RFC pricing seed), so "cheaper mix" is not "more non-opus".
--- W5 burn family. Run: just sql -f queries/burn_model_mix.sql
+--   priced above opus in the pricing seed), so "cheaper mix" is not "more non-opus".
+-- Run: just sql -f queries/burn_model_mix.sql
 WITH per_model AS (
   SELECT
     s.estate,
