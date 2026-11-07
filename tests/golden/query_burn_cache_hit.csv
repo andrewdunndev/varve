@@ -7,6 +7,7 @@
 2026-01-02,3,150,2800,0.9492
 2026-08-01,3,280,0,0.0
 2026-08-03,1,100,0,0.0
-claude-sonnet-5,26,2100,10400,0.832,5.0
+claude-sonnet-5,25,2000,10400,0.8387,5.0
+claude-unlisted-1,1,100,0,0.0,0.0
 day,calls,input,cache_read,cache_hit_ratio
 model,calls,input,cache_read,cache_hit_ratio,cache_read_to_input

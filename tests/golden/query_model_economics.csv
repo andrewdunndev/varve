@@ -1,3 +1,4 @@
-claude-sonnet-5,sonnet,7,26,0.02,0.0,0.0007,0.832
+claude-sonnet-5,sonnet,6,25,0.02,0.0,0.0007,0.8387
+claude-unlisted-1,other,1,1,0.0,0.0,0.0,0.0
 harness,campaign,calls,cost_usd,opus_cost_share,cheap_call_share
 model,tier,sessions,calls,cost_usd,cost_per_session,avg_cost_per_call,cache_hit_ratio
