@@ -15,6 +15,7 @@ Run one with `just sql -f <path>`.
 | `queries/` | `recycle.sql` | Do sessions stay under the recycle thresholds, and what do overruns cost? |
 | `queries/` | `session_shape.sql` | What does a typical session look like, and which are the expensive outliers? |
 | `queries/` | `subagent_economics.sql` | What do subagents cost against the main thread? |
+| `queries/` | `tool_outcomes.sql` | How do tool calls end, by tool, and what do their arguments and results weigh? |
 | `mining/queries/` | `adjudication_sample.sql` | Which correction candidates should be labelled for precision? |
 | `mining/queries/` | `corrections_candidates.sql` | How many correction candidates did mining produce, by detector? |
 | `mining/queries/` | `recall_floor_sample.sql` | How many corrections did mining miss? |
