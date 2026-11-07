@@ -6,9 +6,9 @@
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 ![built with GitLab](https://img.shields.io/badge/built_with-GitLab-FC6D26?logo=gitlab)
 
-**Status: built for and used by its author, maintained occasionally.** CI tests every change. There is no support, no roadmap and no releases.
+**Status: built for and used by its author, maintained occasionally.** CI tests every change. It has no support, roadmap or releases.
 
-Discussion of how you use it is welcome in GitLab issues, and so are core fixes. The direction is a small, solid set of composable primitives. New runtimes and mines live in your own data home; the ones in this repo are examples.
+We'd like to hear how you use it: open a GitLab issue. Core fixes are welcome as merge requests. We're moving toward a small, solid set of composable primitives. New runtimes and mines live in your own data home; the ones in this repo are examples.
 
 A varve is one annual sediment layer in a glacial lake. Scientists read the
 sequence to reconstruct past climate. varve is that instrument for coding-agent
@@ -93,7 +93,7 @@ just sync && just build
 
 ## Write your own adapter
 
-The three adapters are examples. To add a runtime, copy the closest one to `<data home>/adapters/`, edit it, and add a row to `<data home>/runtimes.toml` naming it. Then `just sync && just build`. Every build grades the lake against `sql/record.sql` (`bin/check`), so a wrong column fails the build. Nothing in this repo changes. The only compatibility rule is that a column is never re-meant: a new meaning gets a new name.
+The three adapters are examples. To add a runtime, copy the closest one to `<data home>/adapters/`, edit it, and add a row to `<data home>/runtimes.toml` naming it. Then `just sync && just build`. Every build grades the lake against `sql/record.sql` (`bin/check`), so a wrong column fails the build. The repo needs no change. The one compatibility rule: a column's meaning never changes, and a new meaning gets a new name.
 
 ## Mining
 
@@ -112,4 +112,4 @@ instrument is public; the readings are not.
 
 ## Contributing
 
-Open an issue to discuss how you use varve. Core fixes are welcome as merge requests. GitLab is canonical and GitHub is a push mirror. New runtimes live in your data home.
+Open a GitLab issue to tell us how you use varve. Core fixes are welcome as merge requests. GitLab is canonical; GitHub is a push mirror. New runtimes live in your data home, with no repo change (see [Write your own adapter](#write-your-own-adapter)).

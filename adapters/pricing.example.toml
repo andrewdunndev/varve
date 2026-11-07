@@ -1,11 +1,11 @@
-# SAMPLE. Two rows showing the shape; replace them with your own. The prices
-# here are illustrative and are not kept current. Copy this file to
-# <data home>/pricing.toml: that copy is yours to keep current, from whatever
-# source you trust (LiteLLM's model price table is one).
+# SAMPLE. Two rows show the shape; replace them with your own. These prices are
+# illustrative and not kept current. Copy this file to <data home>/pricing.toml
+# and keep that copy current from a source you trust (LiteLLM's model price
+# table is one).
 #
-# Prices are USD per token. A model with no row here is flagged unpriced_model
-# and costs 0 unless the runtime records its own cost. Subscription-billed
-# models have no per-token price and stay unpriced.
+# Prices are USD per token. A model with no row is flagged unpriced_model and
+# costs 0 unless the runtime records its own cost. Subscription-billed models
+# have no per-token price and stay unpriced.
 
 [[row]]
 model = "claude-sonnet-5"
