@@ -1,8 +1,8 @@
-# ADR-0010 -- Resource envelope
+# ADR-0010: Resource envelope
 
 - **Status:** proposed
 - **Date:** 2026-11-06
-- **Deciders:** operator + session
+- **Deciders:** maintainer
 
 ## Context
 

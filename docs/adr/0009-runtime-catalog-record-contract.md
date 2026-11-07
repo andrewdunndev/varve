@@ -1,8 +1,8 @@
-# ADR-0009 -- Runtime catalog and record contract
+# ADR-0009: Runtime catalog and record contract
 
 - **Status:** proposed
 - **Date:** 2026-11-06
-- **Deciders:** operator + session
+- **Deciders:** maintainer
 
 ## Context
 

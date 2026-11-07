@@ -1,8 +1,8 @@
-# ADR-0008 -- File mirror and whole build
+# ADR-0008: File mirror and whole build
 
 - **Status:** proposed
 - **Date:** 2026-11-06
-- **Deciders:** operator + session
+- **Deciders:** maintainer
 
 ## Context
 
