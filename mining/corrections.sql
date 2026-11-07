@@ -419,7 +419,7 @@ QUALIFY row_number() OVER (PARTITION BY candidate_id
 
 -- The justfile `mine` recipe COPYs stg_correction_candidates to the lake (literal path;
 -- COPY TO cannot take getvariable) -- a full deterministic rebuild every ingest, ORDER BY
--- fixing row order so two runs are byte-identical , same PARTITION_BY/zstd
+-- fixing row order so two runs are byte-identical, same PARTITION_BY/zstd
 -- conventions as the core tables.
 
 -- =====================================================================================

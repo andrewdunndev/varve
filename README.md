@@ -62,7 +62,7 @@ One wrapper bounds every DuckDB process.
 | `mining/` | Correction mining, review rendering, year-in-review stats and their queries |
 | `docs/` | PRD, ADRs (`adr/`), RFCs (`rfc/`), query index |
 | `tests/` | Synthetic three-runtime fixtures and expected output for `just test` |
-| `justfile` | `backfill`, `ingest`, `mine`, `review`, `stats`, `sql`, `lint`, `test`, `disk` |
+| `justfile` | `backfill`, `ingest`, `mine`, `review`, `interventions`, `stats`, `sql`, `lint`, `test`, `disk` |
 
 `mise install` provisions the pinned `duckdb` and `just` from `mise.toml`.
 

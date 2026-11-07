@@ -259,9 +259,8 @@ review out=(data_home + "/review_round1.md"):
     echo "varve: wrote review -> {{out}}" >&2
 
 # Intervention timeline for "does baking a correction into a rule stop it recurring",
-# recovered from a rulebook's own git
-# history, no new capture surface. GENERIC: rulebook_dir is any git repo the operator
-# points this at ; nothing here names a real path.
+# recovered from a rulebook's own git history, no new capture surface. GENERIC:
+# rulebook_dir is any git repo the operator points this at; nothing here names a real path.
 # Read-only -- shells `git log`, never writes to rulebook_dir; safe against a dirty
 # working tree. Idempotent -- full rewrite of interventions.csv every run.
 # Writes <data_home>/state/interventions.csv:

@@ -1,11 +1,11 @@
 # RFC-0001 -- Lake schema
 
-- **Status:** accepted for W1 (Claude Code) and W2 (pi + opencode adapters built;
+- **Status:** accepted for Claude Code and pi + opencode (adapters built;
   opencode reconciled against its live store, pi correct-by-construction). The
   four core tables, partitioning, attribution, ingest, content-storage, and the
   pi/opencode runtime-specific fields are settled below. `correction_events`
   (RFC-0002) remains draft; the marts list stays open.
-- **Date:** 2026-07-06 (revised 2026-07-06 with W1 then W2 build results)
+- **Date:** 2026-07-06 (revised 2026-07-06 with Claude Code then pi + opencode build results)
 
 ## Summary
 
@@ -14,14 +14,14 @@ The normalized schema for the transcript lake: five tables -- `sessions`, `messa
 exposed as DuckDB views and marts, fed by version-tolerant adapters with idempotent
 incremental ingest. The table shapes were agreed in the PRD ("Lake table shapes"); the
 data-definition-language (DDL), partitioning, and attribution-mapping representation
-are now settled by the W1 build (Design) for the four core tables. `correction_events`
+are now settled by the Claude Code build (Design) for the four core tables. `correction_events`
 and the marts list remain open.
 
 ## Motivation
 
-W2 is the primary workstream and this schema is its output. Every downstream analysis
-reads these tables: cost and efficiency (W5), counterfactuals and priors (W6),
-correction mining (W7). Getting the grain and the keys right matters more than any
+This schema is the primary output. Every downstream analysis
+reads these tables: cost and efficiency, counterfactuals and priors,
+correction mining (mining). Getting the grain and the keys right matters more than any
 single query. The shape is settled enough to build against; the DDL is not, and
 writing it down as an RFC keeps the open parts visible.
 
@@ -39,10 +39,10 @@ writing it down as an RFC keeps the open parts visible.
   This is the ccusage `UsageEntry` grain (ADR-0006) and the spine of all cost analysis.
 - `tool_calls` (one row per tool invocation): `session_id`, `message_id`, `tool_name`,
   `started_at`, `ended_at`, `duration_ms` (NULL except opencode), `decision` (nullable).
-- `correction_events` (W7): full schema in RFC-0002.
+- `correction_events` (mining): full schema in RFC-0002.
 
-**Resolved DDL (W1, Claude Code).** Columns and types as built. Runtime-specific
-fields are nullable so pi/opencode land without a schema break; W1 also adds a few
+**Resolved DDL (Claude Code).** Columns and types as built. Runtime-specific
+fields are nullable so pi/opencode land without a schema break; the Claude Code build also adds a few
 provenance columns (marked +) beyond the PRD shape.
 
 - `sessions`: `session_id` VARCHAR, `runtime` VARCHAR, `cwd` VARCHAR, `harness`
@@ -62,7 +62,7 @@ provenance columns (marked +) beyond the PRD shape.
 
 Every table also carries `runtime` and `date` via the Hive partition path.
 
-**Runtime-specific nullable columns (W2, resolved).** pi and opencode land as
+**Runtime-specific nullable columns (resolved).** pi and opencode land as
 additional `runtime=` partitions with the same core columns; their extra columns
 are unioned in via `UNION ALL BY NAME` (sql/stage.sql), so a column a runtime does
 not produce is simply NULL for that runtime's rows -- the nullable-fields contract.
@@ -144,7 +144,7 @@ separate session row.
 
 **Content storage (resolved).** Message content is stored **inline** in Parquet.
 The lake is local-only (ADR-0004), so inlining costs nothing on confidentiality and
-enables W7 `fts`/`vss` over content without a second fetch from source JSONL.
+enables mining `fts`/`vss` over content without a second fetch from source JSONL.
 Correction-event pointers (`model_draft_ptr`, `operator_rewrite_ptr`) stay
 pointer-based per RFC-0002 / invariant I5 -- the inline decision applies to the
 message stream, not to correction drafts.
@@ -167,16 +167,16 @@ plus `union_by_name` can silently drop whole files whose column types do not
 reconcile -- validate file coverage (distinct filenames read) against the on-disk
 count, do not assume the glob loaded everything.
 
-**Extensions.** `vss` (vector similarity) and `fts` (full-text) for W7; `sqlite` for
+**Extensions.** `vss` (vector similarity) and `fts` (full-text) for mining; `sqlite` for
 the opencode `ATTACH` (ADR-0006). `sqlite` is `INSTALL`ed/`LOAD`ed by the opencode
 adapter at ingest.
 
-## W2 build results (pi + opencode) -- decisions the new runtimes forced
+## pi + opencode build results -- decisions the new runtimes forced
 
 **Shared adapter prelude.** Attribution (`_attr_rules` + the `{repo}`/`{worktree}`
 token resolution) and pricing are identical across runtimes, so they moved to
 `sql/prelude.sql` (seeds + `varve_harness()`/`varve_campaign()` macros) loaded once
-before any adapter. The W1 Claude Code adapter was refactored onto the macros; a
+before any adapter. The Claude Code adapter was refactored onto the macros; a
 frozen-source A/B proved the refactor byte-identical (row counts per table and
 priced totals identical to the cent, OLD == NEW).
 
@@ -234,35 +234,35 @@ absent. This is a known, accepted coverage limitation (ADR-0006), distinct from
 Claude Code, whose subagents DO write transcripts (`<session>/subagents/`).
 
 **Attribution surfaces estates outside the current seed (coordinator judgment).**
-opencode session cwds include work paths the W1 seed does not name -- historical
+opencode session cwds include work paths the Claude Code seed does not name -- historical
 work checkouts that predate the current namespace layout -- which currently route
 to the `unknown` bucket. Extending the attribution rule file is an estate-taxonomy
 call left to the coordinator; the adapter reuses the existing rules unchanged.
 
 ## Unresolved questions
 
-Resolved by the W1 build (see Design): DDL and column types; partition cut (session
+Resolved by the Claude Code build (see Design): DDL and column types; partition cut (session
 start date) and cardinality; attribution mapping representation and fallback;
 appended-session delta handling; message-content storage (inline). Still open:
 
 - **Marts list.** Which materialized views are worth precomputing (e.g. burn rollups,
   cache-efficiency, dispatch ratio) vs left as query-time views. Left as query-time
-  views in W1; revisit when the W5 query library exists and query latency is measured.
-- **`correction_events` DDL** (RFC-0002). The W7 table's exact column types and how the
-  multi-label `divergence_category` is stored (list vs join table) -- deferred to W7.
-- ~~**pi / opencode runtime fields.**~~ **Resolved (W2, see W2 build results
+  views in the Claude Code build; revisit when the query library exists and query latency is measured.
+- **`correction_events` DDL** (RFC-0002). The mining table's exact column types and how the
+  multi-label `divergence_category` is stored (list vs join table) -- deferred to mining.
+- ~~**pi / opencode runtime fields.**~~ **Resolved (see pi + opencode build results
   above).** opencode populates `parent_session_id`, `duration_ms`/`ended_at`/
   `decision`, `oc_version`, `agent`, and provider variety; pi populates `pi_version`
   and the `parent_id` message tree. All land as nullable superset columns via
   `UNION ALL BY NAME`. pi's shapes are spec-derived (no local corpus to validate).
 - **Cache-tier pricing.** LiteLLM carries one `cache_creation_input_token_cost`; Claude
   bills 5m vs 1h ephemeral creation at different rates (the records expose both under
-  `usage.cache_creation`). W1 uses the single rate; refine if the reconciliation gap
+  `usage.cache_creation`). The Claude Code build uses the single rate; refine if the reconciliation gap
   warrants it.
 
 ## References
 
-- PRD sections: W2 -- Transcript plane (lake table shapes); W1 -- Lake foundation.
+- PRD sections: Architecture (lake table shapes); Goals.
 - Related: ADR-0006 (normalization denominator), ADR-0005 (attribution), ADR-0001
   (transcript plane), ADR-0002 (files-first engine), RFC-0002 (correction-event schema).
 - External: DuckDB `read_json_auto`, `vss`, `fts`, `sqlite` extensions

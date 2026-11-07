@@ -99,7 +99,7 @@ Output: **`correction_candidates`** in the lake -- one row per (detector, locus)
 `prior_assistant_uuid` (the corrected draft's locus), `ts`, `date` (partition),
 `detector`, `detector_version`, `features` (JSON: marker matched, overlap score,
 decision value...), `model_id` of the corrected draft, `cwd`-derived attribution
-(estate/harness -- reuse the W2 attribution rules). Candidates are **derived purely
+(estate/harness -- reuse the attribution rules). Candidates are **derived purely
 from the lake**, so the table is rebuilt deterministically on ingest (no manifest
 interaction; same rebuild discipline as the views). Confidentiality: candidates live
 only in the local lake; loci are the non-identifying `lake:` form.
@@ -134,7 +134,7 @@ dereferenced (round-0 found `context_judgment` largely un-inferable from a trunc
 excerpt), the model's advisory suggestion (marked ADVISORY, not a verdict), and a copy-in
 skeleton; a second part carries the recall-floor sample. Loci already in the ledger are
 skipped so re-render is idempotent as the ledger grows. Output stays under the data home
-(public-instrument rule); see `docs/queries.md` W7.
+(public-instrument rule); see `docs/queries.md`.
 
 ### Phase 2 -- assisted classification (after phase 1 validates)
 
@@ -246,7 +246,7 @@ distillation (manual, unmeasured -- "Beyond the Prompt", 2025).
 
 ## References
 
-- PRD sections: W7 -- Correction mining; Goals G2, G3; Day-one action #4.
+- PRD sections: Architecture; Goals G2, G3.
 - Related: ADR-0004 (confidentiality: local-only pointers I5, no-identifier rule I4,
   embedding exclusion, LLM-labeling boundary), RFC-0001 (content inline -- the
   decision that makes mining possible; this RFC resolves its open `correction_events`

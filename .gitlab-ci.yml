@@ -1,4 +1,5 @@
 # Merge gate. Both jobs call the justfile recipes, so CI and a local run match.
+# Hand-rolled: varve is SQL + a justfile, not a language stack a dunn.dev/pipeline catalog component targets.
 # lint: just --evaluate.
 # test: just test runs the pipeline on the synthetic fixture under an isolated
 #       VARVE_DATA and executes every SQL file against DuckDB.
