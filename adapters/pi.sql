@@ -234,8 +234,6 @@ SELECT
   CASE WHEN t.is_error THEN 'error' ELSE 'ok' END           AS outcome,
   c.arguments,
   t.txt                                                     AS result_text,
-  NULL::varchar                                             AS mcp_server,
-  NULL::varchar                                             AS mcp_tool,
   t.message_id                                              AS result_message_id,
   'pi'                                                      AS runtime,
   t.date

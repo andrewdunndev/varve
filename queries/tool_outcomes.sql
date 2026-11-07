@@ -1,6 +1,6 @@
 -- QUESTION: How do tool calls end, by tool? Which tools are refused, interrupted or
 --   failing, and how much do their arguments and results weigh?
--- METRIC: Per (runtime, tool_name, mcp_server, mcp_tool): calls, and the count of each
+-- METRIC: Per (runtime, tool_name): calls, and the count of each
 --   outcome (ok, error, denied, cancelled, running, none = the source recorded no
 --   result). error_share = error / calls with a result. arg_chars and result_chars
 --   are the average length of arguments and result_text over rows that have them.
@@ -10,8 +10,6 @@
 SELECT
   runtime,
   tool_name,
-  mcp_server,
-  mcp_tool,
   count(*)                                                             AS calls,
   count(*) FILTER (WHERE outcome = 'ok')                               AS ok,
   count(*) FILTER (WHERE outcome = 'error')                            AS error,
@@ -24,5 +22,5 @@ SELECT
   round(avg(length(arguments)), 1)                                     AS arg_chars,
   round(avg(length(result_text)), 1)                                   AS result_chars
 FROM tool_calls
-GROUP BY runtime, tool_name, mcp_server, mcp_tool
-ORDER BY runtime, calls DESC, tool_name, mcp_server, mcp_tool;
+GROUP BY runtime, tool_name
+ORDER BY runtime, calls DESC, tool_name;

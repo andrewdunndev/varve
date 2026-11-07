@@ -325,8 +325,6 @@ SELECT
   p.outcome,
   p.arguments,
   p.result_text,
-  nullif(regexp_extract(p.tool_name, '^mcp__(.+?)__(.+)$', 1), '')   AS mcp_server,
-  nullif(regexp_extract(p.tool_name, '^mcp__(.+?)__(.+)$', 2), '')   AS mcp_tool,
   p.result_message_id,
   'claude-code'                                                      AS runtime,
   ss.date                                                            AS date

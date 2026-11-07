@@ -28,11 +28,8 @@ want(label, n) AS (
    (SELECT count(*) FROM t WHERE tool_use_id = 'tool_t3' AND outcome = 'cancelled')),
   ('any other error result gives error',
    (SELECT count(*) FROM t WHERE tool_use_id = 'tool_t5' AND outcome = 'error' AND result_text = 'exit 1')),
-  ('array-shaped result content reads as joined text, and an mcp name splits',
-   (SELECT count(*) FROM t WHERE tool_use_id = 'tool_t2' AND outcome = 'ok' AND result_text = 'schema found'
-      AND mcp_server = 'srv' AND mcp_tool = 'lookup')),
-  ('a plain tool has no mcp parts',
-   (SELECT count(*) FROM t WHERE tool_use_id = 'tool_t5' AND mcp_server IS NULL AND mcp_tool IS NULL)),
+  ('array-shaped result content reads as joined text',
+   (SELECT count(*) FROM t WHERE tool_use_id = 'tool_t2' AND outcome = 'ok' AND result_text = 'schema found')),
   ('opencode completed is ok with input and output',
    (SELECT count(*) FROM t WHERE runtime = 'opencode' AND tool_use_id = 'call-1' AND outcome = 'ok'
       AND arguments LIKE '%echo hi%' AND result_text = 'hi' AND result_message_id = message_id)),

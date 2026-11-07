@@ -208,8 +208,6 @@ SELECT
   t.outcome,
   t.arguments,
   t.result_text,
-  NULL::varchar                                            AS mcp_server,
-  NULL::varchar                                            AS mcp_tool,
   CASE WHEN t.outcome IS NOT NULL AND t.outcome <> 'running' THEN t.message_id END AS result_message_id,
   'opencode'                                               AS runtime,
   ss.date                                                  AS date

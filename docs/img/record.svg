@@ -91,7 +91,7 @@
   <text class="nm" x="32" y="556">tool_calls</text>
   <text class="sub" x="508" y="556" text-anchor="end">one row per tool use</text>
   <text class="grp" x="32" y="576">keys</text><text class="col" x="122" y="576">session_id, message_id, tool_use_id, <tspan class="hl">result_message_id</tspan></text>
-  <text class="grp" x="32" y="594">call</text><text class="col" x="122" y="594">tool_name, mcp_server, mcp_tool, arguments</text>
+  <text class="grp" x="32" y="594">call</text><text class="col" x="122" y="594">tool_name, arguments</text>
   <text class="grp" x="32" y="612">when</text><text class="col" x="122" y="612">started_at, ended_at, duration_ms</text>
   <text class="grp" x="32" y="630">result</text><text class="col" x="122" y="630">outcome, result_text</text>
   <text class="grp" x="32" y="648">partition</text><text class="col" x="122" y="648">runtime, date</text>
