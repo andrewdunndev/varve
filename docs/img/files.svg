@@ -16,7 +16,9 @@
     .ln { fill: none; stroke: #404040; stroke-width: 1.5; }
     .ah { fill: #404040; }
     .zl { font-size: 12px; font-weight: 600; fill: #4a6741; }
+    .pg { fill: #ffffff; }
     @media (prefers-color-scheme: dark) {
+      .pg { fill: #1c1c1e; }
       .box { fill: #242426; stroke: #48484a; }
       .acc { fill: #6aaa58; stroke: #6aaa58; }
       .zone { stroke: #6aaa58; }
@@ -32,6 +34,7 @@
       .zl { fill: #6aaa58; }
     }
   </style>
+  <rect class="pg" width="720" height="732"/>
   <defs><marker id="fil-ar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto"><path class="ah" d="M0,0 L10,4 L0,8 Z"/></marker></defs>
 
   <text class="hd" x="110" y="20" text-anchor="middle">reads</text>
@@ -78,9 +81,9 @@
 
   <!-- row 2: check -->
   <rect class="box" x="20" y="126" width="180" height="76" rx="6"/>
-  <text class="nm" x="110" y="146" text-anchor="middle">lake.new, published_*</text>
-  <text class="sub" x="110" y="164" text-anchor="middle">the lake being replaced,</text>
-  <text class="sub" x="110" y="179" text-anchor="middle">and the record view</text>
+  <text class="nm" x="110" y="146" text-anchor="middle">lake.new, lake</text>
+  <text class="sub" x="110" y="164" text-anchor="middle">published_*: the lake being</text>
+  <text class="sub" x="110" y="179" text-anchor="middle">replaced, and the record view</text>
   <text class="sub" x="110" y="194" text-anchor="middle">(sql/record.sql)</text>
   <rect class="box" x="240" y="126" width="180" height="76" rx="6"/>
   <text class="nm" x="330" y="146" text-anchor="middle">checks/*.sql</text>
@@ -89,9 +92,10 @@
   <text class="sub" x="330" y="197" text-anchor="middle">data home, all of them run</text>
   <rect class="box" x="460" y="126" width="240" height="76" rx="6"/>
   <text class="nm" x="580" y="146" text-anchor="middle">failure rows</text>
-  <text class="sub" x="580" y="164" text-anchor="middle">one action column; any row</text>
-  <text class="sub" x="580" y="179" text-anchor="middle">fails the build and leaves</text>
-  <text class="sub" x="580" y="194" text-anchor="middle">lake/ untouched</text>
+  <text class="sub" x="580" y="160" text-anchor="middle">before the swap a row stops</text>
+  <text class="sub" x="580" y="172" text-anchor="middle">the build, lake/ untouched;</text>
+  <text class="sub" x="580" y="184" text-anchor="middle">after the mines a row</text>
+  <text class="sub" x="580" y="196" text-anchor="middle">fails the run</text>
 
   <!-- row 3: mine -->
   <rect class="box" x="20" y="220" width="180" height="76" rx="6"/>
@@ -162,5 +166,5 @@
   <text class="sub" x="594" y="620" text-anchor="middle">the build tests run over</text>
   <text class="lbl" x="24" y="664">The adapter and the row can stay in your data home with no change to the repo.</text>
   <text class="lbl" x="24" y="682">checks/runtime_rows.sql fails a runtime whose mirror yields no sessions.</text>
-  <text class="lbl" x="24" y="700">No shared file is edited; none has been added this way yet.</text>
+  <text class="lbl" x="24" y="700">The fixture also needs a row in tests/fixtures/runtimes.toml; none has been added this way yet.</text>
 </svg>

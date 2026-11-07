@@ -16,7 +16,9 @@
     .bt { font-size: 13px; font-weight: 600; fill: #b3412f; }
     .ln { fill: none; stroke: #404040; stroke-width: 1.5; }
     .ah { fill: #404040; }
+    .pg { fill: #ffffff; }
     @media (prefers-color-scheme: dark) {
+      .pg { fill: #1c1c1e; }
       .box { fill: #242426; stroke: #48484a; }
       .good { stroke: #6aaa58; }
       .bad { stroke: #ff9a86; }
@@ -32,6 +34,7 @@
       .ah { fill: #aeaeb2; }
     }
   </style>
+  <rect class="pg" width="720" height="830"/>
   <defs><marker id="rec-ar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto"><path class="ah" d="M0,0 L10,4 L0,8 Z"/></marker></defs>
 
   <!-- join arrows -->

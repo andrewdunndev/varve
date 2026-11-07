@@ -16,7 +16,9 @@
     .ah { fill: #404040; }
     .zl { font-size: 12px; font-weight: 600; fill: #4a6741; }
     .zg { font-size: 12px; font-weight: 600; fill: #606060; }
+    .pg { fill: #ffffff; }
     @media (prefers-color-scheme: dark) {
+      .pg { fill: #1c1c1e; }
       .box { fill: #242426; stroke: #48484a; }
       .acc { fill: #6aaa58; stroke: #6aaa58; }
       .zone { stroke: #6aaa58; }
@@ -32,6 +34,7 @@
       .zg { fill: #a0a0a6; }
     }
   </style>
+  <rect class="pg" width="720" height="640"/>
   <defs><marker id="sys-ar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto"><path class="ah" d="M0,0 L10,4 L0,8 Z"/></marker></defs>
 
   <!-- zones -->
@@ -55,7 +58,7 @@
 
   <!-- arrow labels -->
   <text class="lbl" x="95" y="86" dx="2" dy="-4">include list only</text>
-  <text class="lbl" x="95" y="262">copy, never shorter</text>
+  <text class="lbl" x="95" y="262">copy</text>
   <text class="lbl" x="250" y="312">writes</text>
   <text class="lbl" x="360" y="256" text-anchor="middle">grades</text>
   <text class="lbl" x="540" y="264" text-anchor="middle">after the swap</text>

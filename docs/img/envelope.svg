@@ -16,7 +16,9 @@
     .ln { fill: none; stroke: #404040; stroke-width: 1.5; }
     .ah { fill: #404040; }
     .zl { font-size: 12px; font-weight: 600; fill: #4a6741; }
+    .pg { fill: #ffffff; }
     @media (prefers-color-scheme: dark) {
+      .pg { fill: #1c1c1e; }
       .box { fill: #242426; stroke: #48484a; }
       .acc { fill: #6aaa58; stroke: #6aaa58; }
       .zone { stroke: #6aaa58; }
@@ -32,6 +34,7 @@
       .zl { fill: #6aaa58; }
     }
   </style>
+  <rect class="pg" width="720" height="736"/>
   <defs><marker id="env-ar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto"><path class="ah" d="M0,0 L10,4 L0,8 Z"/></marker></defs>
 
   <!-- zone -->
@@ -73,12 +76,13 @@
   <!-- stage 2 -->
   <rect class="acc" x="206" y="234" width="160" height="89" rx="6"/>
   <text class="anm" x="286" y="283" text-anchor="middle">2 write init.sql</text>
-  <rect class="box" x="386" y="234" width="310" height="89" rx="6"/>
+  <rect class="box" x="386" y="234" width="310" height="104" rx="6"/>
   <text class="lbl" x="396" y="254">memory_limit 4GB (VARVE_MEMORY_LIMIT)</text>
   <text class="lbl" x="396" y="269">threads 4 (VARVE_THREADS)</text>
   <text class="lbl" x="396" y="284">max_temp_directory_size 20GB (VARVE_MAX_SPILL)</text>
   <text class="lbl" x="396" y="299">views: data-home .toml and .jsonl, lake folders</text>
-  <text class="lbl" x="396" y="314">the engine enforces these; a trip is an error</text>
+  <text class="lbl" x="396" y="314">DuckDB applies these;</text>
+  <text class="lbl" x="396" y="329">memory_limit is not a process cap: step 4 watches RSS</text>
 
   <!-- stage 3 -->
   <rect class="acc" x="206" y="353" width="160" height="59" rx="6"/>
@@ -106,8 +110,9 @@
   <text class="lbl" x="396" y="596">exit 2: any other failure (SQL, bad .toml)</text>
 
   <!-- failure line -->
-  <rect class="bad" x="20" y="645" width="680" height="72" rx="6"/>
+  <rect class="bad" x="20" y="645" width="680" height="78" rx="6"/>
   <text class="bt" x="32" y="665">One failure line when a bound trips</text>
   <text class="mono" x="32" y="684">varve: build hit spill 20GB after 41s; rerun with VARVE_MAX_SPILL=40GB on a host that has it</text>
-  <text class="sub" x="32" y="704">The suggested value is double. A caller treats exit 1 as abandon: a build leaves the lake untouched.</text>
+  <text class="sub" x="32" y="700">The suggested value is double. Defaults live in the wrapper and are unmeasured.</text>
+  <text class="sub" x="32" y="716">bin/build treats exit 1 as abandon and leaves the lake untouched; bin/mine and bin/check count it as a failure and carry on.</text>
 </svg>

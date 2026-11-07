@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 812" width="720" height="812" role="img" aria-labelledby="bld-t bld-d">
-  <title id="bld-t">One build, in order: a failed runtime keeps its published partitions, a failed check leaves lake/ untouched</title>
+  <title id="bld-t">One build, in order: a failed runtime keeps its published partitions, a failed check before the swap leaves lake/ untouched</title>
   <desc id="bld-d">A sequence between bin/build, bin/duck (one process per runtime), the adapter, lake.new, bin/check, lake/ and bin/mine. A build first restores lake/ from lake.old if lake/ is missing. Runtime A runs its adapter and writes four tables into lake.new. Runtime B's adapter fails with exit 2, its output is removed from lake.new, and its published partitions are copied back from lake/. A cap hit (exit 1) abandons the build. bin/check reads lake.new against the published lake; a failing check removes lake.new and leaves lake/ untouched. A passing check renames lake to lake.old and lake.new to lake, then bin/mine runs and saves its tables into lake/.</desc>
   <style>
     svg { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
@@ -18,7 +18,9 @@
     .ah { fill: #404040; }
     .eh { fill: #b3412f; }
     .tag { font-size: 12px; font-weight: 600; fill: #4a6741; }
+    .pg { fill: #ffffff; }
     @media (prefers-color-scheme: dark) {
+      .pg { fill: #1c1c1e; }
       .box { fill: #242426; stroke: #48484a; }
       .acc { fill: #6aaa58; stroke: #6aaa58; }
       .frm { stroke: #636366; }
@@ -34,6 +36,7 @@
       .tag { fill: #6aaa58; }
     }
   </style>
+  <rect class="pg" width="720" height="812"/>
   <defs>
     <marker id="bld-ar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto"><path class="ah" d="M0,0 L10,4 L0,8 Z"/></marker>
     <marker id="bld-er" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto"><path class="eh" d="M0,0 L10,4 L0,8 Z"/></marker>
@@ -54,8 +57,8 @@
 
   <!-- notes -->
   <rect class="box" x="24" y="72" width="276" height="40" rx="4"/>
-  <text class="sub" x="34" y="89">start: lake/ missing and lake.old present:</text>
-  <text class="sub" x="34" y="104">mv lake.old lake, then drop lake.old</text>
+  <text class="sub" x="34" y="89">start: restore lake.old if lake/ is missing;</text>
+  <text class="sub" x="34" y="104">always drop lake.old</text>
   <rect class="box" x="440" y="140" width="258" height="40" rx="4"/>
   <text class="sub" x="450" y="157">a cap trips in any runtime (exit 1):</text>
   <text class="sub" x="450" y="172">rm lake.new, stop, lake/ untouched</text>

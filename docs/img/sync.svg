@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 740" width="720" height="740" role="img" aria-labelledby="syn-t syn-d">
-  <title id="syn-t">A copy only ever grows, and a database and its journal move together or not at all</title>
-  <desc id="syn-d">The per-file decision in bin/sync, top to bottom: config entries must be relative without parent references; find lists only regular files matching the include list, so symlinks are never copied; names in the replace list go to the replace set; a forgotten session is skipped; a source shorter than the mirror copy is skipped and counted; an equal size and whole-second mtime is already current; otherwise the file is copied to a temp name, dropped if the temp came out shorter than the copy, and renamed into place. The replace set beside it is checked for symlinks, staged together under temp names, checked unchanged from before the first copy to after the last with three tries, then the journal copies are cleared and every temp is renamed into place, all or none. A journal the source dropped leaves the mirror. No engine runs.</desc>
+  <title id="syn-t">A copy only ever grows, except the replace set, which is swapped as a unit</title>
+  <desc id="syn-d">The per-file decision in bin/sync, top to bottom: config entries must be relative without parent references; find lists only regular files matching the include list, so symlinks are never copied; names in the replace list are skipped here; a forgotten session is skipped; a source shorter than the mirror copy is skipped and counted; an equal size and whole-second mtime is already current; otherwise the file is copied to a temp name, dropped if the temp came out shorter than the copy, and renamed into place. After the include pass the replace list is walked: each entry is checked for symlinks, staged together under temp names, and checked unchanged from before the first copy to after the last with three tries, all or none up to there; then the journal copies are cleared, also when the source dropped the journal, and each temp is renamed into place. No engine runs.</desc>
   <style>
     svg { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
     .box { fill: #f4f4f4; stroke: #c4c4c4; stroke-width: 1; }
@@ -15,7 +15,9 @@
     .ln { fill: none; stroke: #404040; stroke-width: 1.5; }
     .ah { fill: #404040; }
     .zl { font-size: 12px; font-weight: 600; fill: #4a6741; }
+    .pg { fill: #ffffff; }
     @media (prefers-color-scheme: dark) {
+      .pg { fill: #1c1c1e; }
       .box { fill: #242426; stroke: #48484a; }
       .acc { fill: #6aaa58; stroke: #6aaa58; }
       .out { stroke: #636366; }
@@ -30,6 +32,7 @@
       .zl { fill: #6aaa58; }
     }
   </style>
+  <rect class="pg" width="720" height="740"/>
   <defs><marker id="syn-ar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto"><path class="ah" d="M0,0 L10,4 L0,8 Z"/></marker></defs>
 
   <!-- zone for the replace set -->
@@ -45,7 +48,7 @@
   <path class="ln" d="M125,444 V476" marker-end="url(#syn-ar)"/>
   <path class="ln" d="M125,520 V552" marker-end="url(#syn-ar)"/>
   <!-- exits -->
-  <path class="ln" d="M230,118 H410" marker-end="url(#syn-ar)"/>
+  <path class="ln" d="M230,42 H378 V118 H410" marker-end="url(#syn-ar)"/>
   <path class="ln" d="M230,194 H270" marker-end="url(#syn-ar)"/>
   <path class="ln" d="M230,270 H270" marker-end="url(#syn-ar)"/>
   <path class="ln" d="M230,346 H270" marker-end="url(#syn-ar)"/>
@@ -58,7 +61,7 @@
   <text class="lbl" x="133" y="388">differs</text>
   <text class="lbl" x="133" y="464">copied</text>
   <text class="lbl" x="133" y="540">no</text>
-  <text class="lbl" x="320" y="112" text-anchor="middle">in replace</text>
+  <text class="lbl" x="304" y="36" text-anchor="middle">then the replace list</text>
   <text class="lbl" x="250" y="188" text-anchor="middle">yes</text>
   <text class="lbl" x="250" y="264" text-anchor="middle">yes</text>
   <text class="lbl" x="250" y="340" text-anchor="middle">yes</text>
@@ -111,14 +114,12 @@
   <path class="ln" d="M548,370 V400" marker-end="url(#syn-ar)"/>
   <path class="ln" d="M548,462 V492" marker-end="url(#syn-ar)"/>
   <path class="ln" d="M548,538 V568" marker-end="url(#syn-ar)"/>
-  <path class="ln" d="M548,614 V644" marker-end="url(#syn-ar)"/>
   <text class="lbl" x="556" y="162">safe</text>
   <text class="lbl" x="556" y="238">present</text>
   <text class="lbl" x="556" y="314">changed</text>
   <text class="lbl" x="556" y="390">staged</text>
   <text class="lbl" x="556" y="482">stable</text>
   <text class="lbl" x="556" y="558">cleared</text>
-  <text class="lbl" x="556" y="634">renamed</text>
 
   <!-- replace set nodes -->
   <rect class="box" x="406" y="96" width="284" height="46" rx="6"/>
@@ -136,16 +137,13 @@
   <rect class="box" x="406" y="400" width="284" height="62" rx="6"/>
   <text class="nm" x="548" y="419" text-anchor="middle">unchanged since before?</text>
   <text class="sub" x="548" y="435" text-anchor="middle">ns stat before first copy equals after last</text>
-  <text class="sub" x="548" y="451" text-anchor="middle">3 tries, else temps removed, old set stays</text>
+  <text class="sub" x="548" y="451" text-anchor="middle">all or none: 3 tries, else old set stays</text>
   <rect class="box" x="406" y="492" width="284" height="46" rx="6"/>
   <text class="nm" x="548" y="511" text-anchor="middle">clear the journal copies</text>
-  <text class="sub" x="548" y="527" text-anchor="middle">no database pairs with an older journal</text>
+  <text class="sub" x="548" y="527" text-anchor="middle">no stale journal; also one the source dropped</text>
   <rect class="acc" x="406" y="568" width="284" height="46" rx="6"/>
-  <text class="anm" x="548" y="587" text-anchor="middle">rename every temp into place</text>
-  <text class="asub" x="548" y="603" text-anchor="middle">all or none</text>
-  <rect class="out" x="406" y="644" width="284" height="46" rx="6"/>
-  <text class="nm" x="548" y="663" text-anchor="middle">a journal the source dropped</text>
-  <text class="sub" x="548" y="679" text-anchor="middle">leaves the mirror with the new set</text>
+  <text class="anm" x="548" y="587" text-anchor="middle">rename each temp into place</text>
+  <text class="asub" x="548" y="603" text-anchor="middle">staged and checked first</text>
 
   <text class="sub" x="20" y="640">No engine runs. Temp copies stranded by a killed run</text>
   <text class="sub" x="20" y="656">are deleted at the start, under the sync lock.</text>

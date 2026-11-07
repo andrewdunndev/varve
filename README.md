@@ -29,7 +29,7 @@ can serve as simulation evidence and leak-free benchmark material.
 
 ![The runtime stores are copied into the mirror, built into a new lake, checked, swapped in and mined; the data home sits apart from the repo.](docs/img/system.svg)
 
-Sync never opens the engine, and nothing in the data home is committed.
+Sync never opens the engine.
 
 Three primitives: files, SQL files, one runner (`bin/duck`). Everything extensible is a SQL file, run in a fixed order: adapters, checks, swap, mines.
 
@@ -46,15 +46,15 @@ A new runtime is meant to touch three files; none has been added that way yet.
 
 ![The per-file decision in bin/sync and the replace set that moves a database and its journal together.](docs/img/sync.svg)
 
-A copy only ever grows, and a database and its journal move together or not at all.
+A copy only ever grows, except the replace set, which is swapped as a unit.
 
-![One build as a sequence: a failed runtime keeps its published partitions, a failed check leaves the lake untouched, a rename swaps the new lake in.](docs/img/build.svg)
+![One build as a sequence: a failed runtime keeps its published partitions, a failed check before the swap leaves the lake untouched, a rename swaps the new lake in.](docs/img/build.svg)
 
-A failed runtime keeps its published partitions, and a failed check leaves the lake untouched.
+A failed runtime keeps its published partitions.
 
 ![The four tables with their columns grouped by meaning, the joins between them, and the rules every adapter keeps.](docs/img/record.svg)
 
-Ids come from the source and unknown is NULL; tokens and cost are the only measures summed to 0.
+Ids come from the source and unknown is NULL.
 
 ![Every SQL run passes through bin/duck: the lock, the caps, the watch loop, the exit codes and the one failure line.](docs/img/envelope.svg)
 
