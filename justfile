@@ -335,4 +335,16 @@ test:
     n="$(just sql -noheader -list -c "SELECT count(*) FROM sessions WHERE session_id = 'test-session-noise';")"
     if [ "$n" != "0" ]; then echo "FAIL: the forgotten session is still in the lake" >&2; fail=1; fi
 
+    # The record checks have teeth: a retired column and a value outside a closed set fail.
+    bad="$tmp/badlake"
+    mkdir -p "$bad/messages" "$bad/tool_calls"
+    {{repo}}/bin/duck bad \
+      -c "COPY (SELECT 'm1' AS message_id, 'x' AS content, 'bogus' AS origin) TO '$bad/messages/part.parquet' (FORMAT parquet);" \
+      -c "COPY (SELECT 't1' AS tool_use_id, 'maybe' AS outcome) TO '$bad/tool_calls/part.parquet' (FORMAT parquet);"
+    rc=0; VARVE_LAKE="$bad" {{repo}}/bin/check 2>"$tmp/bad.err" || rc=$?
+    if [ "$rc" -ne 1 ]; then echo "FAIL: the record checks should fail a bad lake, got exit $rc" >&2; fail=1; fi
+    for want in 'messages.content is retired' 'messages.origin has 1 row' 'tool_calls.outcome has 1 row'; do
+      if ! grep -q "$want" "$tmp/bad.err"; then echo "FAIL: no record check line for: $want" >&2; fail=1; fi
+    done
+
     exit $fail
