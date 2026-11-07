@@ -279,6 +279,10 @@ stats *ARGS:
       -c ".output /dev/null" -f "{{repo}}/mining/queries/stats_year.sql" \
       -c ".output" -f "{{repo}}/mining/stats_render.sql"
 
+# Copy runtime sources into the mirror (no engine, nice 19).
+sync:
+    {{repo}}/bin/sync
+
 # Report lake size; tripwire at ~100 GB (PRD D4: keep-everything is cheap
 # at this scale, the watch is the control).
 disk:
@@ -446,5 +450,6 @@ test:
     echo "varve test: runner caps and startup views" >&2
     {{repo}}/tests/caps.sh || fail=1
     {{repo}}/tests/views.sh || fail=1
+    {{repo}}/tests/sync.sh || fail=1
 
     exit $fail

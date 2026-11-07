@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+# Copy runtime sources into the mirror. No SQL. A copy only ever grows: a
+# shorter source is skipped and counted, so an eroded source never shrinks the
+# mirror. Files named in a runtime's `replace` are exempt, because a stale
+# database/journal pair corrupts; they are copied as a stable pair or not at all.
+# Config: $VARVE_DATA/runtimes.toml (see runtimes.example.toml). Sessions listed
+# in forgotten.toml are never copied.
+set -euo pipefail
+
+if [ -z "${VARVE_SYNC_NICED:-}" ]; then VARVE_SYNC_NICED=1 exec nice -n "${VARVE_NICE:-19}" "$0" "$@"; fi
+
+data="${VARVE_DATA:-$HOME/.local/share/varve}"
+mirror="${VARVE_MIRROR:-$data/mirror}"
+lock="${VARVE_LOCK:-${TMPDIR:-/tmp}/varve-duck.lock}.sync"
+die() { echo "varve: sync: $*" >&2; exit 2; }
+
+yq="$(command -v yq 2>/dev/null || mise which yq 2>/dev/null || true)"
+[ -n "$yq" ] || die "no yq on PATH or in mise"
+[ -f "$data/runtimes.toml" ] || die "no $data/runtimes.toml (copy runtimes.example.toml there)"
+
+if stat --version >/dev/null 2>&1; then statfmt=(-c '%s %Y'); else statfmt=(-f '%z %m'); fi
+st() { stat "${statfmt[@]}" "$1"; }
+
+while ! mkdir "$lock" 2>/dev/null; do
+  holder="$(cat "$lock/pid" 2>/dev/null || true)"
+  if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then echo "varve: sync blocked: lock held by pid $holder" >&2; exit 1; fi
+  if [ -z "$holder" ]; then sleep 1; [ -n "$(cat "$lock/pid" 2>/dev/null || true)" ] && continue; fi
+  rm -rf "$lock"
+done
+echo "$$" > "$lock/pid"
+trap 'rm -rf "$lock"' EXIT
+
+forgotten=""
+if [ -f "$data/forgotten.toml" ]; then
+  forgotten="$("$yq" -p toml -o=tsv '(.row // [])[] | .session_id' "$data/forgotten.toml")"
+fi
+
+is_forgotten() {
+  local id
+  [ -n "$forgotten" ] || return 1
+  while IFS= read -r id; do
+    [ -n "$id" ] || continue
+    case "$1" in *"$id"*) return 0 ;; esac
+  done <<< "$forgotten"
+  return 1
+}
+
+in_list() { case ",$2," in *",$1,"*) return 0 ;; *) return 1 ;; esac; }
+
+# copy_pair SRC DEST: copy to a temp name, then rename.
+put() {
+  mkdir -p "$(dirname "$2")"
+  cp -p "$1" "$2.tmp.$$" && mv "$2.tmp.$$" "$2"
+}
+
+# stable_copy SRC DEST: three tries to copy a file that did not change mid-copy.
+stable_copy() {
+  local try before after
+  for try in 1 2 3; do
+    before="$(st "$1")"
+    put "$1" "$2"
+    after="$(st "$1")"
+    [ "$before" = "$after" ] && return 0
+  done
+  return 1
+}
+
+rows="$("$yq" -p toml -o=tsv '(.row // [])[] | [.name, .source, (.include | join(",")), ((.replace // []) | join(","))]' "$data/runtimes.toml")"
+
+while IFS=$'\t' read -r name source include replace; do
+  [ -n "$name" ] || continue
+  src="${source/#\~/$HOME}"
+  if [ ! -d "$src" ]; then echo "varve: sync $name: no source at $src" >&2; continue; fi
+  copied=0; skipped=0; kept=0
+  # Regular files first, then the replace set in listed order (database before journal).
+  pats=()
+  IFS=, read -r -a pats <<< "$include"
+  for pat in "${pats[@]}"; do
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      rel="${f#"$src"/}"
+      in_list "$(basename "$f")" "$replace" && continue
+      if is_forgotten "$rel"; then continue; fi
+      dest="$mirror/$name/$rel"
+      read -r ssize smtime <<< "$(st "$f")"
+      if [ -f "$dest" ]; then
+        read -r dsize dmtime <<< "$(st "$dest")"
+        if [ "$ssize" -lt "$dsize" ]; then skipped=$((skipped + 1)); continue; fi
+        if [ "$ssize" -eq "$dsize" ] && [ "$smtime" = "$dmtime" ]; then continue; fi
+      fi
+      put "$f" "$dest"
+      copied=$((copied + 1))
+    done < <(find "$src" -type f -name "$pat" | LC_ALL=C sort)
+  done
+  reps=()
+  if [ -n "$replace" ]; then IFS=, read -r -a reps <<< "$replace"; fi
+  if [ "${#reps[@]}" -gt 0 ]; then
+    for r in "${reps[@]}"; do
+      f="$src/$r"
+      [ -f "$f" ] || continue
+      dest="$mirror/$name/$r"
+      if [ -f "$dest" ] && [ "$(st "$f")" = "$(st "$dest")" ]; then continue; fi
+      if stable_copy "$f" "$dest"; then copied=$((copied + 1)); else kept=$((kept + 1)); fi
+    done
+  fi
+  echo "varve: sync $name: copied $copied, skipped $skipped shorter, kept $kept unstable" >&2
+done <<< "$rows"

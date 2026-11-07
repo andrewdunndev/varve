@@ -1,0 +1,26 @@
+# Copy to $VARVE_DATA/runtimes.toml and edit. One [[row]] per agent runtime.
+#   name     runtime column value and mirror folder
+#   adapter  file in adapters/ (the data home's adapters/ wins)
+#   source   where the runtime keeps its sessions
+#   include  find -name allow-list; nothing else is copied
+#   replace  optional; files exempt from never-shorter (a stale database and
+#            journal pair corrupts), copied together or not at all
+
+[[row]]
+name = "claude-code"
+adapter = "claude_code.sql"
+source = "~/.claude/projects"
+include = ["*.jsonl"]
+
+[[row]]
+name = "pi"
+adapter = "pi.sql"
+source = "~/.pi/agent/sessions"
+include = ["*.jsonl"]
+
+[[row]]
+name = "opencode"
+adapter = "opencode.sql"
+source = "~/.local/share/opencode"
+include = ["opencode.db", "opencode.db-wal"]
+replace = ["opencode.db", "opencode.db-wal"]
