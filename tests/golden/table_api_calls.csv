@@ -4,6 +4,8 @@ pi-session-1,e2,NULL,NULL,2026-08-01 00:00:01,claude-sonnet-5,anthropic,100,50,0
 session_id,message_id,api_message_id,request_id,timestamp,model,provider,input,output,cache_read,cache_write,cost_usd,unpriced_model,date,runtime
 test-session-0,22222222-2222-2222-2222-222222222222,msg_1,req-1,2026-08-01 00:00:01,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2026-08-01,claude-code
 test-session-0,44444444-4444-4444-4444-444444444444,msg_2,req-2,2026-08-01 00:00:03,claude-sonnet-5,anthropic,80,30,0,0,0.00046,false,2026-08-01,claude-code
+test-session-2023,55555555-5555-5555-5555-555555555555,msg_sub_1,req-sub-1,2023-06-03 00:00:05,claude-sonnet-5,anthropic,40,10,0,0,0.00018,false,2023-06-01,claude-code
+test-session-2023,66666666-6666-6666-6666-666666666666,msg_sub_2,req-sub-2,2023-06-03 00:00:06,claude-sonnet-5,anthropic,30,8,0,0,0.00014,false,2023-06-01,claude-code
 test-session-2023,c0000000-0000-0000-0000-000000000002,msg_t_1,req-t-1,2023-06-01 00:00:02,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-01,claude-code
 test-session-2023,c0000000-0000-0000-0000-000000000004,msg_t_2,req-t-2,2023-06-01 00:00:04,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-01,claude-code
 test-session-2023,c0000000-0000-0000-0000-000000000006,msg_t_3,req-t-3,2023-06-01 00:00:06,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-01,claude-code

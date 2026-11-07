@@ -1,3 +1,3 @@
-NULL,24,2030,945,10400,1100,0.02,false
-claude-sonnet-5,24,2030,945,10400,1100,0.02,false
+NULL,26,2100,963,10400,1100,0.02,false
+claude-sonnet-5,26,2100,963,10400,1100,0.02,false
 model,calls,input,output,cache_read,cache_write,cost_usd,any_unpriced

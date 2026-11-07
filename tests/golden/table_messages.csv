@@ -5,6 +5,8 @@
 33333333-3333-3333-3333-333333333333,test-session-1,user,22222222-2222-2222-2222-222222222222,false,2026-08-01 00:00:02,user,NULL,"""no, use console.log instead""",2026-08-01,claude-code
 44444444-4444-4444-4444-444444444444,test-session-0,assistant,33333333-3333-3333-3333-333333333333,false,2026-08-01 00:00:03,assistant,msg_2,"[{""type"":""text"",""text"":""Updated to use console.log().""}]",2026-08-01,claude-code
 44444444-4444-4444-4444-444444444444,test-session-1,assistant,33333333-3333-3333-3333-333333333333,false,2026-08-01 00:00:03,assistant,msg_2,"[{""type"":""text"",""text"":""Updated to use console.log().""}]",2026-08-01,claude-code
+55555555-5555-5555-5555-555555555555,test-session-2023,assistant,NULL,true,2023-06-03 00:00:05,assistant,msg_sub_1,"[{""type"":""text"",""text"":""Listed the files.""}]",2023-06-01,claude-code
+66666666-6666-6666-6666-666666666666,test-session-2023,assistant,NULL,true,2023-06-03 00:00:06,assistant,msg_sub_2,"[{""type"":""text"",""text"":""Read the config.""}]",2023-06-01,claude-code
 a0000000-0000-0000-0000-000000000001,test-session-ny,user,NULL,false,2025-12-30 12:00:00,user,NULL,"""summarize the build log""",2025-12-30,claude-code
 a0000000-0000-0000-0000-000000000002,test-session-ny,assistant,a0000000-0000-0000-0000-000000000001,false,2025-12-30 12:00:05,assistant,msg_ny_1,"[{""type"":""tool_use"",""id"":""tool_ny_1"",""name"":""Read"",""input"":{}}]",2025-12-30,claude-code
 a0000000-0000-0000-0000-000000000003,test-session-ny,user,a0000000-0000-0000-0000-000000000002,false,2025-12-30 12:00:06,user,NULL,"[{""type"":""tool_result"",""tool_use_id"":""tool_ny_1"",""content"":""build ok""}]",2025-12-30,claude-code
