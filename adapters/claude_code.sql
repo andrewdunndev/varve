@@ -127,7 +127,7 @@ dedup AS (
   SELECT
     api_message_id,
     nullif(request_id,'')          AS request_id,
-    any_value(session_id)          AS session_id,
+    min(session_id)                AS session_id,
     any_value(model)               AS model,
     max_by(line_uuid, outp)        AS message_id,   -- representative line
     max_by(ts, outp)               AS timestamp,

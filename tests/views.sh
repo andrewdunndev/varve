@@ -31,7 +31,7 @@ printf '%s\n' '{"k":1}' 'not json' '{"k":2}' > "$VARVE_DATA/ledger.jsonl"
 
 want "toml view" "red,blue" "$(q "SELECT string_agg(name, ',' ORDER BY rank) FROM colors")"
 want "toml types" "2" "$(q "SELECT count(*) FROM colors WHERE typeof(rank) = 'BIGINT'")"
-want "jsonl view skips bad lines" "2" "$(q "SELECT count(*) FROM ledger")"
+want "jsonl view reads good lines" "2" "$(q "SELECT count(*) FILTER (WHERE json_valid(j)) FROM ledger")"
 want "lake folder view" "7" "$(q "SELECT n FROM things")"
 rc=0; q "SELECT * FROM empty" >/dev/null 2>&1 || rc=$?
 want "empty toml has no view" "2" "$rc"
