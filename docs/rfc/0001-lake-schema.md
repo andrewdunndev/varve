@@ -132,9 +132,12 @@ across runtimes, so they live in `sql/prelude.sql` (the views plus the
 Each adapter reads one runtime's mirror folder (`getvariable('mirror_dir')`) and
 writes `stg_sessions`, `stg_messages`, `stg_api_calls` and `stg_tool_calls`.
 `bin/build` runs one process per runtime into `lake.new`, copying each table with
-`PARTITION_BY (runtime, date)` and `FILENAME_PATTERN 'part'`. A runtime that fails,
-or whose mirror is empty, keeps its last good partitions: every published
-`runtime=` partition that `lake.new` lacks is copied across. The checks read
+`PARTITION_BY (runtime, date)` and `FILENAME_PATTERN 'part'`. A runtime that built
+owns its partitions, so a table it now builds empty fails `row_counts`. A runtime
+that was not built keeps its last good partitions: one whose adapter failed, one
+whose mirror is empty (unless every session it published is forgotten), and one
+not in `runtimes.toml`. Each published `runtime=` partition of those that
+`lake.new` lacks is copied across. The checks read
 `lake.new`, the lake is swapped by rename, and the mines run (ADR-0008).
 `sql/prelude.sql` holds the attribution and pricing macros the adapters share.
 
@@ -162,7 +165,7 @@ results as `tool_calls.arguments` and `result_text`. The lake is local-only
 (ADR-0004), so keeping text costs nothing on confidentiality and lets mining run
 `fts` and `vss` over it without a second fetch from source files. `sql/record.sql`
 gives every column its written meaning. Correction-event pointers
-(`model_draft_ptr`, `operator_rewrite_ptr`) stay pointer-based per RFC-0002 and
+(`draft_ref`, `rewrite_ref`) stay pointer-based per RFC-0002 and
 invariant I5.
 
 ### Engine
@@ -182,8 +185,9 @@ against the Claude Code model ids varve emits. See `queries/reconcile_ccusage.sq
 
 ### Parsers
 
-`read_json_auto` with `union_by_name=true, ignore_errors=true` tolerates schema
-drift across Claude Code versions. The pair can silently drop whole files whose
+`read_json` with an explicit `columns` list and `ignore_errors=true` tolerates schema
+drift across Claude Code versions: a field that does not match its declared type
+reads as NULL. This can silently drop whole files whose
 column types do not reconcile, so validate file coverage (distinct filenames
 read) against the on-disk count rather than assuming the glob loaded everything.
 
@@ -211,5 +215,5 @@ build.
 - Related: ADR-0006 (normalization denominator), ADR-0005 (attribution), ADR-0001
   (transcript plane), ADR-0002 (files-first engine), RFC-0002 (correction-event
   schema).
-- External: DuckDB `read_json_auto`, `vss`, `fts`, `sqlite` extensions
+- External: DuckDB `read_json`, `vss`, `fts`, `sqlite` extensions
   <https://duckdb.org/>.

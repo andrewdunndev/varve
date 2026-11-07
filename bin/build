@@ -3,14 +3,17 @@
 # Run it as: bin/duck locked bin/build
 #
 #   1. each runtime's adapter writes its four tables into lake.new
-#   2. a runtime that fails to build keeps its last good partitions, and so does
-#      one with an empty mirror: every published runtime partition lake.new lacks
-#      is copied across, and so is every non-core folder (the mined tables)
+#   2. a runtime that built owns its partitions, empty tables included. A runtime
+#      that was not built keeps its last good partitions: one whose adapter
+#      failed, one with an empty mirror (unless every session it published is
+#      forgotten), and one not in runtimes.toml. Those partitions are copied
+#      across, and so is every non-core folder (the mined tables)
 #   3. the checks read lake.new against the published lake
 #   4. lake.new replaces lake by rename, then the mines run; the previous lake
 #      stays as lake.old until the next build starts, so a bad swap can be undone
-# A bound hit (exit 1 from bin/duck) abandons the whole build. Exit 1 also means
-# a runtime failed or a check failed; the published lake is untouched then.
+# A bound hit (exit 1 from bin/duck) abandons the whole build and leaves the
+# lake untouched. Exit 1 also means a check failed, which leaves the lake
+# untouched, or a runtime failed, which swaps the rest in and then exits 1.
 set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -34,12 +37,25 @@ rm -rf "$new"
 mkdir -p "$new"
 
 failed=""
+built=" "
+dropped=" "
 rows="$("$yq" -p toml -o=tsv '(.row // [])[] | [.name, .adapter]' "$data/runtimes.toml")"
 while IFS=$'\t' read -r name adapter; do
   [ -n "$name" ] || continue
   dir="$mirror/$name"
   if [ ! -d "$dir" ] || [ -z "$(find "$dir" -type f -print -quit)" ]; then
-    echo "varve: build $name: empty mirror at $dir, keeping its published partitions" >&2
+    left=1
+    if [ -d "$lake/sessions" ]; then
+      left="$(VARVE_LAKE="$lake" "$repo/bin/duck" "build $name" -noheader -list \
+        -c "CREATE VIEW IF NOT EXISTS forgotten AS SELECT NULL::VARCHAR AS session_id WHERE false;" \
+        -c "SELECT count(*) FROM sessions WHERE runtime = '$name' AND session_id NOT IN (SELECT session_id FROM forgotten);")" || left=1
+    fi
+    if [ "$left" = 0 ]; then
+      echo "varve: build $name: empty mirror and every published session is forgotten, dropping its partitions" >&2
+      dropped="$dropped$name "
+    else
+      echo "varve: build $name: empty mirror at $dir, keeping its published partitions" >&2
+    fi
     continue
   fi
   file="$data/adapters/$adapter"
@@ -56,6 +72,8 @@ while IFS=$'\t' read -r name adapter; do
     for t in $tables; do rm -rf "$new/$t/runtime=$name"; done
     echo "varve: build $name: adapter failed, keeping its published partitions" >&2
     failed="$failed $name"
+  else
+    built="$built$name "
   fi
 done <<< "$rows"
 
@@ -67,6 +85,8 @@ if [ -d "$lake" ]; then
       *" $t "*)
         for p in "$d"runtime=*/; do
           [ -d "$p" ] || continue
+          rn="$(basename "$p")"; rn="${rn#runtime=}"
+          case "$built$dropped" in *" $rn "*) continue ;; esac
           if [ ! -d "$new/$t/$(basename "$p")" ]; then
             mkdir -p "$new/$t"
             cp -R "${p%/}" "$new/$t/"

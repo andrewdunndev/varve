@@ -364,4 +364,34 @@ test:
       echo "FAIL: usage_present should name only the runtime with no tokens, got: $out" >&2; fail=1
     fi
 
+    # A runtime that built owns its partitions: a table it now builds empty fails row_counts instead of staying frozen.
+    before="$(sums "$lake")"
+    mkdir -p "$VARVE_DATA/adapters"
+    { cat "{{repo}}/adapters/pi.sql"; echo "CREATE TABLE _no_tools AS SELECT * FROM stg_tool_calls WHERE false; DROP TABLE stg_tool_calls; ALTER TABLE _no_tools RENAME TO stg_tool_calls;"; } > "$VARVE_DATA/adapters/pi.sql"
+    rc=0; just build 2>"$tmp/build.err" || rc=$?
+    if [ "$rc" -ne 1 ] || ! grep -q 'check row_counts: tool_calls rows for pi fell' "$tmp/build.err"; then
+      echo "FAIL: a built runtime with an empty table should fail row_counts, got exit $rc" >&2; tail -5 "$tmp/build.err" >&2; fail=1
+    fi
+    if [ -e "$lake.new" ] || [ "$(sums "$lake")" != "$before" ]; then
+      echo "FAIL: the failed row_counts left lake.new behind or changed the lake" >&2; fail=1
+    fi
+    rm -rf "$VARVE_DATA/adapters"
+
+    # A runtime with an empty mirror keeps its partitions; once every session it published is forgotten, the build completes without it.
+    mv "$VARVE_MIRROR/opencode" "$tmp/opencode-mirror"
+    rc=0; just build 2>"$tmp/build.err" || rc=$?
+    n="$(just sql -noheader -list -c "SELECT count(*) FROM sessions WHERE runtime = 'opencode';")"
+    if [ "$rc" -ne 0 ] || [ "$n" = "0" ]; then
+      echo "FAIL: an empty mirror should keep the runtime's partitions, got exit $rc and $n sessions" >&2; tail -5 "$tmp/build.err" >&2; fail=1
+    fi
+    for id in $(just sql -noheader -list -c "SELECT session_id FROM sessions WHERE runtime = 'opencode';"); do
+      printf '\n[[row]]\nsession_id = "%s"\nruntime = "opencode"\nat = "2026-01-01"\n' "$id" >> "$VARVE_DATA/forgotten.toml"
+    done
+    rc=0; just build 2>"$tmp/build.err" || rc=$?
+    n="$(just sql -noheader -list -c "SELECT count(*) FROM sessions WHERE runtime = 'opencode';")"
+    if [ "$rc" -ne 0 ] || [ "$n" != "0" ] || [ -d "$lake/messages/runtime=opencode" ]; then
+      echo "FAIL: forgetting a runtime's last session should complete the build, got exit $rc and $n sessions" >&2; tail -5 "$tmp/build.err" >&2; fail=1
+    fi
+    mv "$tmp/opencode-mirror" "$VARVE_MIRROR/opencode"
+
     exit $fail
