@@ -1,9 +1,9 @@
 # Merge gate. Both jobs call the justfile recipes, so CI and a local run match.
 # Hand-rolled: varve is SQL + a justfile, not a language stack a dunn.dev/pipeline catalog component targets.
-# lint: just --evaluate.
+# lint: justfile parses, scripts parse, no engine name outside bin/duck.
 # test: just test runs the pipeline on the synthetic fixture under an isolated
 #       VARVE_DATA and executes every SQL file against DuckDB.
-# Runs on the untagged shared runner. The jobs only fetch duckdb and just.
+# Runs on the untagged shared runner. The jobs only fetch the pinned tools.
 
 default:
   interruptible: true
@@ -17,7 +17,7 @@ workflow:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
-# mise provisions duckdb + just from mise.toml. Entrypoint override clears the
+# mise provisions the pinned tools from mise.toml. Entrypoint override clears the
 # image's default `mise shell` ENTRYPOINT so GitLab Runner's `bash -c
 # "<script>"` invocation works.
 .mise-job: &mise-job

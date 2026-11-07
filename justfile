@@ -1,7 +1,7 @@
 # varve -- local agent-session record lake (Parquet + DuckDB).
 # Data home: ~/.local/share/varve (never in this repo; VARVE_DATA overrides).
-# Zero resident processes: every target is invoke-and-exit. DuckDB is single-
-# writer -- ingest/backfill are the SOLE writers; `just sql` opens read-only.
+# Zero resident processes: every target is invoke-and-exit. Every SQL run goes
+# through bin/duck, which bounds it and serializes writers.
 
 # Recipe args reach recipes as "$@" with quoting intact ({{ARGS}} interpolation
 # would re-split quoted SQL at the shell).
@@ -9,14 +9,9 @@ set positional-arguments
 
 data_home := env_var_or_default("VARVE_DATA", env_var("HOME") + "/.local/share/varve")
 repo      := justfile_directory()
-lake      := data_home + "/lake"
+lake      := env_var_or_default("VARVE_LAKE", data_home + "/lake")
 state     := data_home + "/state"
-# DuckDB otherwise claims 80% of RAM, every core, and spill up to 90% of free disk.
-mine_memory_limit := env_var_or_default("VARVE_MINE_MEMORY_LIMIT", "4GB")
-duckdb_threads    := env_var_or_default("VARVE_DUCKDB_THREADS", "4")
-duckdb_max_spill  := env_var_or_default("VARVE_DUCKDB_MAX_SPILL", "20GB")
 manifest  := state + "/manifest.parquet"
-db        := data_home + "/varve.duckdb"
 # Adjudication ledger: operator data, never in the repo.
 # Defaults to the data home (survives a lake rebuild -- backfill clears lake/ only);
 # VARVE_ADJUDICATIONS overrides. `mine` handles an absent file gracefully.
@@ -47,7 +42,6 @@ pi_source   := pi_root + "/**/*.jsonl"
 # the live store is never written or locked (see _pipeline).
 opencode_db := env_var_or_default("VARVE_OPENCODE_DB", env_var("HOME") + "/.local/share/opencode/opencode.db")
 
-duckdb := "mise exec -- duckdb"
 
 default:
     @just --list
@@ -84,7 +78,7 @@ _pipeline mode:
     mkdir -p "{{lake}}" "{{state}}"
     # Manifest bootstrap: empty (schema-only) parquet on first run.
     if [ ! -f "{{manifest}}" ]; then
-      {{duckdb}} -c "COPY (SELECT ''::VARCHAR path, 0::BIGINT size, 0::BIGINT mtime WHERE 1=0) TO '{{manifest}}' (FORMAT parquet);"
+      {{repo}}/bin/duck manifest -c "COPY (SELECT ''::VARCHAR path, 0::BIGINT size, 0::BIGINT mtime WHERE 1=0) TO '{{manifest}}' (FORMAT parquet);"
     fi
     # Current file inventory = high-water mark (path | size-bytes | mtime-epoch),
     # spanning every present runtime. The manifest is refreshed from this, so one
@@ -141,14 +135,7 @@ _pipeline mode:
       echo "varve: skip opencode -- no db at {{opencode_db}}" >&2
     fi
     # Derive + write affected partitions + refresh manifest, one DuckDB session.
-    # Large-corpus safety: an in-memory session cannot spill without a
-    # temp_directory, and insertion order buys nothing here (every COPY is
-    # partitioned; readers sort) -- without both, a first backfill over a
-    # multi-GB corpus exhausts the memory limit and dies.
-    mkdir -p "{{state}}"; spill="$(mktemp -d "{{state}}/duckdb_tmp.XXXXXX")"
-    trap 'rm -rf "$spill"' EXIT
-    {{duckdb}} :memory: \
-      -c "SET preserve_insertion_order=false; SET threads={{duckdb_threads}}; SET max_temp_directory_size='{{duckdb_max_spill}}'; SET temp_directory='$spill';" \
+    {{repo}}/bin/duck "ingest {{mode}}" \
       -c "SET VARIABLE cc_source='{{cc_source}}'; SET VARIABLE pi_source='{{pi_source}}'; SET VARIABLE opencode_db='{{opencode_db}}'; SET VARIABLE repo_dir='{{repo}}'; SET VARIABLE attribution='{{attribution}}'; SET VARIABLE mode='{{mode}}'; SET VARIABLE inventory='$inv'; SET VARIABLE manifest='{{manifest}}';" \
       -f "{{repo}}/sql/prelude.sql" \
       ${adapters[@]+"${adapters[@]}"} \
@@ -161,12 +148,7 @@ _pipeline mode:
       -c "COPY (SELECT path, size, mtime FROM _inventory) TO '{{manifest}}' (FORMAT parquet, OVERWRITE_OR_IGNORE);"
     rm -f "$inv"
     [ -n "$oc_snap" ] && rm -rf "$oc_snap" || true
-    just _views
     just mine
-
-# (Re)create the read-side views in varve.duckdb over the Parquet lake.
-_views:
-    {{duckdb}} "{{db}}" -c "SET VARIABLE lake='{{lake}}';" -f "{{repo}}/sql/views.sql"
 
 # Correction mining. Rebuilds correction_candidates (four detectors, precision-first),
 # operator_messages (recall-floor denominator: metadata-only, flagged = also a candidate
@@ -191,34 +173,13 @@ mine:
     # writes -- a (runtime, date) partition that becomes EMPTY after a detector
     # change would otherwise survive as stale rows.
     rm -rf "{{lake}}/correction_candidates" "{{lake}}/operator_messages" "{{lake}}/correction_events"
-    mkdir -p "{{state}}"; spill="$(mktemp -d "{{state}}/duckdb_tmp.XXXXXX")"
-    trap 'rm -rf "$spill"' EXIT
-    {{duckdb}} :memory: \
-      -c "SET memory_limit='{{mine_memory_limit}}'; SET preserve_insertion_order=false; SET threads={{duckdb_threads}}; SET max_temp_directory_size='{{duckdb_max_spill}}'; SET temp_directory='$spill';" \
+    {{repo}}/bin/duck mine \
       -c "SET VARIABLE lake='{{lake}}'; SET VARIABLE repo_dir='{{repo}}'; SET VARIABLE adjudications='$adj';" \
       -f "{{repo}}/mining/corrections.sql" \
       -c "COPY (SELECT * FROM stg_correction_candidates ORDER BY runtime, date, candidate_id) TO '{{lake}}/correction_candidates' (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);" \
       -c "COPY (SELECT * FROM stg_operator_messages ORDER BY runtime, date, message_uuid) TO '{{lake}}/operator_messages' (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);" \
       -c "COPY (SELECT * FROM stg_correction_events ORDER BY channel, date, event_id) TO '{{lake}}/correction_events' (FORMAT parquet, PARTITION_BY (channel, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);"
     [ -n "$tmp" ] && rm -f "$tmp" || true
-    # (Re)create the read-side views over the just-written tables. CREATE VIEW binds its
-    # glob eagerly, so EVERY table gets a view only once its dir holds parquet:
-    # correction_events is empty until the first adjudication round, and a corpus that
-    # trips zero detectors (or has no user messages at all) leaves candidates/
-    # operator_messages fileless too -- an empty COPY writes no partition files.
-    ev="DROP VIEW IF EXISTS correction_events;"
-    if find "{{lake}}/correction_events" -name '*.parquet' -print -quit 2>/dev/null | grep -q .; then
-      ev="CREATE OR REPLACE VIEW correction_events AS SELECT * FROM read_parquet('{{lake}}/correction_events/**/*.parquet', hive_partitioning=true, union_by_name=true);"
-    fi
-    cands="DROP VIEW IF EXISTS correction_candidates;"
-    if find "{{lake}}/correction_candidates" -name '*.parquet' -print -quit 2>/dev/null | grep -q .; then
-      cands="CREATE OR REPLACE VIEW correction_candidates AS SELECT * FROM read_parquet('{{lake}}/correction_candidates/**/*.parquet', hive_partitioning=true, union_by_name=true);"
-    fi
-    om="DROP VIEW IF EXISTS operator_messages;"
-    if find "{{lake}}/operator_messages" -name '*.parquet' -print -quit 2>/dev/null | grep -q .; then
-      om="CREATE OR REPLACE VIEW operator_messages AS SELECT * FROM read_parquet('{{lake}}/operator_messages/**/*.parquet', hive_partitioning=true, union_by_name=true);"
-    fi
-    {{duckdb}} "{{db}}" -c "$cands $om $ev"
 
 # Adjudication review document. Renders the review sitting to
 # <data_home>/review_round1.md (override with `out=`): one section per flagged correction
@@ -250,7 +211,7 @@ review out=(data_home + "/review_round1.md"):
       ws="$wstmp"
     fi
     mkdir -p "$(dirname "{{out}}")"
-    {{duckdb}} :memory: \
+    {{repo}}/bin/duck review \
       -c "SET VARIABLE lake='{{lake}}'; SET VARIABLE adjudications='$adj'; SET VARIABLE worksheet='$ws';" \
       -f "{{repo}}/mining/review.sql" \
       -c "COPY (SELECT md FROM stg_review_document ORDER BY part, ord2, ord3) TO '{{out}}' (FORMAT csv, HEADER false, QUOTE '', ESCAPE '', DELIMITER E'\t');"
@@ -286,11 +247,11 @@ interventions rulebook_dir:
     mv "$tmp" "$out"
     echo "varve: wrote $(($(wc -l < "$out") - 1)) row(s) -> $out" >&2
 
-# Open DuckDB READ-ONLY with lake views attached. Pass args, e.g.
+# Open the engine with a view per lake folder. Pass args, e.g.
 #   just sql -c "SELECT count(*) FROM api_calls;"
 #   just sql -f queries/burn_by_day.sql
 sql *ARGS:
-    {{duckdb}} -readonly "{{db}}" -c "SET VARIABLE lake='{{lake}}';" "$@"
+    {{repo}}/bin/duck sql "$@"
 
 # Year in review: a local-time activity heatmap plus year totals (ADR-0007).
 #   just stats [--year N] [--runtime claude|pi|opencode|all] [--metric prompts|steps|tokens]
@@ -313,7 +274,7 @@ stats *ARGS:
     case "$runtime" in claude|pi|opencode|all) ;; *) echo "varve stats: --runtime takes claude|pi|opencode|all" >&2; exit 2 ;; esac
     case "$metric" in prompts|steps|tokens) ;; *) echo "varve stats: --metric takes prompts|steps|tokens" >&2; exit 2 ;; esac
     today="${VARVE_TODAY:-$(date +%F)}"
-    {{duckdb}} -readonly "{{db}}" -noheader -list \
+    {{repo}}/bin/duck stats -noheader -list \
       -c "SET VARIABLE lake='{{lake}}'; SET VARIABLE year=$year; SET VARIABLE runtime='$runtime'; SET VARIABLE metric='$metric'; SET VARIABLE today=DATE '$today';" \
       -c ".output /dev/null" -f "{{repo}}/mining/queries/stats_year.sql" \
       -c ".output" -f "{{repo}}/mining/stats_render.sql"
@@ -324,16 +285,24 @@ disk:
     @du -sh {{data_home}} 2>/dev/null || echo "no lake yet at {{data_home}}"
     @kb="$(du -sk {{data_home}} 2>/dev/null | cut -f1)"; if [ "${kb:-0}" -ge 104857600 ]; then echo "varve disk: TRIPWIRE -- data home exceeds ~100 GB (PRD D4 disk watch)"; fi
 
-# CI/local lint: syntax-validate the justfile itself. `--evaluate` parses every
-# recipe body and evaluates the top-level variable assignments, so a broken
-# interpolation or a malformed recipe declaration fails here (verified: an
-# unclosed `{{` and a stray `:` both fail `--evaluate` with a parser error).
-# Not `just --fmt --check`: it would flatten the aligned `:=` blocks.
-# mise.toml resolving is validated for free: every CI job's `mise install`
-# fails outright on an unresolvable duckdb/just pin before any recipe runs.
+# CI/local lint. `just --evaluate` parses every recipe body and evaluates the
+# top-level assignments, so a broken interpolation or recipe declaration fails
+# here. Scripts under bin/ must parse. The engine's name appears nowhere
+# outside the runner, the toolchain pin and prose: every run goes through
+# bin/duck, which owns the bounds.
 lint:
+    #!/usr/bin/env bash
+    set -euo pipefail
     just --evaluate > /dev/null
-    @echo "varve lint: justfile OK"
+    for s in bin/* tests/*.sh; do bash -n "$s"; done
+    word="duck""db"
+    hits="$(find . -type f -not -path './.git/*' -not -path './docs/*' -not -path './golden-out/*' -not -path './bin/duck' -not -name mise.toml -not -name '*.md' -not -name '*.svg' -not -name '*.png' -exec grep -Ilw "$word" {} + || true)"
+    if [ -n "$hits" ]; then
+      echo "varve lint: the engine is named outside bin/duck:" >&2
+      echo "$hits" >&2
+      exit 1
+    fi
+    echo "varve lint: OK"
 
 # CI/local test: the real assertion behind `lint`. Runs the full pipeline
 # (backfill -> mine -> views) against a synthetic three-runtime fixture
@@ -357,7 +326,7 @@ test:
     export TZ=UTC
 
     echo "varve test: seeding synthetic opencode fixture db" >&2
-    {{duckdb}} :memory: \
+    {{repo}}/bin/duck seed \
       -c "INSTALL sqlite; LOAD sqlite; ATTACH '$VARVE_OPENCODE_DB' AS oc (TYPE sqlite);" \
       -f "{{repo}}/tests/fixtures/opencode_seed.sql"
 
@@ -378,7 +347,7 @@ test:
     if [ "${cand:-0}" -lt 1 ]; then
       echo "FAIL: correction_candidates is empty -- the fixture no longer trips" >&2
       echo "      a mining detector (mine's correction_candidates view creation" >&2
-      echo "      requires at least one row; see justfile _views comment)" >&2
+      echo "      requires at least one row)" >&2
       exit 1
     fi
     # Every detector must fire on the fixture; a detector that goes dead fails here
@@ -473,5 +442,9 @@ test:
       head -60 "$tmp/golden.diff" >&2
       fail=1
     fi
+
+    echo "varve test: runner caps and startup views" >&2
+    {{repo}}/tests/caps.sh || fail=1
+    {{repo}}/tests/views.sh || fail=1
 
     exit $fail

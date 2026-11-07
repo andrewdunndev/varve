@@ -58,7 +58,7 @@ One wrapper bounds every DuckDB process.
 | `tests/` | Synthetic three-runtime fixtures and expected output for `just test` |
 | `justfile` | `backfill`, `ingest`, `mine`, `review`, `interventions`, `stats`, `sql`, `lint`, `test`, `disk` |
 
-`mise install` provisions the pinned `duckdb` and `just` from `mise.toml`.
+`mise install` provisions the pinned `duckdb`, `just` and `yq` from `mise.toml`.
 
 Lake data never lives in this repo. It lands in `~/.local/share/varve/`, and so
 does your own data: attribution rules, adjudications, worksheets (ADR-0004). The

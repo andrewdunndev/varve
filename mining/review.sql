@@ -3,7 +3,7 @@
 -- candidates with the full prior draft and full corrective message in front of them
 -- (context_judgment is largely un-inferable from a 240-char excerpt).
 --
--- Invoked by the justfile `review` recipe (mise exec -- duckdb :memory:), which then COPYs
+-- Invoked by the justfile `review` recipe (through bin/duck), which then COPYs
 -- stg_review_document to <data_home>/review_round1.md. Same idiom as mining/corrections.sql:
 -- lake-local read views over the Parquet, a stg_ table the recipe writes out (COPY targets
 -- are literals -- the recipe injects the output path).
