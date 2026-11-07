@@ -27,6 +27,10 @@ can serve as simulation evidence and leak-free benchmark material.
 
 `just sync` copies sources into a mirror. `just build` rebuilds the lake from it, checks it, swaps it in, then runs the mines (ADR-0008 to ADR-0010).
 
+![The runtime stores are copied into the mirror, built into a new lake, checked, swapped in and mined; the data home sits apart from the repo.](docs/img/system.svg)
+
+Sync never opens the engine, and nothing in the data home is committed.
+
 Three primitives: files, SQL files, one runner (`bin/duck`). Everything extensible is a SQL file, run in a fixed order: adapters, checks, swap, mines.
 
 | Kind | Reads | Rows become |
@@ -36,15 +40,23 @@ Three primitives: files, SQL files, one runner (`bin/duck`). Everything extensib
 | mine | the tables | a saved table |
 | query | the tables | printed output |
 
-![Runtime stores are copied into a mirror, built into a new lake, checked, and swapped in. Mines run after the swap.](docs/img/tiers.svg)
-
-The mirror and your data home cannot be rebuilt.
-
-![A new runtime adds an adapter, a fixture and a runtimes row.](docs/img/runtime.svg)
+![Each SQL file kind, what it reads and writes, when it runs and where it is looked up; a new runtime is a row, an adapter and a fixture.](docs/img/files.svg)
 
 A new runtime is meant to touch three files; none has been added that way yet.
 
-![Every SQL file runs inside the bin/duck boundary.](docs/img/envelope.svg)
+![The per-file decision in bin/sync and the replace set that moves a database and its journal together.](docs/img/sync.svg)
+
+A copy only ever grows, and a database and its journal move together or not at all.
+
+![One build as a sequence: a failed runtime keeps its published partitions, a failed check leaves the lake untouched, a rename swaps the new lake in.](docs/img/build.svg)
+
+A failed runtime keeps its published partitions, and a failed check leaves the lake untouched.
+
+![The four tables with their columns grouped by meaning, the joins between them, and the rules every adapter keeps.](docs/img/record.svg)
+
+Ids come from the source and unknown is NULL; tokens and cost are the only measures summed to 0.
+
+![Every SQL run passes through bin/duck: the lock, the caps, the watch loop, the exit codes and the one failure line.](docs/img/envelope.svg)
 
 One wrapper bounds every DuckDB process.
 
@@ -78,8 +90,8 @@ just sync && just build
 ## Mining
 
 The repo's `mining/` holds example mines, one detector per file. To use them, copy
-`mining/[0-9]*.sql` into `mining/` in your data home, copy `patterns.example.toml`
-and `divergence_taxonomy.example.toml` there without the `.example`, and tune the
+`mining/[0-9]*.sql` into `mining/` in your data home. Copy `patterns.example.toml`
+and `divergence_taxonomy.example.toml` to the data-home root (next to `runtimes.toml`, not in `mining/`) without the `.example`, and tune the
 patterns. `just mine` runs your files in filename order. Each saves one table under
 the lake: `NN-<table>[.<part>].sql` leaves its rows in `mine_out` and lands in
 `<table>/<part>.parquet`. A mine's version is the hash of its file. A failing mine
