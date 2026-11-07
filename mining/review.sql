@@ -1,7 +1,7 @@
--- varve adjudication REVIEW renderer (W7). Builds the operator's round-N review document
+-- varve adjudication review renderer. Builds the review document
 -- from the lake + the model-suggested worksheet, so the operator can adjudicate correction
--- candidates with the FULL prior draft and FULL corrective message in front of them (the
--- round-0 finding: context_judgment is largely un-inferable from a 240-char excerpt).
+-- candidates with the full prior draft and full corrective message in front of them
+-- (context_judgment is largely un-inferable from a 240-char excerpt).
 --
 -- Invoked by the justfile `review` recipe (mise exec -- duckdb :memory:), which then COPYs
 -- stg_review_document to <data_home>/review_round1.md. Same idiom as mining/corrections.sql:
@@ -9,7 +9,7 @@
 -- are literals -- the recipe injects the output path).
 --
 -- Variables (set by the recipe):
---   lake          : <data_home>/lake (read core Parquet + the W7 tables)
+--   lake          : <data_home>/lake (read core Parquet + the mining tables)
 --   adjudications : path to the JSONL adjudication ledger (operator data, outside the repo;
 --                   the recipe guarantees the path EXISTS -- empty temp file when absent).
 --                   Used ONLY to SKIP already-adjudicated loci so re-render is idempotent as
@@ -19,7 +19,7 @@
 --                   (priming a non-matching sentinel row when absent) so the advisory LEFT
 --                   JOIN degrades gracefully to "no advisory" -- worksheet absence is non-fatal.
 --
--- CONFIDENTIALITY (ADR-0004; public-instrument rule): this .sql holds ZERO transcript
+-- CONFIDENTIALITY (ADR-0004): this .sql holds ZERO transcript
 -- content. Draft/message text is dereferenced from the LOCAL lake at run time and written
 -- ONLY under the data home (the review_round1.md the recipe COPYs). Loci are the
 -- non-identifying `lake:` form. Nothing here is printed to a terminal or emitted off the
@@ -168,7 +168,7 @@ UNION ALL BY NAME
 -- part 2: recall-floor banner
 SELECT 2 AS part, '' AS ord2, '' AS ord3,
   '## Part 2 -- recall-floor sample (unflagged operator messages)' || chr(10) || chr(10)
-  || 'Adjudicate these to measure what mining MISSED (the G-recall floor). These operator '
+  || 'Adjudicate these to measure what mining MISSED (the recall floor). These operator '
   || 'messages were flagged by NO detector. Keyed on `message_uuid`; the skeleton fixes '
   || '`"selection":"sampled"` so recall-floor labels stay distinguishable from precision-sample '
   || 'labels in the ledger.' AS md

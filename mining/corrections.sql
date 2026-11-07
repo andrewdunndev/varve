@@ -1,88 +1,74 @@
--- varve corrections adapter (W7 phase 1 -- mechanical correction MINING, mining-first
--- revision per RFC-0002 2026-07-06). Reworked from the withdrawn hand-fed-ledger shape.
--- Near-pure DuckDB SQL (ADR-0002). Three products, all written to the lake:
---   1. correction_candidates -- one row per (detector, locus), derived PURELY from the
+-- varve corrections adapter: mechanical correction mining. Near-pure DuckDB SQL
+-- (ADR-0002). Three products, all written to the lake:
+--   1. correction_candidates -- one row per (detector, locus), derived purely from the
 --      lake (messages/tool_calls/api_calls/sessions views), so it rebuilds
---      deterministically on every ingest (no manifest interaction; same rebuild
---      discipline as the read-side views). Four detectors, tuned precision-over-recall.
---   2. operator_messages -- METADATA ONLY, no content: one row per genuine operator
---      message (same `is_operator` predicate _op_ctx already computes for D2/D3/D4 --
---      "operator message" means exactly what the detectors mean by it, no logic
---      duplication) plus `flagged` (true iff the message's (runtime, session_id,
---      message_uuid) also appears as a candidate locus, any detector). This is the
---      RFC-0002 G-recall-floor denominator: `mining/queries/recall_floor_sample.sql` samples
---      flagged=false rows for adjudication of the miss rate. Same rebuild discipline as
---      correction_candidates (pure function of the lake; deterministic on re-run).
---   3. correction_events -- confirmed candidates, promoted after the operator adjudicates
---      a sample. The withdrawn design's DDL survives; channel becomes {mined | opt_in}
---      ('curated' retired).
+--      deterministically on every ingest. Four detectors, tuned precision-over-recall.
+--   2. operator_messages -- metadata only, no content: one row per genuine operator
+--      message (same `is_operator` predicate _op_ctx computes for D2/D3/D4) plus
+--      `flagged` (true iff the message also appears as a candidate locus, any
+--      detector). This is the recall-floor denominator:
+--      `mining/queries/recall_floor_sample.sql` samples flagged=false rows to
+--      estimate the miss rate.
+--   3. correction_events -- confirmed candidates, promoted after the operator
+--      adjudicates a sample. channel is {mined | opt_in}.
 --
--- Invoked by the justfile `mine` recipe, which _pipeline calls AFTER the core tables are
--- written and the read-side views rebuilt (ingest/backfill are the sole lake writers).
+-- Invoked by the justfile `mine` recipe, which _pipeline calls after the core tables
+-- are written and the read-side views rebuilt.
 -- Variables (set by the justfile):
 --   lake          : <data_home>/lake (to read core Parquet + write the new tables)
---   repo_dir      : this repo root (to read the taxonomy PRIOR seed)
---   adjudications : path to a JSONL adjudication ledger. This is OPERATOR DATA and lives
---                   OUTSIDE the repo at a configured path (public-instrument rule: varve
---                   is going public, so no operator data in git). Defaults to
---                   <data_home>/adjudications.jsonl (VARVE_ADJUDICATIONS overrides). The
---                   justfile guarantees the path EXISTS (it substitutes an empty temp file
---                   when the ledger is absent), so the read below never errors on a missing
---                   file -- absent ledger => zero rows => zero promoted events.
+--   repo_dir      : this repo root (to read the taxonomy prior seed)
+--   adjudications : path to a JSONL adjudication ledger. Operator data: it lives
+--                   outside the repo (default <data_home>/adjudications.jsonl,
+--                   VARVE_ADJUDICATIONS overrides). The justfile guarantees the path
+--                   exists (an empty temp file stands in when the ledger is absent),
+--                   so an absent ledger means zero promoted events.
 --
 -- =====================================================================================
--- NOISE EXCLUSION (the load-bearing precision control; RFC-0002 "CRITICAL noise
--- exclusion"). Transcripts are full of harness-injected text that is NOT operator
--- speech; treating it as such explodes false positives. Every exclusion below was
--- confirmed against the live corpus 2026-07-06. The lake `messages` view does NOT carry
--- Claude Code's `isMeta` flag (adding it would need a full backfill to repopulate
--- history, which mining must not trigger), so meta rows are excluded by CONTENT pattern
--- instead -- the enumerated markers below cover every isMeta signature observed:
---   * <system-reminder> ......... harness reminder blocks (122 CC user rows)
---   * <command-name>/<command-message>/<command-args> .. slash-command invocations (50)
+-- NOISE EXCLUSION (the load-bearing precision control). Transcripts are full of
+-- injected text that is not operator speech; treating it as such explodes false
+-- positives. The lake `messages` view does not carry Claude Code's `isMeta` flag
+-- (adding it would need a full backfill), so meta rows are excluded by content pattern.
+-- The markers below cover every isMeta signature observed:
+--   * <system-reminder> ......... reminder blocks
+--   * <command-name>/<command-message>/<command-args> .. slash-command invocations
 --   * <local-command-stdout>/<local-command-caveat> + "Caveat: The messages below were
---     generated" ................ slash-command mechanics + the local-command caveat (55)
---   * <task-notification> ....... subagent task-completion notifications (706 -- the
---                                 single largest noise class)
+--     generated" ................ slash-command mechanics and the local-command caveat
+--   * <task-notification> ....... subagent task-completion notifications (the
+--                                 largest noise class)
 --   * <user-prompt-submit-hook> . prompt-submit hook output
---   * "This session is being continued" .. compaction summaries (42)
---   * "[SYSTEM NOTIFICATION - NOT USER INPUT]" .. autonomous-loop notifications (10)
+--   * "This session is being continued" .. compaction summaries
+--   * "[SYSTEM NOTIFICATION - NOT USER INPUT]" .. autonomous-loop notifications
 --   * "Base directory for this skill:" .. skill-body injections, a text-block array that
---                                 would otherwise read as operator text (82)
---   * "The coordinator sent a message while you were working:" .. session-manager
---                                 coordinator injections (6)
---   * <<autonomous-loop...>> .... loop-control injections (6)
--- Also excluded structurally (not operator speech):
---   * tool_result-carrier user rows (47,908 of 47,163+ array user rows) -- the model's
---     tool results fed back under the user role. These are the LOCUS for detector D1
---     (tool-decision rejection) but never operator utterances for D3/D4.
+--                                 would otherwise read as operator text
+--   * "The coordinator sent a message while you were working:" .. injected
+--                                 coordinator messages
+--   * <<autonomous-loop...>> .... loop-control injections
+-- Also excluded structurally:
+--   * tool_result-carrier user rows: the model's tool results fed back under the user
+--     role. These are the locus for detector D1 (tool-decision rejection) but never
+--     operator utterances for D3/D4.
 --   * the bare interrupt marker "[Request interrupted by user...]" -- stripped from the
---     body; a message that is ONLY the marker has an empty body and is not a redirect.
+--     body; a message that is only the marker has an empty body and is not a redirect.
 --
--- CONFIDENTIALITY (ADR-0004; public-instrument rule -- I4/I5 hold):
---   * Candidates + events live ONLY in the local lake. Loci are the non-identifying
---     `lake:<session_id>/<message_uuid>` form; session/message uuids are opaque and
---     resolve to a path only on this disk. No account-bearing path is stored.
---   * operator_messages is COUNTS/METADATA ONLY -- runtime, ids, timestamp, attribution,
---     a bool. No content column, no excerpt, no `body`/`raw_txt`.
---   * `features` carries METADATA only (matched marker label, overlap score, mode) --
---     never verbatim transcript content, so even the lake-local candidate table holds no
---     operator/model prose beyond the loci it points at.
---   * `note` on a promoted event is the adjudicator's role-level gloss only (I4).
+-- CONFIDENTIALITY (ADR-0004):
+--   * Candidates and events live only in the local lake. Loci are the non-identifying
+--     `lake:<session_id>/<message_uuid>` form; uuids are opaque and resolve to a path
+--     only on this disk. No account-bearing path is stored.
+--   * operator_messages is metadata only: runtime, ids, timestamp, attribution, a bool.
+--     No content column, no excerpt, no `body`/`raw_txt`.
+--   * `features` carries metadata only (matched marker label, overlap score, mode),
+--     never verbatim transcript content.
+--   * `note` on a promoted event is the adjudicator's role-level gloss only.
 -- =====================================================================================
 
--- Detector + marker-list versions. Bump the relevant one on any logic/marker change so
--- `detector_version` on historical candidates stays honest (RFC-0002 detector-drift
--- mitigation). The lexical marker list version rides D3's version.
+-- Detector + marker-list versions. Bump the relevant one on any logic or marker change
+-- so `detector_version` on historical candidates stays honest. The lexical marker list
+-- version rides D3's version.
 --   D1 tool_reject       v2   D2 interrupt_redirect v1
 --   D3 lexical (markers) v1   D4 rewrite (jaccard)  v2
--- v2 (2026-07-07): D1 + D4 fixed from adjudication ROUND-0 EVIDENCE (model-suggested
--- labels over the stratified sample -- advisory, not the G-precision measurement). Both
--- fixes are STRUCTURAL (a co-present template literal; an identity/echo band), defensible
--- without operator labels. D2's weak next_message prior and D3's negation/actually FP
--- classes are ALSO round-0 findings, but their fixes need content judgment -- deferred
--- until the operator's independent labels land, to avoid tuning judgment calls on model
--- suggestions alone.
+-- v2 fixes for D1 and D4 are structural (a co-present template literal; an
+-- identity/echo band). D2's weak next_message prior and D3's negation/actually
+-- false-positive classes need content judgment and wait for independent labels.
 
 -- -------------------------------------------------------------------------------------
 -- Lake-local read views over the freshly-written core Parquet (same read_parquet shape
@@ -100,7 +86,7 @@ CREATE OR REPLACE VIEW _lk_sessions AS
   SELECT * FROM read_parquet(getvariable('lake') || '/sessions/**/*.parquet',
     hive_partitioning = true, union_by_name = true);
 
--- Versioned lexical marker list (RFC-0002 D3). Anchored at message start (RE2 `^`),
+-- Versioned lexical marker list. Anchored at message start (RE2 `^`),
 -- matched AFTER an optional leading interjection is stripped (see _op below). Each row's
 -- `marker` label lands in features so per-marker precision is measurable at adjudication.
 -- "no" is intentionally NOT in the interjection strip-list (it is itself a marker).
@@ -159,8 +145,8 @@ DROP TABLE _cc_user_arr;
 -- pi is DELIBERATELY absent from _um -- and so from every detector and the
 -- recall-floor denominator: the pi adapter is the least-validated of the three
 -- (adapters/pi.sql STATUS) and its message content shape is unverified against
--- a real corpus at scale. Mining is precision-first (RFC-0002 gates), so
--- excluding pi beats guessing; RFC-0001 records the coverage limitation. Add
+-- a real corpus at scale. Mining is precision-first, so
+-- excluding pi beats guessing. Add
 -- pi here once the adapter is validated.
 CREATE OR REPLACE TABLE _um AS
   SELECT message_id, session_id, timestamp AS ts, 'claude-code' AS runtime,
@@ -258,17 +244,17 @@ CREATE OR REPLACE MACRO _tok(s) AS
                             lambda x: length(x) > 0));
 
 -- =====================================================================================
--- DETECTORS. Each emits the RFC-0002 candidate grain: runtime, session_id, message_uuid
+-- DETECTORS. Each emits the candidate grain: runtime, session_id, message_uuid
 -- (the corrective user message), prior_assistant_uuid (the corrected draft), ts, detector,
 -- detector_version, features (JSON metadata), model_id. Attribution/date are joined last.
 -- A single message may be flagged by more than one detector -- that is the intended
--- "one row per (detector, locus)" grain (RFC-0002).
+-- "one row per (detector, locus)" grain.
 -- =====================================================================================
 
 -- D1 -- tool-decision rejections.
 --   Claude Code: a tool_result carrying the exact rejection boilerplate. NOTE: match the
 --   full literal, NOT "want to proceed" -- the AskUserQuestion tool result "...how do you
---   want to proceed..." is a legitimate answer, not a rejection (confirmed 2026-07-06).
+--   want to proceed..." is a legitimate answer, not a rejection.
 --   v2: ALSO exclude tool_results co-carrying "The user wants to clarify these questions"
 --   -- the AskUserQuestion "clarify" selection emits BOTH that template and the full
 --   rejection literal, but it is the operator engaging with a question the model asked,
@@ -368,7 +354,7 @@ QUALIFY row_number() OVER (PARTITION BY ctx.runtime, ctx.session_id, ctx.message
 
 -- D4 -- rewrite detection. Operator message with high token-set overlap against the
 --   preceding assistant draft but not identical (operator restating/rewriting the model).
---   jaccard on lowercased word unigrams (cheap set overlap, RFC-0002 phase-1); threshold
+--   jaccard on lowercased word unigrams (cheap set overlap); threshold
 --   0.5 chosen from the corpus overlap distribution (>=0.5 => 8 CC pairs; 0.3 => 12).
 --   v2: BANDED [0.5, 0.9) -- jaccard at/near 1.0 is an ECHO, not a rewrite: the operator
 --   pasting model text forward (handoff/resume prompts, directives, status summaries) or
@@ -394,7 +380,7 @@ SELECT * FROM (
 WHERE jaccard >= 0.5 AND jaccard < 0.9;
 
 -- =====================================================================================
--- Assemble candidates: union detectors, attach W2 attribution + partition date from the
+-- Assemble candidates: union detectors, attach attribution + partition date from the
 -- session (co-partitions a session's candidates; deterministic rebuild unit), mint a
 -- deterministic candidate_id from (detector, locus) so re-runs are byte-identical.
 -- =====================================================================================
@@ -427,17 +413,17 @@ ANTI JOIN _copies cp
   ON cp.runtime = d.runtime AND cp.session_id = d.session_id AND cp.message_id = d.message_uuid
 JOIN _lk_sessions s ON s.runtime = d.runtime AND s.session_id = d.session_id
 -- candidate_id is the (detector, locus) primary key; a total order keeps the surviving
--- row identical run to run (G-idempotence) regardless of detector fan-in.
+-- row identical run to run regardless of detector fan-in.
 QUALIFY row_number() OVER (PARTITION BY candidate_id
                            ORDER BY d.features::varchar, d.prior_assistant_uuid, d.ts, d.model_id) = 1;
 
 -- The justfile `mine` recipe COPYs stg_correction_candidates to the lake (literal path;
 -- COPY TO cannot take getvariable) -- a full deterministic rebuild every ingest, ORDER BY
--- fixing row order so two runs are byte-identical (G-idempotence), same PARTITION_BY/zstd
+-- fixing row order so two runs are byte-identical , same PARTITION_BY/zstd
 -- conventions as the core tables.
 
 -- =====================================================================================
--- operator_messages -- RFC-0002 G-recall-floor support. One row per genuine operator
+-- operator_messages -- recall-floor support. One row per genuine operator
 -- message, using the EXACT SAME `is_operator` predicate _op_ctx already computes for
 -- D2/D3/D4 (no second definition of "operator message" to drift out of sync), plus a
 -- `flagged` bool: true iff this message's (runtime, session_id, message_uuid) is also a
@@ -473,9 +459,9 @@ WHERE ctx.is_operator;
 
 -- =====================================================================================
 -- ADJUDICATION -> correction_events. The human loop, relocated from capture time to
--- review time (RFC-0002). The operator labels a stratified candidate sample; labels are
+-- review time. The operator labels a stratified candidate sample; labels are
 -- appended to the configured adjudications ledger, which lives in the data home (outside
--- the repo, public-instrument rule) so it survives a lake rebuild (`just backfill` clears
+-- the repo) so it survives a lake rebuild (`just backfill` clears
 -- lake/ only, not the data home) without putting operator data in git. This adapter joins
 -- labels back and promotes CONFIRMED candidates.
 --
