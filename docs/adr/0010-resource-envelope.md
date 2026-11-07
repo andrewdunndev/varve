@@ -15,10 +15,12 @@
 
 - One wrapper, `bin/duck`, is the only path to DuckDB.
 - It sets memory, threads, spill cap, low priority, a wall-clock limit, and a lock. Runs never stack.
+- DuckDB does not promise `memory_limit` as a whole-process cap, so the wrapper also watches resident memory and kills the run over its cap.
 - `just lint` fails on DuckDB anywhere else. `just test` goes through the wrapper.
 - Defaults live in the wrapper, set from the first measured build. Env overrides them.
 - On a bound: the process dies, `lake.new` goes, the published lake is untouched, exit 1, and one line names the next action.
-- `sync` never opens DuckDB.
+- `sync` never opens DuckDB. It runs at low priority, one at a time, and ships only after the wrapper.
+- A lab run forced over each cap proves it stops, before any run on a shared machine.
 - Build runs on a host with headroom.
 
 ## Consequences
