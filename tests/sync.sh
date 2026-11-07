@@ -55,4 +55,73 @@ T
 "$sync" 2>/dev/null
 want "forgotten not copied" "no" "$([ -e "$m/proj/gone-session-9.jsonl" ] && echo yes || echo no)"
 
+
+# A replace pair that changes mid-copy ships as neither file. The shim lets the
+# real cp run, then grows the watched source so its stat differs afterwards.
+shim="$tmp/shim"; mkdir -p "$shim"
+cat > "$shim/cp" <<S
+#!/bin/sh
+$(command -v cp) "\$@" || exit \$?
+if [ "\$2" = "\$SHIM_GROW" ] && [ "\$(cat "\$SHIM_TIMES")" -gt 0 ]; then
+  echo \$((\$(cat "\$SHIM_TIMES") - 1)) > "\$SHIM_TIMES"
+  printf x >> "\$2"
+fi
+S
+chmod +x "$shim/cp"
+export SHIM_GROW="$src/store.db-wal" SHIM_TIMES="$tmp/times"
+
+printf 'db2\n' > "$src/store.db"; printf 'wal-two-longer\n' > "$src/store.db-wal"
+echo 99 > "$SHIM_TIMES"
+PATH="$shim:$PATH" "$sync" 2>"$tmp/err"
+want "unstable pair keeps old db" "db1" "$(cat "$m/store.db")"
+want "unstable pair keeps old wal" "w" "$(cat "$m/store.db-wal")"
+want "unstable pair is logged" "yes" "$(grep -q 'kept 2 unstable' "$tmp/err" && echo yes || echo no)"
+want "unstable pair leaves no temp" "0" "$(find "$m" -name '*.tmp.*' | wc -l | tr -d ' ')"
+
+echo 1 > "$SHIM_TIMES"
+PATH="$shim:$PATH" "$sync" 2>/dev/null
+want "pair ships once stable (db)" "db2" "$(cat "$m/store.db")"
+want "pair ships once stable (wal)" "yes" "$(cmp -s "$src/store.db-wal" "$m/store.db-wal" && echo yes || echo no)"
+unset SHIM_GROW SHIM_TIMES
+
+# Nothing outside the source root is copied: symlinked files and directories
+# are not followed, a replace entry through a symlink is skipped, and an entry
+# with '..' or a leading '/' fails the run.
+mkdir -p "$tmp/outside" "$tmp/src2/real"
+printf 'outside\n' > "$tmp/outside/secret.jsonl"; printf 'outside-db\n' > "$tmp/outside/secret.db"
+ln -s "$tmp/outside/secret.jsonl" "$tmp/src2/real/link.jsonl"
+ln -s "$tmp/outside" "$tmp/src2/linkdir"
+ln -s "$tmp/outside/secret.db" "$tmp/src2/store.db"
+printf 'inside\n' > "$tmp/src2/real/in.jsonl"
+cat > "$VARVE_DATA/runtimes.toml" <<T
+[[row]]
+name = "beta"
+adapter = "beta.sql"
+source = "$tmp/src2"
+include = ["*.jsonl", "*.db"]
+replace = ["store.db", "linkdir/secret.db"]
+T
+"$sync" 2>/dev/null
+b="$VARVE_DATA/mirror/beta"
+want "real file copied" "inside" "$(cat "$b/real/in.jsonl")"
+want "symlinked file not copied" "no" "$([ -e "$b/real/link.jsonl" ] && echo yes || echo no)"
+want "symlinked dir not followed" "no" "$([ -e "$b/linkdir" ] && echo yes || echo no)"
+want "symlinked replace entry not copied" "no" "$([ -e "$b/store.db" ] && echo yes || echo no)"
+
+for bad in 'real|../outside/secret.db' 'real|/etc/hostname' 'real|real/../../outside/secret.db' '../outside/*.jsonl|store.db'; do
+  inc="${bad%%|*}"; rep="${bad#*|}"
+  case "$inc" in real) inc='*.jsonl' ;; esac
+  cat > "$VARVE_DATA/runtimes.toml" <<T
+[[row]]
+name = "gamma"
+adapter = "gamma.sql"
+source = "$tmp/src2"
+include = ["$inc"]
+replace = ["$rep"]
+T
+  rc=0; "$sync" 2>"$tmp/err" || rc=$?
+  want "escape refused: $inc $rep" "2" "$rc"
+  want "escape copied nothing: $inc $rep" "0" "$(find "$VARVE_DATA/mirror/gamma" -type f 2>/dev/null | wc -l | tr -d ' ')"
+done
+
 exit $fail

@@ -66,8 +66,7 @@ if [ "$mode" = locked ]; then
   exit "$rc"
 fi
 
-duck="$(command -v duckdb 2>/dev/null || mise which duckdb 2>/dev/null || true)"
-[ -n "$duck" ] || die "$label: no duckdb on PATH or in mise"
+duck="$("$repo/bin/tool" duckdb)" || exit 2
 
 take_lock
 
@@ -93,8 +92,7 @@ yq=""
 for f in "$data"/*.toml; do
   [ -f "$f" ] || continue
   if [ -z "$yq" ]; then
-    yq="$(command -v yq 2>/dev/null || mise which yq 2>/dev/null || true)"
-    [ -n "$yq" ] || die "$label: config in $data needs yq on PATH or in mise"
+    yq="$("$repo/bin/tool" yq)" || exit 2
   fi
   stem="$(basename "$f" .toml)"
   "$yq" -p toml -o json -I0 '(.row // [])[]' "$f" > "$run/$stem.jsonl" 2>"$run/yq.err" \

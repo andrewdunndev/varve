@@ -9,13 +9,13 @@ set -euo pipefail
 
 if [ -z "${VARVE_SYNC_NICED:-}" ]; then VARVE_SYNC_NICED=1 exec nice -n "${VARVE_NICE:-19}" "$0" "$@"; fi
 
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 data="${VARVE_DATA:-$HOME/.local/share/varve}"
 mirror="${VARVE_MIRROR:-$data/mirror}"
 lock="${VARVE_LOCK:-${TMPDIR:-/tmp}/varve-duck.lock}.sync"
 die() { echo "varve: sync: $*" >&2; exit 2; }
 
-yq="$(command -v yq 2>/dev/null || mise which yq 2>/dev/null || true)"
-[ -n "$yq" ] || die "no yq on PATH or in mise"
+yq="$("$repo/bin/tool" yq)" || exit 2
 [ -f "$data/runtimes.toml" ] || die "no $data/runtimes.toml (copy runtimes.example.toml there)"
 
 if stat --version >/dev/null 2>&1; then statfmt=(-c '%s %Y'); else statfmt=(-f '%z %m'); fi
@@ -47,21 +47,41 @@ is_forgotten() {
 
 in_list() { case ",$2," in *",$1,"*) return 0 ;; *) return 1 ;; esac; }
 
-# copy_pair SRC DEST: copy to a temp name, then rename.
+# put SRC DEST: copy to a temp name, then rename.
 put() {
   mkdir -p "$(dirname "$2")"
   cp -p "$1" "$2.tmp.$$" && mv "$2.tmp.$$" "$2"
 }
 
-# stable_copy SRC DEST: three tries to copy a file that did not change mid-copy.
-stable_copy() {
+# stage SRC TMP: copy SRC to TMP, succeeding only when SRC did not change during
+# the copy. Three tries; a failure leaves no TMP behind.
+stage() {
   local try before after
   for try in 1 2 3; do
     before="$(st "$1")"
-    put "$1" "$2"
+    cp -p "$1" "$2" || { rm -f "$2"; return 1; }
     after="$(st "$1")"
-    [ "$before" = "$after" ] && return 0
+    if [ "$before" = "$after" ]; then return 0; fi
   done
+  rm -f "$2"
+  return 1
+}
+
+# safe_rel REL: succeeds for a relative path that cannot leave its root.
+safe_rel() {
+  case "$1" in
+    ""|/*|..|../*|*/..|*/../*) return 1 ;;
+  esac
+  return 0
+}
+
+# inside FILE: succeeds when FILE is not a symlink and its directory, with
+# symlinks resolved, is under the resolved source root.
+inside() {
+  local d
+  [ ! -L "$1" ] || return 1
+  d="$(cd "$(dirname "$1")" 2>/dev/null && pwd -P)" || return 1
+  case "$d/" in "$realsrc"/*) return 0 ;; esac
   return 1
 }
 
@@ -72,6 +92,12 @@ while IFS=$'\t' read -r name source include replace; do
   src="${source/#\~/$HOME}"
   if [ ! -d "$src" ]; then echo "varve: sync $name: no source at $src" >&2; continue; fi
   copied=0; skipped=0; kept=0
+  realsrc="$(cd "$src" && pwd -P)"
+  entries=()
+  IFS=, read -r -a entries <<< "$include,$replace"
+  for e in "${entries[@]}"; do
+    [ -z "$e" ] || safe_rel "$e" || die "$name: '$e' must be a relative name without '..'"
+  done
   # Regular files first, then the replace set in listed order (database before journal).
   pats=()
   IFS=, read -r -a pats <<< "$include"
@@ -95,13 +121,33 @@ while IFS=$'\t' read -r name source include replace; do
   reps=()
   if [ -n "$replace" ]; then IFS=, read -r -a reps <<< "$replace"; fi
   if [ "${#reps[@]}" -gt 0 ]; then
+    # The replace set ships together or not at all: every file is staged under a
+    # temp name and checked stable, then all are renamed into place. One unstable
+    # file leaves the whole previous pair untouched.
+    todo=(); changed=0
     for r in "${reps[@]}"; do
       f="$src/$r"
       [ -f "$f" ] || continue
+      if ! inside "$f"; then echo "varve: sync $name: replace entry $r is a symlink or resolves outside the source, skipped" >&2; continue; fi
+      todo+=("$r")
       dest="$mirror/$name/$r"
-      if [ -f "$dest" ] && [ "$(st "$f")" = "$(st "$dest")" ]; then continue; fi
-      if stable_copy "$f" "$dest"; then copied=$((copied + 1)); else kept=$((kept + 1)); fi
+      if [ ! -f "$dest" ] || [ "$(st "$f")" != "$(st "$dest")" ]; then changed=1; fi
     done
+    if [ "$changed" = 1 ] && [ "${#todo[@]}" -gt 0 ]; then
+      ok=1
+      for r in "${todo[@]}"; do
+        dest="$mirror/$name/$r"
+        mkdir -p "$(dirname "$dest")"
+        if ! stage "$src/$r" "$dest.tmp.$$"; then ok=0; break; fi
+      done
+      if [ "$ok" = 1 ]; then
+        for r in "${todo[@]}"; do mv "$mirror/$name/$r.tmp.$$" "$mirror/$name/$r"; done
+        copied=$((copied + ${#todo[@]}))
+      else
+        for r in "${todo[@]}"; do rm -f "$mirror/$name/$r.tmp.$$"; done
+        kept=$((kept + ${#todo[@]}))
+      fi
+    fi
   fi
   echo "varve: sync $name: copied $copied, skipped $skipped shorter, kept $kept unstable" >&2
 done <<< "$rows"

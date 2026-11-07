@@ -14,8 +14,7 @@ id="${1:-}"
 [ -n "$id" ] || die "usage: just forget SESSION_ID"
 case "$id" in *[!A-Za-z0-9._-]*) die "session id '$id' has characters outside A-Za-z0-9._-" ;; esac
 
-yq="$(command -v yq 2>/dev/null || mise which yq 2>/dev/null || true)"
-[ -n "$yq" ] || die "no yq on PATH or in mise"
+yq="$("$repo/bin/tool" yq)" || exit 2
 
 rt="$("$repo/bin/duck" forget -noheader -list -c "SELECT string_agg(DISTINCT runtime, ',') FROM sessions WHERE session_id = '$id';")"
 [ -n "$rt" ] || die "no session $id in the lake"

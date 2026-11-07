@@ -27,8 +27,7 @@ rm -rf "$old"
 for f in runtimes attribution pricing; do
   [ -f "$data/$f.toml" ] || die "no $data/$f.toml (copy the matching *.example.toml there and edit)"
 done
-yq="$(command -v yq 2>/dev/null || mise which yq 2>/dev/null || true)"
-[ -n "$yq" ] || die "no yq on PATH or in mise"
+yq="$("$repo/bin/tool" yq)" || exit 2
 
 rm -rf "$new"
 mkdir -p "$new"
