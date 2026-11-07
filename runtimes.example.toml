@@ -1,4 +1,4 @@
-# Copy to $VARVE_DATA/runtimes.toml and edit. One [[row]] per agent runtime.
+# SAMPLE. Copy to $VARVE_DATA/runtimes.toml and edit. One [[row]] per agent runtime.
 #   name     runtime column value and mirror folder
 #   adapter  file in adapters/ (the data home's adapters/ wins)
 #   source   where the runtime keeps its sessions

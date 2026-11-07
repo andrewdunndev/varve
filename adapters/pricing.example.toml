@@ -1,45 +1,11 @@
-# Per-token USD prices (ADR-0006 denominator). Copy to <data home>/pricing.toml;
-# edit there. Rates follow the LiteLLM model price table, the same one ccusage
-# prices from, and first-party release notes. Only pricing metadata leaves the
-# machine to refresh it. Cache creation is the 5-minute write rate.
-# A model absent here is flagged unpriced_model and costs 0 unless the runtime
-# records its own cost. Subscription-billed models stay unpriced by design.
-
-[[row]]
-model = "claude-opus-4-8"
-input_cost = 0.000005
-output_cost = 0.000025
-cache_read_cost = 0.0000005
-cache_creation_cost = 0.00000625
-source = "litellm"
-fetched = "2026-07-06"
-
-[[row]]
-model = "claude-opus-4-7"
-input_cost = 0.000005
-output_cost = 0.000025
-cache_read_cost = 0.0000005
-cache_creation_cost = 0.00000625
-source = "litellm"
-fetched = "2026-07-06"
-
-[[row]]
-model = "claude-opus-4-6"
-input_cost = 0.000005
-output_cost = 0.000025
-cache_read_cost = 0.0000005
-cache_creation_cost = 0.00000625
-source = "litellm"
-fetched = "2026-07-06"
-
-[[row]]
-model = "claude-opus-4-5"
-input_cost = 0.000005
-output_cost = 0.000025
-cache_read_cost = 0.0000005
-cache_creation_cost = 0.00000625
-source = "litellm"
-fetched = "2026-07-06"
+# SAMPLE. Two rows showing the shape; replace them with your own. The prices
+# here are illustrative and are not kept current. Copy this file to
+# <data home>/pricing.toml: that copy is yours to keep current, from whatever
+# source you trust (LiteLLM's model price table is one).
+#
+# Prices are USD per token. A model with no row here is flagged unpriced_model
+# and costs 0 unless the runtime records its own cost. Subscription-billed
+# models have no per-token price and stay unpriced.
 
 [[row]]
 model = "claude-sonnet-5"
@@ -47,17 +13,7 @@ input_cost = 0.000002
 output_cost = 0.00001
 cache_read_cost = 0.0000002
 cache_creation_cost = 0.0000025
-source = "litellm"
-fetched = "2026-07-06"
-
-[[row]]
-model = "claude-sonnet-4-6"
-input_cost = 0.000003
-output_cost = 0.000015
-cache_read_cost = 0.0000003
-cache_creation_cost = 0.00000375
-source = "litellm"
-fetched = "2026-07-06"
+source = "sample"
 
 [[row]]
 model = "claude-haiku-4-5-20251001"
@@ -65,41 +21,4 @@ input_cost = 0.000001
 output_cost = 0.000005
 cache_read_cost = 0.0000001
 cache_creation_cost = 0.00000125
-source = "litellm"
-fetched = "2026-07-06"
-
-[[row]]
-model = "claude-fable-5"
-input_cost = 0.00001
-output_cost = 0.00005
-cache_read_cost = 0.000001
-cache_creation_cost = 0.0000125
-source = "litellm"
-fetched = "2026-07-06"
-
-[[row]]
-model = "claude-fable-5-1"
-input_cost = 0.00001
-output_cost = 0.00005
-cache_read_cost = 0.000001
-cache_creation_cost = 0.0000125
-source = "litellm"
-fetched = "2026-09-02"
-
-[[row]]
-model = "claude-opus-5-5"
-input_cost = 0.000004
-output_cost = 0.00002
-cache_read_cost = 0.0000002
-cache_creation_cost = 0.000005
-source = "anthropic"
-fetched = "2026-10-02"
-
-[[row]]
-model = "claude-sonnet-5-5"
-input_cost = 0.000002
-output_cost = 0.00001
-cache_read_cost = 0.0000002
-cache_creation_cost = 0.0000025
-source = "anthropic"
-fetched = "2026-10-02"
+source = "sample"
