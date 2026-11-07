@@ -1,5 +1,5 @@
 cand-0de46574d7884b7c94be8929f7373ce4,test-session-2023,c0000000-0000-0000-0000-000000000005,c0000000-0000-0000-0000-000000000004,2023-06-01 00:00:05,interrupt_redirect,v1,"{""mode"":""inline""}",claude-sonnet-5,unknown,unknown,NULL,2023-06-01,claude-code
-cand-1ae0ff0d34918b9eb64de4125dbbbb5b,oc-session-2023,oc-msg-4,oc-msg-4,2023-06-01 00:00:01.6,tool_reject,v2,"{""marker"":""decision_rejected"",""source"":""decision_column""}",NULL,unknown,unknown,NULL,2023-06-01,opencode
+cand-1ae0ff0d34918b9eb64de4125dbbbb5b,oc-session-2023,oc-msg-4,oc-msg-4,2023-06-01 00:00:01.6,tool_reject,v2,"{""marker"":""outcome_denied"",""source"":""outcome_column""}",NULL,unknown,unknown,NULL,2023-06-01,opencode
 cand-4c09a86e542db6448befc592233461aa,test-session-1,33333333-3333-3333-3333-333333333333,22222222-2222-2222-2222-222222222222,2026-08-01 00:00:02,lexical,v1,"{""marker"":""negation""}",NULL,unknown,unknown,NULL,2026-08-01,claude-code
 cand-7912e6d22052c186c8f29199f27c0fb7,test-session-2023,c0000000-0000-0000-0000-000000000010,c0000000-0000-0000-0000-000000000009,2023-06-01 00:00:10,lexical,v1,"{""marker"":""negation""}",claude-sonnet-5,unknown,unknown,NULL,2023-06-01,claude-code
 cand-8287b422bf4dfbfcfc0612a427ba41ec,oc-session-2023,oc-msg-5,oc-msg-4,2023-06-01 00:00:05,lexical,v1,"{""marker"":""negation""}",claude-sonnet-5,unknown,unknown,NULL,2023-06-01,opencode

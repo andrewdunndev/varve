@@ -16,7 +16,7 @@ For each candidate below: read the FULL prior draft and FULL corrective message,
 **ADVISORY:** none (candidate not in the worksheet).
 
 --- PRIOR ASSISTANT DRAFT (full) ---
-"Understood, I will wait for further instructions from you."
+Understood, I will wait for further instructions from you.
 
 --- CORRECTIVE OPERATOR MESSAGE (full) ---
 please also handle the empty input case in the parser
@@ -37,7 +37,7 @@ Adjudication line (copy into adjudications.jsonl; fill verdict + context_judgmen
 **ADVISORY:** none (candidate not in the worksheet).
 
 --- PRIOR ASSISTANT DRAFT (full) ---
-"Handled the empty input case in the parser as requested."
+Handled the empty input case in the parser as requested.
 
 --- CORRECTIVE OPERATOR MESSAGE (full) ---
 use a streaming reader for the large inputs
@@ -58,7 +58,7 @@ Adjudication line (copy into adjudications.jsonl; fill verdict + context_judgmen
 **ADVISORY:** none (candidate not in the worksheet).
 
 --- PRIOR ASSISTANT DRAFT (full) ---
-"Running the formatter on the parser module now."
+Running the formatter on the parser module now.
 
 --- CORRECTIVE OPERATOR MESSAGE (full) ---
 try the fallback path instead of retrying the formatter
@@ -79,7 +79,7 @@ Adjudication line (copy into adjudications.jsonl; fill verdict + context_judgmen
 **ADVISORY:** none (candidate not in the worksheet).
 
 --- PRIOR ASSISTANT DRAFT (full) ---
-"Sure, here's a hello function using print()."
+Sure, here's a hello function using print().
 
 --- CORRECTIVE OPERATOR MESSAGE (full) ---
 no, use console.log instead
@@ -100,7 +100,7 @@ Adjudication line (copy into adjudications.jsonl; fill verdict + context_judgmen
 **ADVISORY:** none (candidate not in the worksheet).
 
 --- PRIOR ASSISTANT DRAFT (full) ---
-"Switched the parser over to a streaming reader for large config files."
+Switched the parser over to a streaming reader for large config files.
 
 --- CORRECTIVE OPERATOR MESSAGE (full) ---
 no, keep the old reader and revert the streaming change
@@ -142,7 +142,7 @@ Adjudication line (copy into adjudications.jsonl; fill verdict + context_judgmen
 **ADVISORY:** none (candidate not in the worksheet).
 
 --- PRIOR ASSISTANT DRAFT (full) ---
-"Waiting for your clarification on the output format."
+Waiting for your clarification on the output format.
 
 --- CORRECTIVE OPERATOR MESSAGE (full) ---
 okay wait, the parser should return an error instead of an empty list
@@ -163,8 +163,8 @@ Adjudication line (copy into adjudications.jsonl; fill verdict + context_judgmen
 **ADVISORY:** none (candidate not in the worksheet).
 
 --- PRIOR ASSISTANT DRAFT (full) ---
-"The parser reads the config file and validates every key against the schema"
-"then writes the result to the output directory"
+The parser reads the config file and validates every key against the schema
+then writes the result to the output directory
 
 --- CORRECTIVE OPERATOR MESSAGE (full) ---
 the parser reads the config file and validates every key against the schema then writes results to the output folder
@@ -180,7 +180,7 @@ Adjudication line (copy into adjudications.jsonl; fill verdict + context_judgmen
 - locus (prior draft): `lake:oc-session-2023/oc-msg-4`
 - model_id: (unknown)
 - attribution: unknown / unknown / 
-- features: `{"marker":"decision_rejected","source":"decision_column"}`
+- features: `{"marker":"outcome_denied","source":"outcome_column"}`
 
 **ADVISORY:** none (candidate not in the worksheet).
 
@@ -206,10 +206,10 @@ Adjudication line (copy into adjudications.jsonl; fill verdict + context_judgmen
 **ADVISORY:** none (candidate not in the worksheet).
 
 --- PRIOR ASSISTANT DRAFT (full) ---
-"I will run the build now."
+I will run the build now.
 
 --- CORRECTIVE OPERATOR MESSAGE (full) ---
-"The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed."
+The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.
 
 Adjudication line (copy into adjudications.jsonl; fill verdict + context_judgment):
 

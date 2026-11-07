@@ -52,7 +52,7 @@ and structural features:
 - **Tool-decision rejections.** Claude Code: tool results carrying the rejection
   marker ("The user doesn't want to proceed with this tool use") and the
   interrupt marker ("[Request interrupted by user...]"), already structured in
-  `tool_calls` and `messages`. opencode: the native `decision` column.
+  `tool_calls` and `messages`. opencode: the native tool `outcome`.
 - **Interrupt-then-redirect.** A user interrupt followed by a user message within
   the same session. The message after an interrupt is a correction with high
   prior.

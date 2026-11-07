@@ -35,7 +35,9 @@ does not produce are nullable.
   VARCHAR (Claude Code `parentUuid`; the pi message tree), `is_sidechain`
   BOOLEAN (Claude Code only, false elsewhere), `timestamp` TIMESTAMP,
   `record_type` VARCHAR, `api_message_id` VARCHAR (provider message id, null
-  for non-API rows), `content` VARCHAR (inline JSON).
+  for non-API rows), `origin` VARCHAR (`operator`, `tool_result` or `model`,
+  structure only), `text` VARCHAR (the message's text), `interrupted` BOOLEAN
+  (Claude Code only, null elsewhere).
 - `api_calls`: `session_id`, `message_id` VARCHAR (representative line uuid,
   joins `messages`), `api_message_id` VARCHAR, `request_id` VARCHAR,
   `timestamp` TIMESTAMP, `model` VARCHAR, `provider` VARCHAR,
@@ -45,10 +47,13 @@ does not produce are nullable.
   null for pi and opencode, which expose neither at this grain.
 - `tool_calls`: `session_id`, `message_id` VARCHAR, `tool_use_id` VARCHAR,
   `tool_name` VARCHAR, `started_at` TIMESTAMP, `ended_at` TIMESTAMP,
-  `duration_ms` BIGINT, `decision` VARCHAR. `ended_at` and `duration_ms` are
-  opencode only, the one runtime with tool timing. `decision` is the opencode
-  tool `state.status` (completed, error or running); for pi it carries an
-  `isError` status when a `toolResult` reports one; null for Claude Code.
+  `duration_ms` BIGINT, `outcome` VARCHAR (`ok`, `error`, `denied`,
+  `cancelled`, `running`), `arguments` VARCHAR (JSON text), `result_text`
+  VARCHAR, `mcp_server` and `mcp_tool` VARCHAR, `result_message_id` VARCHAR (the
+  message carrying the result). `ended_at` and `duration_ms` are opencode only,
+  the one runtime with tool timing. A Claude Code result with no matching
+  `tool_use`, or a second result for one, gets its own row with a null
+  `tool_name`, so every result block appears once.
 - `correction_events`: RFC-0002.
 
 Every table also carries `runtime` and `date` from the Hive partition path.
@@ -56,9 +61,11 @@ Every table also carries `runtime` and `date` from the Hive partition path.
 `provider` is `anthropic` for Claude Code, the pi message provider, or the
 opencode `providerID`.
 
-`content` is inline for all three runtimes. Claude Code stores the message
-content blocks and pi the message content field. opencode has no text on the
-message row, so `content` is the aggregated text and reasoning `part` text.
+`sql/record.sql` is the contract: one row per column with its written meaning.
+`text` is a bare string, or the text blocks joined with the two characters
+backslash and n. A leading interrupt marker stays in it, and opencode includes
+reasoning parts. Parsers report facts; judgment about what a message means
+stays in mining. `content` and `decision` are retired.
 
 ### Grain per runtime
 
@@ -165,9 +172,9 @@ else it is absent. This is an accepted coverage limitation (ADR-0006).
 
 ### Content storage
 
-Message content is stored inline in Parquet. The lake is local-only (ADR-0004),
+Message text is stored inline in Parquet. The lake is local-only (ADR-0004),
 so inlining costs nothing on confidentiality and lets mining run `fts` and `vss`
-over content without a second fetch from source files. Correction-event pointers
+over text without a second fetch from source files. Correction-event pointers
 (`model_draft_ptr`, `operator_rewrite_ptr`) stay pointer-based per RFC-0002 and
 invariant I5; the inline decision covers the message stream, not correction
 drafts.

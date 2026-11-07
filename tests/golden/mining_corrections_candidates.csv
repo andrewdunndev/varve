@@ -3,7 +3,7 @@
 2023-06-01,rewrite,1
 2023-06-01,tool_reject,2
 2026-08-01,lexical,1
-claude-code,39,3,7.692,OVER 5% -- TIGHTEN MARKERS
+claude-code,41,3,7.317,OVER 5% -- TIGHTEN MARKERS
 claude-code,interrupt_redirect,v1,3
 claude-code,lexical,v1,3
 claude-code,negation,2
