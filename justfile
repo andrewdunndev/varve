@@ -299,7 +299,7 @@ test:
     if [ "$bad_versions" != "0" ] || [ "$all_lexical" = "0" ]; then
       echo "FAIL: detector_version is not the hash of the mine file ($bad_versions of $all_lexical differ)" >&2; fail=1
     fi
-    empty="$(just sql -noheader -list -c "SELECT count(*) FROM correction_events;" 2>&1 || true)"
+    empty="$(just sql -noheader -list -c "SELECT count(*) FROM correction_events;" 2>/dev/null || true)"
     if [ "$empty" != "0" ]; then echo "FAIL: an empty mine did not save a readable table: $empty" >&2; fail=1; fi
 
     # A failing mine keeps its last good file; the mines after it still run.
