@@ -161,7 +161,7 @@ while IFS=$'\t' read -r name source include replace; do
       f="$src/$r"
       dest="$mirror/$name/$r"
       if [ ! -f "$f" ]; then
-        if [ -f "$dest" ]; then changed=1; fi
+        if [ -s "$dest" ]; then changed=1; fi
         continue
       fi
       if ! inside "$f"; then echo "varve: sync $name: replace entry $r is a symlink or resolves outside the source, skipped" >&2; continue; fi

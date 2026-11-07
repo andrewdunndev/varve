@@ -409,7 +409,7 @@ test:
           -c "INSTALL sqlite; LOAD sqlite;" \
           -c "SELECT string_agg(id, ',' ORDER BY id) FROM sqlite_scan('$w/mirror/oc/store.db', 'item');"
       }
-      wal_sums() { cksum "$w/mirror/oc/store.db" "$w/mirror/oc/store.db-wal" 2>/dev/null || true; }
+      wal_sums() { cksum "$w/mirror/oc/store.db"; if [ -s "$w/mirror/oc/store.db-wal" ]; then cksum "$w/mirror/oc/store.db-wal"; fi; }
       {
         printf '%s\n' 'PRAGMA journal_mode=WAL;' 'CREATE TABLE item(id TEXT);' "INSERT INTO item VALUES ('main-1');" \
           'PRAGMA wal_checkpoint(TRUNCATE);' 'PRAGMA wal_autocheckpoint=0;' "INSERT INTO item VALUES ('wal-1'), ('wal-2');"
