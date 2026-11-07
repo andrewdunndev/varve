@@ -4,7 +4,7 @@
   The earlier "week-1 capture minimum" (a hand-fed JSONL ledger kept beside the
   operator's standing voicing rules, a standing instruction in the operator's
   skill registry) is WITHDRAWN -- see History. Phase-1 mechanical mining is
-  BUILT (`adapters/corrections.sql`; `just mine` / `just review`); phases 2-3
+  BUILT (`mining/corrections.sql`; `just mine` / `just review`); phases 2-3
   (classification, taxonomy derivation) stay draft.
 - **Date:** 2026-07-06 (revised same day: capture-minimum resolved, then reversed)
 
@@ -114,7 +114,7 @@ path** (`VARVE_ADJUDICATIONS`, default `<data_home>/adjudications.jsonl`) -- the
 public-instrument rule keeps operator data out of git now that varve is public;
 the ledger sits in the data home (outside `lake/`) so it survives a lake rebuild
 (`just backfill` clears `lake/` only), and entries are non-identifying loci + labels only,
-so I4/I5 hold regardless. `adapters/corrections.sql` joins the ledger back to candidates
+so I4/I5 hold regardless. `mining/corrections.sql` joins the ledger back to candidates
 and promotes confirmed ones (`verdict=true_positive`) into `correction_events` (prior DDL
 below) with `channel='mined'` + adjudication provenance. The adjudication line format --
 one JSON object per line (the withdrawn design's hand-crib, relocated here):
@@ -127,7 +127,7 @@ one JSON object per line (the withdrawn design's hand-crib, relocated here):
   "adjudicated_at":   "2026-07-06T12:00:00" }                  // optional ISO timestamp
 ```
 
-`queries/adjudication_sample.sql` emits a ready-to-fill skeleton of this line per candidate.
+`mining/queries/adjudication_sample.sql` emits a ready-to-fill skeleton of this line per candidate.
 For the review sitting itself, `just review` renders `<data_home>/review_round1.md`: one
 section per flagged candidate with the FULL prior draft + FULL corrective message
 dereferenced (round-0 found `context_judgment` largely un-inferable from a truncated
@@ -148,7 +148,7 @@ Third-party embedding APIs remain excluded (ADR-0004). Nothing leaves the machin
 
 Cluster adjudicated true-positive events (phase-2 labels/embeddings); name the
 recurring divergence directions from what the clusters show; version the result as
-`adapters/divergence_taxonomy.csv` v1 -- the controlled vocabulary for
+`mining/divergence_taxonomy.csv` v1 -- the controlled vocabulary for
 `correction_events.category`. THEN run the hypothesis test against the prior: the
 voicing-derived 17-category list (kept in the same CSV, explicitly marked PRIOR) --
 "does the mined taxonomy match the rules the operator bothered to write?" is itself a
@@ -251,9 +251,9 @@ distillation (manual, unmeasured -- "Beyond the Prompt", 2025).
   embedding exclusion, LLM-labeling boundary), RFC-0001 (content inline -- the
   decision that makes mining possible; this RFC resolves its open `correction_events`
   DDL), PRD G3 (post-training instrument).
-- In this repo: `adapters/corrections.sql` (candidates + events adapter),
-  `adapters/divergence_taxonomy.csv` (voicing-derived PRIOR; canonical taxonomy is a
-  phase-3 output), `queries/corrections_candidates.sql` + `queries/adjudication_sample.sql`.
+- In this repo: `mining/corrections.sql` (candidates + events adapter),
+  `mining/divergence_taxonomy.csv` (voicing-derived PRIOR; canonical taxonomy is a
+  phase-3 output), `mining/queries/corrections_candidates.sql` + `mining/queries/adjudication_sample.sql`.
   The adjudication ledger lives OUTSIDE the repo at a configured path
   (`VARVE_ADJUDICATIONS`, default `<data_home>/adjudications.jsonl`; public-instrument
   rule), created by the first adjudication round.

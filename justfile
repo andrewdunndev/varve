@@ -204,7 +204,7 @@ mine:
     {{duckdb}} :memory: \
       -c "SET memory_limit='{{mine_memory_limit}}'; SET preserve_insertion_order=false; SET threads={{duckdb_threads}}; SET max_temp_directory_size='{{duckdb_max_spill}}'; SET temp_directory='$spill';" \
       -c "SET VARIABLE lake='{{lake}}'; SET VARIABLE repo_dir='{{repo}}'; SET VARIABLE adjudications='$adj';" \
-      -f "{{repo}}/adapters/corrections.sql" \
+      -f "{{repo}}/mining/corrections.sql" \
       -c "COPY (SELECT * FROM stg_correction_candidates ORDER BY runtime, date, candidate_id) TO '{{lake}}/correction_candidates' (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);" \
       -c "COPY (SELECT * FROM stg_operator_messages ORDER BY runtime, date, message_uuid) TO '{{lake}}/operator_messages' (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);" \
       -c "COPY (SELECT * FROM stg_correction_events ORDER BY channel, date, event_id) TO '{{lake}}/correction_events' (FORMAT parquet, PARTITION_BY (channel, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);"
@@ -236,7 +236,7 @@ mine:
 # sample (unflagged operator messages) as a second part. Candidates/loci already in the
 # adjudications ledger are SKIPPED, so the doc shrinks as the operator works through it
 # (idempotent re-render). CONFIDENTIALITY: the ONLY output is the markdown under the data
-# home; adapters/review.sql holds zero transcript content, loci are the `lake:` form, and
+# home; mining/review.sql holds zero transcript content, loci are the `lake:` form, and
 # nothing is printed to a terminal. The worksheet is advisory operator data outside the repo
 # (see `worksheet`); absence is non-fatal (a non-matching sentinel primes read_json_auto).
 # The adjudication ledger is handled like `mine` (empty temp file when absent). COPY target
@@ -260,7 +260,7 @@ review out=(data_home + "/review_round1.md"):
     mkdir -p "$(dirname "{{out}}")"
     {{duckdb}} :memory: \
       -c "SET VARIABLE lake='{{lake}}'; SET VARIABLE adjudications='$adj'; SET VARIABLE worksheet='$ws';" \
-      -f "{{repo}}/adapters/review.sql" \
+      -f "{{repo}}/mining/review.sql" \
       -c "COPY (SELECT md FROM stg_review_document ORDER BY part, ord2, ord3) TO '{{out}}' (FORMAT csv, HEADER false, QUOTE '', ESCAPE '', DELIMITER E'\t');"
     [ -n "$adjtmp" ] && rm -f "$adjtmp" || true
     [ -n "$wstmp" ] && rm -f "$wstmp" || true
@@ -336,8 +336,8 @@ stats *ARGS:
     today="${VARVE_TODAY:-$(date +%F)}"
     {{duckdb}} -readonly "{{db}}" -noheader -list \
       -c "SET VARIABLE lake='{{lake}}'; SET VARIABLE year=$year; SET VARIABLE runtime='$runtime'; SET VARIABLE metric='$metric'; SET VARIABLE today=DATE '$today';" \
-      -c ".output /dev/null" -f "{{repo}}/queries/stats_year.sql" \
-      -c ".output" -f "{{repo}}/sql/stats_render.sql"
+      -c ".output /dev/null" -f "{{repo}}/mining/queries/stats_year.sql" \
+      -c ".output" -f "{{repo}}/mining/stats_render.sql"
 
 # Report lake size; tripwire at ~100 GB (PRD D4: keep-everything is cheap
 # at this scale, the watch is the control).
@@ -361,8 +361,8 @@ lint:
 # CI/local test: the real assertion behind `lint`. Runs the full pipeline
 # (backfill -> mine -> views) against a synthetic three-runtime fixture
 # (tests/fixtures/), isolated under a scratch VARVE_DATA so it never touches
-# the operator's real lake, then executes every file in queries/ plus `just
-# review` against the result. This exercises every statement in adapters/*.sql
+# the operator's real lake, then executes every file in queries/ and mining/queries/ plus `just
+# review` against the result. This exercises every statement in adapters/*.sql, mining/*.sql
 # and sql/*.sql for real against DuckDB (the actual engine, not a generic SQL
 # linter) -- a broken statement fails the run, not just a parse-only check.
 test:
@@ -414,9 +414,9 @@ test:
       exit 1
     fi
 
-    echo "varve test: executing every queries/*.sql against the fixture" >&2
+    echo "varve test: executing every queries/*.sql and mining/queries/*.sql against the fixture" >&2
     fail=0
-    for f in "{{repo}}"/queries/*.sql; do
+    for f in "{{repo}}"/queries/*.sql "{{repo}}"/mining/queries/*.sql; do
       echo "  -- $f" >&2
       if ! just sql -c "SET VARIABLE repo='{{repo}}';" -f "$f" > /dev/null; then
         echo "FAIL: $f did not execute cleanly against DuckDB" >&2
@@ -424,7 +424,7 @@ test:
       fi
     done
 
-    echo "varve test: just review (adapters/review.sql)" >&2
+    echo "varve test: just review (mining/review.sql)" >&2
     just review "$tmp/review.md" > /dev/null
 
     echo "varve test: just stats (snapshot, year-boundary streak, empty year, runtime filter)" >&2

@@ -17,10 +17,10 @@
 #            recipe runs), then `just test` runs the full backfill/mine
 #            pipeline against a synthetic three-runtime fixture
 #            (tests/fixtures/) in an isolated VARVE_DATA, so every statement in
-#            adapters/*.sql and sql/*.sql executes for real against DuckDB
+#            adapters/, sql/ and mining/ executes for real against DuckDB
 #            (the actual engine -- not a generic SQL linter that would
 #            disagree with its dialect), then executes every file in
-#            queries/*.sql plus `just review` against the result. See the
+#            queries/ and mining/queries/ plus `just review` against the result. See the
 #            justfile `test` recipe for the full rationale.
 #
 # Runner: untagged GitLab SaaS shared runner (dunn.dev/pipeline README v2.2.0+

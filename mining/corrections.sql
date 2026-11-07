@@ -10,7 +10,7 @@
 --      "operator message" means exactly what the detectors mean by it, no logic
 --      duplication) plus `flagged` (true iff the message's (runtime, session_id,
 --      message_uuid) also appears as a candidate locus, any detector). This is the
---      RFC-0002 G-recall-floor denominator: `queries/recall_floor_sample.sql` samples
+--      RFC-0002 G-recall-floor denominator: `mining/queries/recall_floor_sample.sql` samples
 --      flagged=false rows for adjudication of the miss rate. Same rebuild discipline as
 --      correction_candidates (pure function of the lake; deterministic on re-run).
 --   3. correction_events -- confirmed candidates, promoted after the operator adjudicates
@@ -122,7 +122,7 @@ SELECT * FROM (VALUES
 -- Versioned taxonomy PRIOR (NOT the controlled vocabulary -- a phase-3 output). Used for
 -- SOFT validation of promoted-event categories (flag, never crash).
 CREATE OR REPLACE TABLE _corr_taxonomy AS
-SELECT * FROM read_csv(getvariable('repo_dir') || '/adapters/divergence_taxonomy.csv',
+SELECT * FROM read_csv(getvariable('repo_dir') || '/mining/divergence_taxonomy.csv',
   header = true, comment = '#', auto_detect = true);
 CREATE OR REPLACE TABLE _corr_known AS SELECT list(category) AS known FROM _corr_taxonomy;
 

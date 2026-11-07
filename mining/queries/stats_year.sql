@@ -1,6 +1,6 @@
 -- QUESTION: What did the year look like? An opencode-stats-style year summary: one
 --   local-time day per cell, plus year totals. `just stats` renders it
---   (sql/stats_render.sql); this file computes it. ADR-0007 records the definitions.
+--   (mining/stats_render.sql); this file computes it. ADR-0007 records the definitions.
 -- WINDOW: local-time days from Jan 1 of `year` to min(Dec 31, `today`). Every event is
 --   bucketed by the local day of its row timestamp, not the session-start partition.
 -- METRIC (per runtime, summed over the runtime filter):
@@ -30,7 +30,7 @@
 -- CAVEATS: Claude Code and pi timestamps are UTC in the lake; opencode timestamps are
 --   wall-clock in the TimeZone of the ingest run (to_timestamp cast to TIMESTAMP), so
 --   they are taken as local as-is. A streak that runs across Jan 1 is cut at the window.
--- Run: just stats [--year N] [--runtime R] [--metric M], or just sql -f queries/stats_year.sql
+-- Run: just stats [--year N] [--runtime R] [--metric M], or just sql -f mining/queries/stats_year.sql
 CREATE OR REPLACE TEMP MACRO stats_local_day(rt, ts) AS
   CASE WHEN rt = 'opencode' THEN ts
        ELSE timezone(current_setting('TimeZone'), timezone('UTC', ts)) END::date;

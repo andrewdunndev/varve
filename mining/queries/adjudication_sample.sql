@@ -24,8 +24,8 @@
 --   the corrective message is excerpted (operator speech); the corrected DRAFT is left as
 --   a locus (draft_locus) to dereference live when judging context, minimising model/work
 --   content in the output. Excerpt is capped at 240 chars, whitespace-collapsed.
--- W7. Run: just sql -f queries/adjudication_sample.sql
---   (or one detector: just sql -c "SET VARIABLE det='lexical'" -f queries/adjudication_sample.sql)
+-- W7. Run: just sql -f mining/queries/adjudication_sample.sql
+--   (or one detector: just sql -c "SET VARIABLE det='lexical'" -f mining/queries/adjudication_sample.sql)
 
 CREATE TEMP TABLE _sample AS
 SELECT c.*,

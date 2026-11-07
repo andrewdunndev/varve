@@ -26,7 +26,7 @@
 --   operator's terminal. It is LAKE-LOCAL ONLY -- NEVER written to a repo-committed file
 --   (this .sql contains zero transcript content) and NEVER exported. Do not redirect this
 --   query's output into the repo or off ~/.local/share/varve.
--- W7. Run: just sql -f queries/recall_floor_sample.sql
+-- W7. Run: just sql -f mining/queries/recall_floor_sample.sql
 
 CREATE TEMP TABLE _floor_sample AS
 SELECT om.*

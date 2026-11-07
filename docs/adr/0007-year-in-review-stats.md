@@ -19,8 +19,8 @@ ingest run's TimeZone, because the adapter casts `to_timestamp(ms)` to `TIMESTAM
 
 ## Decision
 
-The metrics are defined once, in `queries/stats_year.sql` (its header carries the same
-text). `sql/stats_render.sql` only lays them out.
+The metrics are defined once, in `mining/queries/stats_year.sql` (its header carries the same
+text). `mining/stats_render.sql` only lays them out.
 
 - **session**: one top-level transcript: a `sessions` row with `parent_session_id` NULL,
   counted on its `started_at` day.

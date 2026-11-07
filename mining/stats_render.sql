@@ -1,5 +1,5 @@
 -- `just stats` text renderer over the stats_window / stats_days / stats_totals temp
--- tables that queries/stats_year.sql builds in the same session (ADR-0007).
+-- tables that mining/queries/stats_year.sql builds in the same session (ADR-0007).
 CREATE OR REPLACE TEMP MACRO stats_compact(x) AS
   CASE WHEN x < 1000 THEN printf('%d', x::bigint)
        WHEN x < 999950 THEN printf('%.1fk', x / 1e3)

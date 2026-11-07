@@ -4,7 +4,7 @@
 -- round-0 finding: context_judgment is largely un-inferable from a 240-char excerpt).
 --
 -- Invoked by the justfile `review` recipe (mise exec -- duckdb :memory:), which then COPYs
--- stg_review_document to <data_home>/review_round1.md. Same idiom as adapters/corrections.sql:
+-- stg_review_document to <data_home>/review_round1.md. Same idiom as mining/corrections.sql:
 -- lake-local read views over the Parquet, a stg_ table the recipe writes out (COPY targets
 -- are literals -- the recipe injects the output path).
 --
@@ -38,7 +38,7 @@ CREATE OR REPLACE VIEW _rv_opmsgs AS
     hive_partitioning = true, union_by_name = true);
 
 -- Ledger: candidate_ids and message_uuids already adjudicated (any verdict). Read exactly
--- as adapters/corrections.sql reads it. Drives the idempotent SKIP -- an adjudicated locus
+-- as mining/corrections.sql reads it. Drives the idempotent SKIP -- an adjudicated locus
 -- drops out of the next render.
 CREATE OR REPLACE TABLE _rv_ledger AS
 SELECT j ->> 'candidate_id' AS candidate_id, j ->> 'message_uuid' AS message_uuid
@@ -55,7 +55,7 @@ CREATE OR REPLACE TABLE _rv_worksheet AS
   SELECT * FROM read_json_auto(getvariable('worksheet'));
 
 -- Full operator/corrective text extraction (runtime-aware), reused verbatim in spirit from
--- queries/adjudication_sample.sql but NOT truncated -- the whole point of the review doc.
+-- mining/queries/adjudication_sample.sql but NOT truncated -- the whole point of the review doc.
 -- CC user rows: text blocks joined; else the tool_result `content` path with the harness
 -- "the user said:" prefix stripped. Interrupt marker stripped. opencode: content is plain.
 CREATE OR REPLACE MACRO _rv_usertext(rt, content) AS
@@ -104,7 +104,7 @@ WHERE c.candidate_id NOT IN (SELECT candidate_id FROM _rv_ledger_cands);
 
 -- -------------------------------------------------------------------------------------
 -- PART 2 -- recall-floor sample. The DETERMINISTIC top-50 unflagged operator messages
--- (ORDER BY md5(message_uuid), matching queries/recall_floor_sample.sql so the floor
+-- (ORDER BY md5(message_uuid), matching mining/queries/recall_floor_sample.sql so the floor
 -- denominator is a stable set), with already-adjudicated loci dropped from the render (the
 -- sample IDENTITY stays those 50; we do not backfill, which would shift the denominator).
 CREATE OR REPLACE TABLE _rv_floor AS

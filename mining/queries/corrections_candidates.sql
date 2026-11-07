@@ -7,7 +7,7 @@
 -- CAVEATS: candidates are PRE-adjudication -- volume is not precision. tool_reject +
 --   interrupt_redirect are Claude Code only (opencode records no user-verdict/interrupt);
 --   opencode contributes lexical + rewrite only. Counts move as the lake grows.
--- W7. Run: just sql -f queries/corrections_candidates.sql
+-- W7. Run: just sql -f mining/queries/corrections_candidates.sql
 CREATE TEMP TABLE _cc AS SELECT * FROM correction_candidates;
 
 -- (1) per detector x runtime
