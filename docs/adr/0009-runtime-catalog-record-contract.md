@@ -40,4 +40,4 @@
 ## References
 
 - Amends ADR-0006. RFC-0001 carries the column text.
-- Field signal: knightb8's Copilot, Antigravity and Vibe adapter PRs.
+- Field signal: three outside adapter PRs (Copilot, Antigravity, Vibe).
