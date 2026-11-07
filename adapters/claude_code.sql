@@ -208,10 +208,10 @@ dedup AS (
     any_value(model)               AS model,
     max_by(line_uuid, outp)        AS message_id,   -- representative line
     max_by(ts, outp)               AS timestamp,
-    max(inp)                       AS input,
-    max(outp)                      AS output,
-    max(cr)                        AS cache_read,
-    max(cw)                        AS cache_write
+    coalesce(max(inp), 0)          AS input,
+    coalesce(max(outp), 0)         AS output,
+    coalesce(max(cr), 0)           AS cache_read,
+    coalesce(max(cw), 0)           AS cache_write
   FROM asst
   GROUP BY api_message_id, nullif(request_id,'')
 )
