@@ -242,33 +242,40 @@ JOIN stg_sessions ss  ON d.session_id = ss.session_id;
 -- One pass over the corpus keeps only the tool_use and tool_result blocks,
 -- already reduced to the fields the table needs, so the window and the join
 -- below never run beside a JSON reader.
+--
+-- json_transform reads each block into just the fields used here, so an image
+-- payload in a result is never copied out. A json_extract per field copies the
+-- payload once per field, and a run of image blocks then fills memory_limit
+-- with transient vectors that cannot spill.
 CREATE OR REPLACE TABLE _cc_tool AS
 SELECT session_id, message_id, timestamp, i, bt,
-       CASE WHEN bt = 'tool_use' THEN json_extract_string(blk, '$.id')
-            ELSE json_extract_string(blk, '$.tool_use_id') END                               AS tool_use_id,
-       CASE WHEN bt = 'tool_use' THEN json_extract_string(blk, '$.name') END                 AS tool_name,
-       CASE WHEN bt = 'tool_use' THEN json_extract(blk, '$.input')::varchar END              AS arguments,
+       CASE WHEN bt = 'tool_use' THEN h.id ELSE h.tool_use_id END                            AS tool_use_id,
+       CASE WHEN bt = 'tool_use' THEN h.name END                                             AS tool_name,
+       CASE WHEN bt = 'tool_use' THEN h.input::varchar END                                   AS arguments,
        CASE WHEN bt = 'tool_result'
-            THEN coalesce(try_cast(json_extract_string(blk, '$.is_error') AS BOOLEAN), false) END AS is_error,
+            THEN coalesce(try_cast(h.is_error AS BOOLEAN), false) END                        AS is_error,
        CASE WHEN bt = 'tool_result' THEN
-         CASE WHEN json_type(json_extract(blk, '$.content')) = 'ARRAY'
-              THEN _join_blocks(list_transform(
-                     list_filter(try_cast(json_extract(blk, '$.content') AS json[]),
-                                 lambda j: _block_type(j) = 'text'),
-                     lambda j: json_extract_string(j, '$.text')))
-              WHEN json_type(json_extract(blk, '$.content')) = 'VARCHAR'
-              THEN json_extract_string(json_extract(blk, '$.content'), '$') END
+         CASE json_type(blk, '$.content')
+           WHEN 'ARRAY'
+           THEN _join_blocks(list_transform(
+                  list_filter(json_transform(blk, '{"content":[{"type":"VARCHAR","text":"VARCHAR"}]}').content,
+                              lambda c: c.type = 'text'),
+                  lambda c: c.text))
+           WHEN 'VARCHAR' THEN json_extract_string(blk, '$.content') END
        END                                                                                   AS result_text
-FROM (SELECT session_id, message_id, timestamp, record_type, i, blk, _block_type(blk) AS bt
-      FROM (SELECT session_id, message_id, timestamp, record_type, blocks[i] AS blk, i
-            FROM (SELECT sessionId::varchar AS session_id, uuid::varchar AS message_id, timestamp,
-                         type AS record_type, blocks,
-                         unnest(generate_series(1, len(blocks))) AS i
-                  FROM (SELECT *, try_cast(message.content::json AS json[]) AS blocks
-                        FROM _cc_raw
-                        WHERE type IN ('user','assistant') AND uuid IS NOT NULL
-                          AND json_type(message.content::json) = 'ARRAY'))))
+FROM (SELECT session_id, message_id, timestamp, record_type, i, blk, h.type AS bt, h
+      FROM (SELECT session_id, message_id, timestamp, record_type, i, blk,
+                   json_transform(blk, '{"type":"VARCHAR","id":"VARCHAR","name":"VARCHAR","tool_use_id":"VARCHAR","is_error":"VARCHAR","input":"JSON"}') AS h
+            FROM (SELECT session_id, message_id, timestamp, record_type, blocks[i] AS blk, i
+                  FROM (SELECT sessionId::varchar AS session_id, uuid::varchar AS message_id, timestamp,
+                               type AS record_type, blocks,
+                               unnest(generate_series(1, len(blocks))) AS i
+                        FROM (SELECT *, try_cast(message.content::json AS json[]) AS blocks
+                              FROM _cc_raw
+                              WHERE type IN ('user','assistant') AND uuid IS NOT NULL
+                                AND json_type(message.content::json) = 'ARRAY')))))
 WHERE (bt = 'tool_use' AND record_type = 'assistant') OR bt = 'tool_result';
+
 
 -- Outcome: an error result is denied when the tool refused to run on the
 -- operator's say-so, cancelled when the operator interrupted it, else error.
