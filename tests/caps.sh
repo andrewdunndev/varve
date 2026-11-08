@@ -77,8 +77,10 @@ child_nice() {
   else ps -o ni= -p "$c" | tr -d ' '; fi
 }
 base="$(child_nice $$)"
+maxnice="$(nice -n 99 sh -c "ps -o ni= -p \$\$" | tr -d " ")"
 for add in 10 0; do
   want=$((base + add))
+  [ "$want" -le "$maxnice" ] || want=$maxnice
   rm -f "$VARVE_LOCK/child"
   VARVE_NICE=$add VARVE_THREADS=1 "$duck" priority -c "$SPIN" >/dev/null 2>&1 &
   bg=$!
