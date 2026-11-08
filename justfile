@@ -354,11 +354,11 @@ test:
       if ! grep -q "$want" "$tmp/bad.err"; then echo "FAIL: no record check line for: $want" >&2; fail=1; fi
     done
 
-    # A runtime whose recent calls all carry no tokens fires usage_present and names the action; a runtime with tokens, and one with too few calls, do not.
+    # A runtime whose recent calls all carry no tokens fires usage_present and names the action; a runtime with tokens, one with too few calls, and one whose newest few calls failed after older calls with tokens, do not.
     use="$tmp/uselake"
     mkdir -p "$use/api_calls"
     {{repo}}/bin/duck use \
-      -c "COPY (SELECT * FROM (VALUES ('zero', DATE '2026-08-01', 0, 0, 0, 0), ('zero', DATE '2026-08-02', 0, 0, 0, 0), ('zero', DATE '2026-08-03', NULL, NULL, NULL, NULL), ('ctl', DATE '2026-08-01', 0, 0, 0, 0), ('ctl', DATE '2026-08-02', 0, 0, 0, 0), ('ctl', DATE '2026-08-03', 10, 5, 0, 0), ('few', DATE '2026-08-01', 0, 0, 0, 0), ('few', DATE '2026-08-02', 0, 0, 0, 0)) AS t(runtime, date, input, output, cache_read, cache_write)) TO '$use/api_calls/part.parquet' (FORMAT parquet);"
+      -c "COPY (SELECT * FROM (VALUES ('zero', DATE '2026-08-01', 0, 0, 0, 0), ('zero', DATE '2026-08-02', 0, 0, 0, 0), ('zero', DATE '2026-08-03', NULL, NULL, NULL, NULL), ('ctl', DATE '2026-08-01', 0, 0, 0, 0), ('ctl', DATE '2026-08-02', 0, 0, 0, 0), ('ctl', DATE '2026-08-03', 10, 5, 0, 0), ('few', DATE '2026-08-01', 0, 0, 0, 0), ('few', DATE '2026-08-02', 0, 0, 0, 0), ('burst', DATE '2026-05-01', 10, 5, 0, 0), ('burst', DATE '2026-08-01', 0, 0, 0, 0), ('burst', DATE '2026-08-02', 0, 0, 0, 0), ('burst', DATE '2026-08-03', 0, 0, 0, 0)) AS t(runtime, date, input, output, cache_read, cache_write)) TO '$use/api_calls/part.parquet' (FORMAT parquet);"
     out="$(VARVE_LAKE="$use" {{repo}}/bin/duck use -noheader -list -f "{{repo}}/sql/record.sql" -f "{{repo}}/checks/usage_present.sql")"
     if [ "$out" != "api_calls for zero: 3 recent calls carry no tokens; a usage field moved, fix the adapter" ]; then
       echo "FAIL: usage_present should name only the runtime with no tokens, got: $out" >&2; fail=1
