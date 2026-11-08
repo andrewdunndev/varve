@@ -8,7 +8,7 @@
 
 **Status: built for and used by its author, maintained occasionally.** CI tests every change. It has no support, roadmap or releases.
 
-We'd like to hear how you use it: open a GitLab issue. Core fixes are welcome as merge requests. We're moving toward a small, solid set of composable primitives. New runtimes and mines live in your own data home; the ones in this repo are examples.
+We'd like to hear how you use it: open an issue on GitLab or GitHub. Core fixes are welcome as merge requests. We're moving toward a small, solid set of composable primitives. New runtimes and mines live in your own data home; the ones in this repo are examples.
 
 A varve is one annual sediment layer in a glacial lake. Scientists read the
 sequence to reconstruct past climate. varve is that instrument for coding-agent
@@ -112,4 +112,4 @@ instrument is public; the readings are not.
 
 ## Contributing
 
-Open a GitLab issue to tell us how you use varve. Core fixes are welcome as merge requests. GitLab is canonical; GitHub is a push mirror. New runtimes live in your data home, with no repo change (see [Write your own adapter](#write-your-own-adapter)).
+Open an issue on GitLab or GitHub to tell us how you use varve. Core fixes are welcome as merge requests. GitLab is canonical; GitHub is a push mirror. New runtimes live in your data home, with no repo change (see [Write your own adapter](#write-your-own-adapter)).
