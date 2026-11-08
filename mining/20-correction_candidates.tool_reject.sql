@@ -7,19 +7,39 @@
 -- Candidate id: md5 of detector, runtime, session and message, so adjudications
 -- keep their keys. Version: the hash of this file.
 
+-- string_agg keeps its state in memory that cannot spill, so only the carriers
+-- with more than one result go through it; the rest pass their single result through.
+CREATE TEMP TABLE _carrier_n AS
+SELECT runtime, session_id, result_message_id, count(*) AS n
+FROM tool_calls
+WHERE runtime = 'claude-code' AND result_message_id IS NOT NULL
+GROUP BY runtime, session_id, result_message_id;
+
+CREATE TEMP VIEW _carried AS
+SELECT t.runtime, t.session_id, t.result_message_id, t.result_text AS result_txt
+FROM tool_calls t
+JOIN _carrier_n g ON g.n = 1 AND g.runtime = t.runtime AND g.session_id = t.session_id
+                 AND g.result_message_id = t.result_message_id
+WHERE t.runtime = 'claude-code'
+UNION ALL
+SELECT t.runtime, t.session_id, t.result_message_id, string_agg(t.result_text, chr(10))
+FROM tool_calls t
+JOIN _carrier_n g ON g.n > 1 AND g.runtime = t.runtime AND g.session_id = t.session_id
+                 AND g.result_message_id = t.result_message_id
+WHERE t.runtime = 'claude-code'
+GROUP BY t.runtime, t.session_id, t.result_message_id;
+
 CREATE TEMP TABLE _d AS
 SELECT x.runtime, x.session_id, x.message_id AS message_uuid, x.prior_asst_uuid, x.ts,
        'tool_reject' AS detector,
        json_object('marker', 'tool_use_rejected', 'source', 'tool_result') AS features,
        x.model_id
-FROM (SELECT runtime, session_id, result_message_id, string_agg(result_text, chr(10)) AS result_txt
-      FROM tool_calls
-      WHERE runtime = 'claude-code' AND result_message_id IS NOT NULL
-      GROUP BY runtime, session_id, result_message_id) cc
+FROM (SELECT runtime, session_id, result_message_id
+      FROM _carried
+      WHERE EXISTS (SELECT 1 FROM patterns p WHERE p.kind = 'reject' AND result_txt ILIKE p.pattern)
+        AND NOT EXISTS (SELECT 1 FROM patterns p WHERE p.kind = 'reject_exclude' AND result_txt ILIKE p.pattern)) cc
 JOIN operator_context x
   ON x.runtime = 'claude-code' AND x.session_id = cc.session_id AND x.message_id = cc.result_message_id
-WHERE EXISTS (SELECT 1 FROM patterns p WHERE p.kind = 'reject' AND cc.result_txt ILIKE p.pattern)
-  AND NOT EXISTS (SELECT 1 FROM patterns p WHERE p.kind = 'reject_exclude' AND cc.result_txt ILIKE p.pattern)
 UNION ALL BY NAME
 SELECT tc.runtime, tc.session_id, tc.message_id AS message_uuid,
        tc.message_id AS prior_asst_uuid, tc.started_at AS ts,

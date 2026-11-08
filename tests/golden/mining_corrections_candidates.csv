@@ -8,14 +8,14 @@ claude-code,interrupt_redirect,04502827e5e3a99e8d54105133b76538,3
 claude-code,lexical,4f47d0645abc3eba47ec42ad25e37264,3
 claude-code,negation,2
 claude-code,rewrite,8746036796bdc9e5a9ebb08a04ede1af,1
-claude-code,tool_reject,5c51ced7fda6281c2e6055e9af2bebf2,1
+claude-code,tool_reject,6b918973878d0eca969cd02bc0f44d5c,1
 claude-code,wait,1
 day,detector,candidates
 estate,harness,detector,candidates,sessions
 opencode,3,1,33.333,OVER 5% -- TIGHTEN MARKERS
 opencode,lexical,4f47d0645abc3eba47ec42ad25e37264,1
 opencode,negation,1
-opencode,tool_reject,5c51ced7fda6281c2e6055e9af2bebf2,1
+opencode,tool_reject,6b918973878d0eca969cd02bc0f44d5c,1
 pi,1,0,0.0,ok
 runtime,detector,detector_version,candidates
 runtime,lexical_marker,candidates
