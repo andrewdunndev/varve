@@ -28,7 +28,7 @@
 -- files (<project>/<id>.jsonl) and subagent transcripts are read; other JSONL
 -- (workflow journals, tool output) is skipped. Values that do not fit the
 -- schema read as NULL (ignore_errors).
-CREATE OR REPLACE TABLE _cc_raw AS
+CREATE OR REPLACE VIEW _cc_raw AS
 SELECT * FROM read_json(
   getvariable('mirror_dir') || '/**/*.jsonl',
   format              = 'newline_delimited',
@@ -107,54 +107,45 @@ FROM matched;
 -- JSONL remains the source of truth.
 --
 -- message.content is an array of blocks for tool-bearing turns and a bare string
--- for plain text. Casting the raw content to json[] under a CASE guard is
--- unsafe: the planner hoists the cast above the type filter and errors on
--- string content. So the array rows are materialized first, and only then cast.
-CREATE OR REPLACE TABLE _cc_arr_raw AS
-SELECT sessionId::varchar AS session_id, uuid::varchar AS message_id,
-       parentUuid::varchar AS parent_id, coalesce(isSidechain, false) AS is_sidechain,
-       timestamp, type AS record_type, message.role AS role,
-       message.id AS api_message_id, message.content::json AS content_json
-FROM _cc_raw
-WHERE type IN ('user','assistant') AND uuid IS NOT NULL
-  AND json_type(message.content::json) = 'ARRAY';
-
-CREATE OR REPLACE TABLE _cc_arr AS
-SELECT
-  session_id, message_id, parent_id, is_sidechain, timestamp, record_type, role, api_message_id,
-  _join_blocks(list_transform(list_filter(blocks, lambda j: _block_type(j) = 'text'),
-                              lambda j: json_extract_string(j, '$.text')))     AS text,
-  len(list_filter(blocks, lambda j: _block_type(j) = 'tool_result')) > 0      AS has_tool_result,
-  _join_blocks(list_transform(list_filter(blocks, lambda j: _block_type(j) = 'tool_result'),
-                              lambda j: (j -> 'content')::varchar))           AS tool_result_txt,
-  blocks
-FROM (SELECT *, cast(content_json AS json[]) AS blocks FROM _cc_arr_raw);
-DROP TABLE _cc_arr_raw;
-
-CREATE OR REPLACE TABLE _cc_str AS
-SELECT sessionId::varchar AS session_id, uuid::varchar AS message_id,
-       parentUuid::varchar AS parent_id, coalesce(isSidechain, false) AS is_sidechain,
-       timestamp, type AS record_type, message.role AS role,
-       message.id AS api_message_id,
-       CASE WHEN json_type(message.content::json) = 'VARCHAR'
-            THEN json_extract_string(message.content::json, '$') END AS text
-FROM _cc_raw
-WHERE type IN ('user','assistant') AND uuid IS NOT NULL
-  AND json_type(message.content::json) IS DISTINCT FROM 'ARRAY';
-
+-- for plain text. try_cast to json[] is NULL for anything that is not an array,
+-- so the cast is safe wherever the planner puts it.
+--
+-- _cc_raw and the stg_ views below stay views: the corpus is parsed again by
+-- each consumer, and nothing but the small stg_sessions and stg_api_calls is
+-- held in the database, so a build's spill is its sort and join state and not
+-- a copy of the corpus.
+--
 -- origin is structural: a row carrying a tool result is tool_result, whatever
 -- else it holds. interrupted is a fact about the row: the interrupt marker is in
 -- its text or in a tool result it carries. Whether the operator meant a
 -- correction is judgment and stays in mining.
-CREATE OR REPLACE TABLE stg_messages AS
+CREATE OR REPLACE VIEW stg_messages AS
 WITH m AS (
   SELECT session_id, message_id, parent_id, is_sidechain, timestamp, record_type, role,
-         api_message_id, text, has_tool_result, tool_result_txt
-  FROM _cc_arr
-  UNION ALL
+         api_message_id, ctype, content_json,
+         CASE WHEN ctype = 'ARRAY' THEN try_cast(content_json AS json[]) END AS blocks
+  FROM (SELECT sessionId::varchar AS session_id, uuid::varchar AS message_id,
+               parentUuid::varchar AS parent_id, coalesce(isSidechain, false) AS is_sidechain,
+               timestamp, type AS record_type, message.role AS role,
+               message.id AS api_message_id,
+               message.content::json AS content_json,
+               json_type(message.content::json) AS ctype
+        FROM _cc_raw
+        WHERE type IN ('user','assistant') AND uuid IS NOT NULL)
+),
+t AS (
   SELECT session_id, message_id, parent_id, is_sidechain, timestamp, record_type, role,
-         api_message_id, text, false, NULL
-  FROM _cc_str
+         api_message_id,
+         CASE WHEN ctype = 'ARRAY'
+              THEN _join_blocks(list_transform(list_filter(blocks, lambda j: _block_type(j) = 'text'),
+                                               lambda j: json_extract_string(j, '$.text')))
+              WHEN ctype = 'VARCHAR' THEN json_extract_string(content_json, '$') END      AS text,
+         coalesce(len(list_filter(blocks, lambda j: _block_type(j) = 'tool_result')) > 0, false)
+                                                                                         AS has_tool_result,
+         CASE WHEN ctype = 'ARRAY'
+              THEN _join_blocks(list_transform(list_filter(blocks, lambda j: _block_type(j) = 'tool_result'),
+                                               lambda j: (j -> 'content')::varchar)) END AS tool_result_txt
+  FROM m
 )
 SELECT
   m.message_id,
@@ -175,7 +166,7 @@ SELECT
        ELSE false END                                                 AS interrupted,
   'claude-code'                                                       AS runtime,
   ss.date                                                             AS date
-FROM m
+FROM t m
 JOIN stg_sessions ss ON m.session_id = ss.session_id;
 
 -- ---------------------------------------------------------------------------
@@ -237,6 +228,7 @@ LEFT JOIN _pricing p  ON d.model = p.model
 JOIN stg_sessions ss  ON d.session_id = ss.session_id;
 
 -- ---------------------------------------------------------------------------
+
 -- tool_calls: one row per tool_use block, paired with its tool_result block by
 -- (session_id, tool_use_id). The first result pairs with the first tool_use of
 -- that id. A further result, or one with no tool_use, gets a row of its own with
@@ -245,48 +237,56 @@ JOIN stg_sessions ss  ON d.session_id = ss.session_id;
 -- no tool timing, so ended_at and duration_ms are NULL.
 --
 -- Result content is a string or an array of items; the text items join like
--- message blocks. As above, the array rows are materialized before the cast.
-CREATE OR REPLACE TABLE _cc_blocks AS
-SELECT session_id, message_id, timestamp, record_type, blocks[i] AS blk, i
-FROM (SELECT session_id, message_id, timestamp, record_type, blocks,
-             unnest(generate_series(1, len(blocks))) AS i
-      FROM _cc_arr);
-DROP TABLE _cc_arr;
+-- message blocks.
+--
+-- One pass over the corpus keeps only the tool_use and tool_result blocks,
+-- already reduced to the fields the table needs, so the window and the join
+-- below never run beside a JSON reader.
+--
+-- json_transform reads each block into just the fields used here, so an image
+-- payload in a result is never copied out. A json_extract per field copies the
+-- payload once per field, and a run of image blocks then fills memory_limit
+-- with transient vectors that cannot spill.
+CREATE OR REPLACE TABLE _cc_tool AS
+SELECT session_id, message_id, timestamp, i, bt,
+       CASE WHEN bt = 'tool_use' THEN h.id ELSE h.tool_use_id END                            AS tool_use_id,
+       CASE WHEN bt = 'tool_use' THEN h.name END                                             AS tool_name,
+       CASE WHEN bt = 'tool_use' THEN h.input::varchar END                                   AS arguments,
+       CASE WHEN bt = 'tool_result'
+            THEN coalesce(try_cast(h.is_error AS BOOLEAN), false) END                        AS is_error,
+       CASE WHEN bt = 'tool_result' THEN
+         CASE json_type(blk, '$.content')
+           WHEN 'ARRAY'
+           THEN _join_blocks(list_transform(
+                  list_filter(json_transform(blk, '{"content":[{"type":"VARCHAR","text":"VARCHAR"}]}').content,
+                              lambda c: c.type = 'text'),
+                  lambda c: c.text))
+           WHEN 'VARCHAR' THEN json_extract_string(blk, '$.content') END
+       END                                                                                   AS result_text
+FROM (SELECT session_id, message_id, timestamp, record_type, i, blk, h.type AS bt, h
+      FROM (SELECT session_id, message_id, timestamp, record_type, i, blk,
+                   json_transform(blk, '{"type":"VARCHAR","id":"VARCHAR","name":"VARCHAR","tool_use_id":"VARCHAR","is_error":"VARCHAR","input":"JSON"}') AS h
+            FROM (SELECT session_id, message_id, timestamp, record_type, blocks[i] AS blk, i
+                  FROM (SELECT sessionId::varchar AS session_id, uuid::varchar AS message_id, timestamp,
+                               type AS record_type, blocks,
+                               unnest(generate_series(1, len(blocks))) AS i
+                        FROM (SELECT *, try_cast(message.content::json AS json[]) AS blocks
+                              FROM _cc_raw
+                              WHERE type IN ('user','assistant') AND uuid IS NOT NULL
+                                AND json_type(message.content::json) = 'ARRAY')))))
+WHERE (bt = 'tool_use' AND record_type = 'assistant') OR bt = 'tool_result';
 
-CREATE OR REPLACE TABLE _cc_res AS
-SELECT session_id, message_id, timestamp, i,
-       json_extract_string(blk, '$.tool_use_id')                                             AS tool_use_id,
-       coalesce(try_cast(json_extract_string(blk, '$.is_error') AS BOOLEAN), false)          AS is_error,
-       json_type(json_extract(blk, '$.content'))                                       AS ctype,
-       json_extract(blk, '$.content')                                                AS cjson
-FROM _cc_blocks
-WHERE _block_type(blk) = 'tool_result';
-
-CREATE OR REPLACE TABLE _cc_res_arr_raw AS
-SELECT * FROM _cc_res WHERE ctype = 'ARRAY';
-
-CREATE OR REPLACE TABLE _cc_results AS
-SELECT session_id, message_id, timestamp, i, tool_use_id, is_error,
-       CASE WHEN ctype = 'VARCHAR' THEN json_extract_string(cjson, '$') END AS result_text
-FROM _cc_res WHERE ctype IS DISTINCT FROM 'ARRAY'
-UNION ALL
-SELECT session_id, message_id, timestamp, i, tool_use_id, is_error,
-       _join_blocks(list_transform(list_filter(items, lambda j: _block_type(j) = 'text'),
-                                   lambda j: json_extract_string(j, '$.text')))
-FROM (SELECT *, cast(cjson AS json[]) AS items FROM _cc_res_arr_raw);
-DROP TABLE _cc_res;
-DROP TABLE _cc_res_arr_raw;
 
 -- Outcome: an error result is denied when the tool refused to run on the
 -- operator's say-so, cancelled when the operator interrupted it, else error.
-CREATE OR REPLACE TABLE stg_tool_calls AS
+CREATE OR REPLACE VIEW stg_tool_calls AS
 WITH u AS (
-  SELECT session_id, message_id, json_extract_string(blk, '$.id') AS tool_use_id, json_extract_string(blk, '$.name') AS tool_name,
-         timestamp AS started_at, json_extract(blk, '$.input')::varchar AS arguments,
-         row_number() OVER (PARTITION BY session_id, json_extract_string(blk, '$.id')
+  SELECT session_id, message_id, tool_use_id, tool_name,
+         timestamp AS started_at, arguments,
+         row_number() OVER (PARTITION BY session_id, tool_use_id
                             ORDER BY timestamp, message_id) AS urank
-  FROM _cc_blocks
-  WHERE record_type = 'assistant' AND _block_type(blk) = 'tool_use'
+  FROM _cc_tool
+  WHERE bt = 'tool_use'
 ),
 r AS (
   SELECT session_id, message_id, tool_use_id, result_text,
@@ -296,7 +296,7 @@ r AS (
               ELSE 'error' END AS outcome,
          row_number() OVER (PARTITION BY session_id, tool_use_id
                             ORDER BY timestamp, message_id, i) AS rn
-  FROM _cc_results
+  FROM _cc_tool WHERE bt = 'tool_result'
 ),
 paired AS (
   SELECT coalesce(uu.session_id, rr.session_id) AS session_id, uu.message_id,
