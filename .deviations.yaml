@@ -8,3 +8,10 @@
     only_allow_merge_if_pipeline_succeeds=true), which outranks the
     project flag; flipping the project copy would be redundant state.
   owner: andrew@dunn.dev
+- standard: pipeline
+  assertion: "file-contains:.gitlab-ci.yml"
+  reason: >-
+    Hand-rolled two-job gate: varve is SQL plus a justfile, not a language
+    stack any dunn.dev/pipeline catalog component targets. Both jobs call
+    the justfile recipes, so CI and a local run match.
+  owner: andrew@dunn.dev

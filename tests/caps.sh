@@ -77,8 +77,13 @@ child_nice() {
   else ps -o ni= -p "$c" | tr -d ' '; fi
 }
 base="$(child_nice $$)"
+nice -n 99 sleep 5 & probe=$!; sleep 0.3
+maxnice="$(child_nice "$probe")"
+kill "$probe" 2>/dev/null || true; wait "$probe" 2>/dev/null || true
+[ -n "$maxnice" ] || { echo "FAIL: could not read the maximum nice" >&2; exit 1; }
 for add in 10 0; do
   want=$((base + add))
+  [ "$want" -le "$maxnice" ] || want=$maxnice
   rm -f "$VARVE_LOCK/child"
   VARVE_NICE=$add VARVE_THREADS=1 "$duck" priority -c "$SPIN" >/dev/null 2>&1 &
   bg=$!

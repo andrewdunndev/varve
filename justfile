@@ -199,7 +199,7 @@ test:
         "{{repo}}"/mining/*) name="mining_$(basename "$f" .sql).csv" ;;
         *) name="query_$(basename "$f" .sql).csv" ;;
       esac
-      if ! just sql -csv -c "SET VARIABLE repo='{{repo}}';" -f "$f" | LC_ALL=C sort > "$gold/$name"; then
+      if ! just sql -csv -c "SET VARIABLE repo='{{repo}}'; SET VARIABLE today=DATE '2026-11-07';" -f "$f" | LC_ALL=C sort > "$gold/$name"; then
         echo "FAIL: $f did not execute cleanly" >&2
         fail=1
       fi
