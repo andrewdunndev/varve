@@ -1,5 +1,4 @@
--- No row is dated after the day the check runs. The date partition comes from a
--- session's started_at, so a later date is a misparsed or mis-zoned timestamp.
+-- No row is dated more than a day after the check runs (dates are UTC, the clock may be local).
 CREATE VIEW IF NOT EXISTS sessions AS SELECT NULL::VARCHAR AS session_id, NULL::VARCHAR AS runtime, NULL::DATE AS date WHERE false;
 CREATE VIEW IF NOT EXISTS messages AS SELECT NULL::VARCHAR AS session_id, NULL::VARCHAR AS runtime, NULL::DATE AS date WHERE false;
 CREATE VIEW IF NOT EXISTS api_calls AS SELECT NULL::VARCHAR AS session_id, NULL::VARCHAR AS runtime, NULL::DATE AS date WHERE false;
@@ -11,6 +10,6 @@ WITH d AS (
   UNION ALL SELECT 'tool_calls', runtime, date FROM tool_calls
 )
 SELECT tbl || ' has ' || count(*) || ' row(s) for ' || runtime || ' dated after today, latest ' || max(date) || '; fix the adapter''s timestamp parse' AS action
-FROM d WHERE try_cast(date AS DATE) > current_date
+FROM d WHERE try_cast(date AS DATE) > current_date + 1
 GROUP BY tbl, runtime
 ORDER BY tbl, runtime;
