@@ -3,6 +3,8 @@
 --   next_message a bare interrupt; the redirect is the next operator message,
 --                guarded to the same draft so no new assistant turn intervened.
 --                The locus is the redirect.
+-- Subagent (is_sidechain) and harness-written (is_meta) rows are not operator speech
+-- and never fire.
 -- Candidate id: md5 of detector, runtime, session and message, so adjudications
 -- keep their keys. Version: the hash of this file.
 
@@ -11,9 +13,9 @@ SELECT ctx.message_id AS interrupt_uuid, ctx.session_id, ctx.runtime, ctx.ts,
        ctx.prior_asst_uuid, ctx.model_id,
        ((NOT ctx.is_noise) AND length(trim(ctx.body)) > 20) AS has_inline_redirect
 FROM operator_context ctx
-WHERE ctx.runtime = 'claude-code' AND ctx.interrupted;
+WHERE ctx.runtime = 'claude-code' AND ctx.interrupted AND NOT ctx.is_sidechain AND NOT ctx.is_meta;
 
-CREATE TEMP TABLE _op_operator AS SELECT * FROM operator_context WHERE is_operator;
+CREATE TEMP TABLE _op_operator AS SELECT * FROM operator_context WHERE is_operator AND NOT is_sidechain AND NOT is_meta;
 
 CREATE TEMP TABLE _d AS
 SELECT i.runtime, i.session_id, i.interrupt_uuid AS message_uuid, i.prior_asst_uuid, i.ts,

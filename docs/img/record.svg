@@ -80,7 +80,7 @@
   <text class="nm" x="32" y="372">messages</text>
   <text class="sub" x="508" y="372" text-anchor="end">one row per source line or entry</text>
   <text class="grp" x="32" y="392">keys</text><text class="col" x="122" y="392">message_id, session_id, parent_id, api_message_id</text>
-  <text class="grp" x="32" y="410">kind</text><text class="col" x="122" y="410">role, origin, record_type, is_sidechain</text>
+  <text class="grp" x="32" y="410">kind</text><text class="col" x="122" y="410">role, origin, record_type, is_sidechain, is_meta</text>
   <text class="grp" x="32" y="428">when</text><text class="col" x="122" y="428">timestamp</text>
   <text class="grp" x="32" y="446">content</text><text class="col" x="122" y="446">text, interrupted</text>
   <text class="grp" x="32" y="464">partition</text><text class="col" x="122" y="464">runtime, date</text>

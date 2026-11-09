@@ -44,6 +44,7 @@ SELECT * FROM read_json(
     uuid:        'VARCHAR',
     parentUuid:  'VARCHAR',
     isSidechain: 'BOOLEAN',
+    isMeta:      'BOOLEAN',
     type:        'VARCHAR',
     requestId:   'VARCHAR',
     message:     'STRUCT(role VARCHAR, id VARCHAR, model VARCHAR, content JSON,
@@ -121,20 +122,23 @@ FROM matched;
 -- correction is judgment and stays in mining.
 CREATE OR REPLACE VIEW stg_messages AS
 WITH m AS (
-  SELECT session_id, message_id, parent_id, is_sidechain, timestamp, record_type, role,
+  SELECT session_id, message_id, parent_id, is_sidechain, is_meta, timestamp, record_type, role,
          api_message_id, ctype, content_json,
          CASE WHEN ctype = 'ARRAY' THEN try_cast(content_json AS json[]) END AS blocks
   FROM (SELECT sessionId::varchar AS session_id, uuid::varchar AS message_id,
                parentUuid::varchar AS parent_id, coalesce(isSidechain, false) AS is_sidechain,
+               coalesce(isMeta, false) AS is_meta,
                timestamp, type AS record_type, message.role AS role,
                message.id AS api_message_id,
                message.content::json AS content_json,
                json_type(message.content::json) AS ctype
         FROM _cc_raw
-        WHERE type IN ('user','assistant') AND uuid IS NOT NULL)
+        WHERE type IN ('user','assistant') AND uuid IS NOT NULL
+        QUALIFY row_number() OVER (PARTITION BY sessionId, uuid
+                                   ORDER BY filename, timestamp, parentUuid NULLS LAST) = 1)
 ),
 t AS (
-  SELECT session_id, message_id, parent_id, is_sidechain, timestamp, record_type, role,
+  SELECT session_id, message_id, parent_id, is_sidechain, is_meta, timestamp, record_type, role,
          api_message_id,
          CASE WHEN ctype = 'ARRAY'
               THEN _join_blocks(list_transform(list_filter(blocks, lambda j: _block_type(j) = 'text'),
@@ -153,6 +157,7 @@ SELECT
   m.role,
   m.parent_id,
   m.is_sidechain,
+  m.is_meta,
   m.timestamp,
   m.record_type,
   m.api_message_id,
@@ -229,11 +234,12 @@ JOIN stg_sessions ss  ON d.session_id = ss.session_id;
 
 -- ---------------------------------------------------------------------------
 
--- tool_calls: one row per tool_use block, paired with its tool_result block by
--- (session_id, tool_use_id). The first result pairs with the first tool_use of
--- that id. A further result, or one with no tool_use, gets a row of its own with
--- NULL tool_name, message_id and started_at, so every result block appears
--- exactly once. A tool_use with no result has NULL outcome. Claude Code records
+-- tool_calls: one row per (session_id, tool_use_id), a tool_use paired with its
+-- tool_result. The first tool_use of an id (by timestamp, then message id) and its
+-- first result (then block position) are kept; a repeat of either, as when a
+-- source repeats lines, is dropped. A result with no tool_use gets a row of its
+-- own with NULL tool_name, message_id and started_at. A tool_use with no result
+-- has NULL outcome. Claude Code records
 -- no tool timing, so ended_at and duration_ms are NULL.
 --
 -- Result content is a string or an array of items; the text items join like
@@ -305,14 +311,6 @@ paired AS (
   FROM (SELECT * FROM u WHERE urank = 1) uu
   FULL JOIN (SELECT * FROM r WHERE rn = 1) rr
     ON uu.session_id = rr.session_id AND uu.tool_use_id = rr.tool_use_id
-  UNION ALL
-  SELECT session_id, message_id, tool_use_id, tool_name, started_at, arguments,
-         NULL::varchar, NULL::varchar, NULL::varchar
-  FROM u WHERE urank > 1
-  UNION ALL
-  SELECT session_id, NULL::varchar, tool_use_id, NULL::varchar, NULL::timestamp, NULL::varchar,
-         outcome, result_text, message_id
-  FROM r WHERE rn > 1
 )
 SELECT
   p.session_id,

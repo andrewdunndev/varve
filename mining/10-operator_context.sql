@@ -7,6 +7,8 @@
 --   is_noise       injected text, by the noise patterns
 --   is_operator    typed operator speech: not noise, not a tool result, not empty
 --   interrupted    the adapter's interrupt fact
+--   is_sidechain   the message is subagent traffic (messages.is_sidechain)
+--   is_meta        the message is harness-written, not typed (messages.is_meta)
 --   is_copy        the same message recorded under an earlier-started session
 --   prior_asst_uuid  nearest preceding assistant message that carries text
 --   model_id       model of the nearest api call at or before the message
@@ -15,7 +17,8 @@
 
 CREATE TEMP TABLE _um AS
 SELECT row_number() OVER () AS rid, message_id, session_id, timestamp AS ts, runtime,
-       text AS raw_txt, (origin = 'tool_result') AS has_tool_result, interrupted
+       text AS raw_txt, (origin = 'tool_result') AS has_tool_result, interrupted,
+       is_sidechain, is_meta
 FROM messages
 WHERE role = 'user'
   AND (runtime = 'claude-code' OR (runtime = 'opencode' AND text IS NOT NULL));
@@ -28,6 +31,7 @@ SET VARIABLE interrupt_prefix = coalesce((SELECT any_value(pattern) FROM pattern
 
 CREATE TEMP TABLE _op AS
 SELECT u.rid, u.message_id, u.session_id, u.ts, u.runtime, u.has_tool_result, u.interrupted,
+       u.is_sidechain, u.is_meta,
        (u.raw_txt IS NULL) AS raw_null, (coalesce(u.raw_txt, '') = '') AS raw_empty,
        trim(regexp_replace(coalesce(u.raw_txt, ''), getvariable('interrupt_prefix'), '')) AS body,
        (u.rid IN (SELECT rid FROM _noisy)) AS is_noise
@@ -99,7 +103,7 @@ SELECT
          regexp_replace(k.result_txt, '^.*?the user said:\s*', ''), getvariable('interrupt_prefix'), ''))
        WHEN c.raw_null THEN NULL
        ELSE '' END AS speech,
-  c.is_noise, c.has_tool_result, c.is_operator, c.interrupted,
+  c.is_noise, c.has_tool_result, c.is_operator, c.interrupted, c.is_sidechain, c.is_meta,
   (cp.message_id IS NOT NULL) AS is_copy,
   c.prior_asst_uuid, c.model_id
 FROM _op_ctx c

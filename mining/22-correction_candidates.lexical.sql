@@ -2,6 +2,8 @@
 -- (kind marker in patterns), after an optional leading interjection, directly
 -- following an assistant draft. The hit's name lands in features, so precision
 -- is measurable per marker.
+-- Subagent (is_sidechain) and harness-written (is_meta) rows are not operator speech
+-- and never fire.
 -- Candidate id: md5 of detector, runtime, session and message, so adjudications
 -- keep their keys. Version: the hash of this file; a patterns change does not move it.
 
@@ -17,7 +19,7 @@ SELECT ctx.runtime, ctx.session_id, ctx.message_id AS message_uuid, ctx.prior_as
 FROM operator_context ctx
 JOIN (SELECT name, pattern FROM patterns WHERE kind = 'marker') mk
   ON regexp_matches(regexp_replace(lower(trim(ctx.body)), getvariable('interjection'), ''), mk.pattern)
-WHERE ctx.is_operator AND ctx.prior_asst_uuid IS NOT NULL
+WHERE ctx.is_operator AND NOT ctx.is_sidechain AND NOT ctx.is_meta AND ctx.prior_asst_uuid IS NOT NULL
 QUALIFY row_number() OVER (PARTITION BY ctx.runtime, ctx.session_id, ctx.message_id
                            ORDER BY mk.name) = 1;
 

@@ -1,9 +1,9 @@
 claude-code,AskUserQuestion,1,0,0,1,0,0,0,0.0,2.0,136.0
-claude-code,Bash,7,0,2,1,1,0,3,0.5,4.0,69.8
+claude-code,Bash,8,1,2,1,1,0,3,0.4,6.6,58.8
 claude-code,Grep,1,1,0,0,0,0,0,0.0,2.0,7.0
-claude-code,NULL,2,2,0,0,0,0,0,0.0,NULL,13.0
+claude-code,NULL,1,1,0,0,0,0,0,0.0,NULL,13.0
 claude-code,Read,2,2,0,0,0,0,0,0.0,9.0,10.0
 claude-code,mcp__srv__lookup,1,1,0,0,0,0,0,0.0,16.0,12.0
-opencode,bash,4,1,1,1,0,1,0,0.25,21.5,4.0
+opencode,bash,5,1,1,2,0,1,0,0.2,22.2,4.0
 pi,bash,1,1,0,0,0,0,0,0.0,21.0,2.0
 runtime,tool_name,calls,ok,error,denied,cancelled,running,none,error_share,arg_chars,result_chars

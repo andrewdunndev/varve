@@ -4,6 +4,8 @@
 --     outcome is the fact that the call was refused, and telling a clarifying
 --     answer from a correction is this detector's judgment.
 --   opencode: the call's outcome is denied.
+-- Subagent (is_sidechain) and harness-written (is_meta) rows are not operator speech
+-- and never fire.
 -- Candidate id: md5 of detector, runtime, session and message, so adjudications
 -- keep their keys. Version: the hash of this file.
 
@@ -40,6 +42,7 @@ FROM (SELECT runtime, session_id, result_message_id
         AND NOT EXISTS (SELECT 1 FROM patterns p WHERE p.kind = 'reject_exclude' AND result_txt ILIKE p.pattern)) cc
 JOIN operator_context x
   ON x.runtime = 'claude-code' AND x.session_id = cc.session_id AND x.message_id = cc.result_message_id
+  AND NOT x.is_sidechain AND NOT x.is_meta
 UNION ALL BY NAME
 SELECT tc.runtime, tc.session_id, tc.message_id AS message_uuid,
        tc.message_id AS prior_asst_uuid, tc.started_at AS ts,
@@ -47,7 +50,9 @@ SELECT tc.runtime, tc.session_id, tc.message_id AS message_uuid,
        json_object('marker', 'outcome_' || tc.outcome, 'source', 'outcome_column') AS features,
        NULL::varchar AS model_id
 FROM tool_calls tc
-WHERE tc.runtime = 'opencode' AND tc.outcome = 'denied';
+WHERE tc.runtime = 'opencode' AND tc.outcome = 'denied'
+  AND NOT EXISTS (SELECT 1 FROM sessions ps WHERE ps.runtime = 'opencode' AND ps.session_id = tc.session_id
+                  AND ps.parent_session_id IS NOT NULL);
 
 CREATE TEMP TABLE mine_out AS
 SELECT

@@ -62,3 +62,36 @@ INSERT INTO oc.part VALUES
    '{"type":"tool","callID":"call-3","tool":"bash","state":{"status":"error","input":{"command":"false"},"error":"exit 1","time":{"start":1685577601700,"end":1685577601800}}}'),
   ('oc-part-8', 'oc-msg-5', 'oc-session-2023', 1685577605000,
    '{"type":"text","text":"no, use the other directory instead"}');
+
+-- Operator scope (2023, outside every stats window): a parent session whose
+-- second user message holds only a synthetic text part, and a child session
+-- (a subagent) whose user prompt opens like a correction and whose assistant
+-- rejects a tool call. Neither may reach operator_messages or a detector.
+INSERT INTO oc.session VALUES
+  ('oc-session-scope', NULL, '/home/runner/gitlab.com/testns/testrepo', '1.0.0', 'build',
+   'claude-sonnet-5', 1685923200000),
+  ('oc-session-child', 'oc-session-scope', '/home/runner/gitlab.com/testns/testrepo', '1.0.0', 'build',
+   'claude-sonnet-5', 1685923210000);
+
+INSERT INTO oc.message VALUES
+  ('oc-msg-s1', 'oc-session-scope', 1685923200000, '{"role":"user"}'),
+  ('oc-msg-s2', 'oc-session-scope', 1685923201000,
+   '{"role":"assistant","modelID":"claude-sonnet-5","providerID":"anthropic","time":{"created":1685923201000,"completed":1685923202000},"cost":0.001,"tokens":{"input":100,"output":50,"reasoning":0,"cache":{"read":0,"write":0}}}'),
+  ('oc-msg-s3', 'oc-session-scope', 1685923205000, '{"role":"user"}'),
+  ('oc-msg-c1', 'oc-session-child', 1685923210000, '{"role":"user"}'),
+  ('oc-msg-c2', 'oc-session-child', 1685923211000,
+   '{"role":"assistant","modelID":"claude-sonnet-5","providerID":"anthropic","time":{"created":1685923211000,"completed":1685923212000},"cost":0.001,"tokens":{"input":100,"output":50,"reasoning":0,"cache":{"read":0,"write":0}}}');
+
+INSERT INTO oc.part VALUES
+  ('oc-part-s1', 'oc-msg-s1', 'oc-session-scope', 1685923200000,
+   '{"type":"text","text":"summarize the repository layout"}'),
+  ('oc-part-s2', 'oc-msg-s2', 'oc-session-scope', 1685923201500,
+   '{"type":"text","text":"The repository holds adapters and mining files."}'),
+  ('oc-part-s3', 'oc-msg-s3', 'oc-session-scope', 1685923205000,
+   '{"type":"text","synthetic":true,"text":"no, this injected text was not typed"}'),
+  ('oc-part-c1', 'oc-msg-c1', 'oc-session-child', 1685923210000,
+   '{"type":"text","text":"no, search only the mining folder"}'),
+  ('oc-part-c2', 'oc-msg-c2', 'oc-session-child', 1685923211500,
+   '{"type":"text","text":"Searching the mining folder."}'),
+  ('oc-part-c3', 'oc-msg-c2', 'oc-session-child', 1685923211600,
+   '{"type":"tool","callID":"call-c1","tool":"bash","state":{"status":"rejected","input":{"command":"rm -r cache"},"time":{"start":1685923211600,"end":1685923211700}}}');
