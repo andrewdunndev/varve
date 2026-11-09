@@ -1,20 +1,19 @@
--- tool_calls pairs each Claude Code result with its tool_use, gives every other
--- result block a row of its own, and maps outcome, arguments and result text.
+-- tool_calls pairs each Claude Code result with its tool_use, gives a result with no
+-- tool_use a row of its own, keeps one row per tool_use_id, and maps outcome, arguments and result text.
 -- Fixture ids are test-session-2023 lines and calls.
 CREATE VIEW IF NOT EXISTS tool_calls AS SELECT NULL::VARCHAR AS tool_use_id WHERE false;
 WITH t AS (SELECT * FROM tool_calls),
 carrier AS (SELECT 'c0000000-0000-0000-0000-000000000025' AS id),
 want(label, n) AS (
   VALUES
-  ('one row per result block in a carrier with three',
-   (SELECT (count(*) = 3)::int FROM t, carrier WHERE t.result_message_id = carrier.id)),
+  ('one row per tool_use_id in a carrier with three results',
+   (SELECT (count(*) = 2)::int FROM t, carrier WHERE t.result_message_id = carrier.id)),
   ('the first result pairs with its tool_use',
    (SELECT count(*) FROM t WHERE tool_use_id = 'tool_t6' AND message_id = 'c0000000-0000-0000-0000-000000000024'
       AND tool_name = 'Read' AND outcome = 'ok' AND result_text = 'first result'
       AND result_message_id = 'c0000000-0000-0000-0000-000000000025' AND arguments LIKE '%a.txt%')),
-  ('a second result for one tool_use gets its own unpaired row',
-   (SELECT count(*) FROM t WHERE tool_use_id = 'tool_t6' AND message_id IS NULL AND tool_name IS NULL
-      AND started_at IS NULL AND result_text = 'second result')),
+  ('a second result for one tool_use is dropped',
+   (SELECT (count(*) = 1)::int FROM t WHERE tool_use_id = 'tool_t6')),
   ('a result with no tool_use gets an unpaired row',
    (SELECT count(*) FROM t WHERE tool_use_id = 'tool_unpaired' AND message_id IS NULL AND tool_name IS NULL
       AND started_at IS NULL AND outcome = 'ok' AND result_text = 'orphan result')),

@@ -1,5 +1,6 @@
 estate,week,model,model_cost,week_total_cost,cost_share
 unknown,2023-05-29,claude-sonnet-5,0.01,0.01,1.0
+unknown,2023-06-05,claude-sonnet-5,0.0,0.0,1.0
 unknown,2025-12-29,claude-sonnet-5,0.01,0.01,1.0
 unknown,2026-07-27,claude-sonnet-5,0.0,0.0,1.0
 unknown,2026-08-03,claude-sonnet-5,0.0,0.0,1.0

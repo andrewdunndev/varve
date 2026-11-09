@@ -110,8 +110,8 @@ JOIN (SELECT path, session_id, strftime(started_at,'%Y-%m-%d') AS date FROM _pi_
 WHERE e.type IS DISTINCT FROM 'session' AND e.id IS NOT NULL;
 
 -- ---------------------------------------------------------------------------
--- messages: one row per user/assistant/toolResult entry. is_sidechain is false:
--- pi has no sidechain flag; branching is the parent_id tree.
+-- messages: one row per user/assistant/toolResult entry. is_sidechain and is_meta
+-- are false: pi has no such flags; branching is the parent_id tree.
 --
 -- Entry content is a string or an array of blocks. The array rows are
 -- materialized before the json[] cast, as in the Claude Code adapter. text is
@@ -159,6 +159,7 @@ SELECT
   role,
   parent_id,
   false                                    AS is_sidechain,
+  false                                    AS is_meta,
   timestamp,
   record_type,
   NULL::varchar                            AS api_message_id,

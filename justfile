@@ -252,7 +252,7 @@ test:
 
     echo "varve test: build behavior" >&2
     sums() { (cd "$1" && find . -type f | LC_ALL=C sort | xargs cksum); }
-    rm -f "$VARVE_DATA/checks/"{candidates_present,copy_owner,detectors}.sql
+    rm -f "$VARVE_DATA/checks/"{candidates_present,copy_owner,detectors,operator_scope}.sql
 
     # A runtime whose adapter fails keeps its published partitions; the others rebuild.
     mkdir -p "$VARVE_DATA/adapters"
@@ -354,6 +354,22 @@ test:
       if ! grep -q "$want" "$tmp/bad.err"; then echo "FAIL: no record check line for: $want" >&2; fail=1; fi
     done
 
+    # The key, orphan and date checks have teeth: a repeated key, a child with no session and a row dated in the future each fail, one line per table.
+    key="$tmp/keylake"
+    mkdir -p "$key/sessions" "$key/messages" "$key/api_calls" "$key/tool_calls"
+    {{repo}}/bin/duck key \
+      -c "COPY (SELECT * FROM (VALUES ('s1', 'rt', DATE '2026-08-01'), ('s1', 'rt', DATE '2026-08-01'), ('s2', 'rt', DATE '2999-01-01')) t(session_id, runtime, date)) TO '$key/sessions/part.parquet' (FORMAT parquet);" \
+      -c "COPY (SELECT * FROM (VALUES ('m1', 's1', 'rt', DATE '2026-08-01'), ('m1', 's1', 'rt', DATE '2026-08-01'), ('m2', 's1', 'rt', DATE '2999-01-01'), ('m9', 'ghost', 'rt', DATE '2026-08-01')) t(message_id, session_id, runtime, date)) TO '$key/messages/part.parquet' (FORMAT parquet);" \
+      -c "COPY (SELECT * FROM (VALUES ('a1', 's1', 'rt', DATE '2026-08-01'), ('a1', 's1', 'rt', DATE '2026-08-01'), ('a2', 's1', 'rt', DATE '2999-01-01'), ('a9', 'ghost', 'rt', DATE '2026-08-01')) t(message_id, session_id, runtime, date)) TO '$key/api_calls/part.parquet' (FORMAT parquet);" \
+      -c "COPY (SELECT * FROM (VALUES ('t1', 's1', 'rt', DATE '2026-08-01'), ('t1', 's1', 'rt', DATE '2026-08-01'), ('t2', 's1', 'rt', DATE '2999-01-01'), ('t9', 'ghost', 'rt', DATE '2026-08-01')) t(tool_use_id, session_id, runtime, date)) TO '$key/tool_calls/part.parquet' (FORMAT parquet);"
+    rc=0; VARVE_LAKE="$key" {{repo}}/bin/check 2>"$tmp/key.err" || rc=$?
+    if [ "$rc" -ne 1 ]; then echo "FAIL: the key, orphan and date checks should fail a bad lake, got exit $rc" >&2; fail=1; fi
+    for want in 'check primary_keys: sessions has 1 repeated' 'check primary_keys: messages has 1 repeated' 'check primary_keys: api_calls has 1 repeated' 'check primary_keys: tool_calls has 1 repeated' \
+                'check orphans: messages has 1 row' 'check orphans: api_calls has 1 row' 'check orphans: tool_calls has 1 row' \
+                'check future_dates: sessions has 1 row' 'check future_dates: messages has 1 row' 'check future_dates: api_calls has 1 row' 'check future_dates: tool_calls has 1 row'; do
+      if ! grep -q "$want" "$tmp/key.err"; then echo "FAIL: no check line for: $want" >&2; fail=1; fi
+    done
+
     # A runtime whose recent calls all carry no tokens fires usage_present and names the action; a runtime with tokens, one with too few calls, and one whose newest few calls failed after older calls with tokens, do not.
     use="$tmp/uselake"
     mkdir -p "$use/api_calls"
@@ -404,7 +420,7 @@ test:
     if [ "$rc" -ne 0 ] || [ "$n" = "0" ]; then
       echo "FAIL: an empty mirror should keep the runtime's partitions, got exit $rc and $n sessions" >&2; tail -5 "$tmp/build.err" >&2; fail=1
     fi
-    rm -f "$VARVE_DATA/checks/"{tool_pairing,record_columns}.sql
+    rm -f "$VARVE_DATA/checks/"{tool_pairing,record_columns,message_flags}.sql
     for id in $(just sql -noheader -list -c "SELECT session_id FROM sessions WHERE runtime = 'opencode';"); do
       printf '\n[[row]]\nsession_id = "%s"\nruntime = "opencode"\nat = "2026-01-01"\n' "$id" >> "$VARVE_DATA/forgotten.toml"
     done

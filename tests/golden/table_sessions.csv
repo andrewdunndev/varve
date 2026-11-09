@@ -1,5 +1,7 @@
 oc-session-1,/home/runner/gitlab.com/testns/testrepo,unknown,unknown,NULL,2026-08-03 00:00:00,NULL,NULL,NULL,1.0.0,build,2026-08-03,opencode
 oc-session-2023,/home/runner/gitlab.com/testns/testrepo,unknown,unknown,NULL,2023-06-01 00:00:00,NULL,NULL,NULL,1.0.0,build,2023-06-01,opencode
+oc-session-child,/home/runner/gitlab.com/testns/testrepo,unknown,unknown,NULL,2023-06-05 00:00:10,oc-session-scope,NULL,NULL,1.0.0,build,2023-06-05,opencode
+oc-session-scope,/home/runner/gitlab.com/testns/testrepo,unknown,unknown,NULL,2023-06-05 00:00:00,NULL,NULL,NULL,1.0.0,build,2023-06-05,opencode
 pi-session-1,/home/runner/gitlab.com/testns/testrepo,unknown,unknown,NULL,2026-08-01 00:00:00,NULL,NULL,3,NULL,NULL,2026-08-01,pi
 session_id,cwd,harness,estate,campaign,started_at,parent_session_id,cc_version,pi_version,oc_version,agent,date,runtime
 test-session-0,/home/runner/gitlab.com/testns/testrepo,unknown,unknown,NULL,2026-08-01 00:00:01,NULL,2.1.201,NULL,NULL,NULL,2026-08-01,claude-code
@@ -7,3 +9,4 @@ test-session-1,/home/runner/gitlab.com/testns/testrepo,unknown,unknown,NULL,2026
 test-session-2023,/home/runner/gitlab.com/testns/testrepo,unknown,unknown,NULL,2023-06-01 00:00:01,NULL,2.1.201,NULL,NULL,NULL,2023-06-01,claude-code
 test-session-noise,/home/runner/gitlab.com/testns/testrepo,unknown,unknown,NULL,2023-06-02 00:00:01,NULL,2.1.201,NULL,NULL,NULL,2023-06-02,claude-code
 test-session-ny,/home/runner/gitlab.com/testns/testrepo,unknown,unknown,NULL,2025-12-30 12:00:00,NULL,2.1.201,NULL,NULL,NULL,2025-12-30,claude-code
+test-session-scope,/home/runner/gitlab.com/testns/testrepo,unknown,unknown,NULL,2023-06-05 00:00:01,NULL,2.1.201,NULL,NULL,NULL,2023-06-05,claude-code

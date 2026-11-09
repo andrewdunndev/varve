@@ -28,9 +28,9 @@ text). `mining/stats_render.sql` only lays them out.
 - **subagent**: one child transcript or sidechain. Claude Code: a sidechain root (an
   `is_sidechain` message with no `parent_id`). opencode: a session with `parent_session_id` set.
 - **prompt**: one human-authored user turn: an `operator_messages` row (the correction-mining
-  `is_operator` predicate, which excludes tool results and runtime-injected messages) that is
-  neither a sidechain message nor in an opencode child session. The predicate is reused, not
-  rewritten.
+  `is_operator` predicate, which excludes tool results and runtime-injected messages, and
+  which `operator_messages` further limits to rows that are neither sidechain nor `is_meta`). The
+  predicate is reused, not rewritten.
 - **step**: one assistant turn: one `api_calls` row.
 - **tokens**: `input + output + cache_read + cache_write`.
 - **cost**: `sum(api_calls.cost_usd)`, as priced at build by the adapters and
@@ -59,7 +59,7 @@ invented:
 | Metric | Claude Code | pi | opencode |
 |--------|-------------|----|----------|
 | subagent | sidechain roots | not exposed: `--no-session` children write no transcript (ADR-0006), so always 0 | child sessions, which mostly chain sessions rather than dispatch work, so the count reads high as a dispatch signal |
-| prompt | `operator_messages`, minus sidechain rows | pi is absent from correction mining, so this falls back to `role='user'` messages with no injection filter | `operator_messages` in top-level sessions |
+| prompt | `operator_messages` | pi is absent from correction mining, so this falls back to `role='user'` messages with no injection filter | `operator_messages` in top-level sessions |
 | step | one per `(message.id, requestId)` | one per assistant entry | one per assistant message; per-step `step-finish` parts are not in the lake |
 | tokens | all four classes | all four classes | all four classes; `tokens.reasoning` is not in the lake |
 | tool success | `tool_result` blocks, error = `is_error`, one per `tool_use_id` | `toolResult` entries, error = `isError` | `state.status` completed or error; `running` has no result and is excluded |

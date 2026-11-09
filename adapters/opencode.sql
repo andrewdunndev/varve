@@ -81,9 +81,9 @@ FROM matched;
 -- messages: one row per message (all roles). opencode keeps text in `part`, not
 -- on the message, so text is the message's text and reasoning parts joined in
 -- part order. Reasoning parts stay in: dropping them would move the prior-draft
--- token sets the rewrite detector compares. is_sidechain is false -- opencode
--- has no sidechain flag; its parent/child structure lives at SESSION grain
--- (parent_id). interrupted is NULL: opencode records no interrupt signal that a
+-- token sets the rewrite detector compares. is_sidechain is true for a message in
+-- a child session (parent_session_id set). is_meta is true for a user message
+-- whose text parts are all synthetic. interrupted is NULL: opencode records no interrupt signal that a
 -- query reads.
 CREATE OR REPLACE TABLE stg_messages AS
 WITH txt AS (
@@ -93,13 +93,21 @@ WITH txt AS (
   WHERE json_extract_string(data, '$.type') IN ('text','reasoning')
     AND json_extract_string(data, '$.text') IS NOT NULL
   GROUP BY message_id
+),
+syn AS (
+  SELECT message_id, count(*) AS n, count(*) FILTER (WHERE coalesce(h.synthetic, false)) AS n_synthetic
+  FROM (SELECT message_id, json_transform(data, '{"type":"VARCHAR","synthetic":"BOOLEAN"}') AS h
+        FROM oc_part)
+  WHERE h.type = 'text'
+  GROUP BY message_id
 )
 SELECT
   m.id::varchar                                    AS message_id,
   m.session_id::varchar                            AS session_id,
   json_extract_string(m.data, '$.role')            AS role,
   json_extract_string(m.data, '$.parentID')        AS parent_id,
-  false                                            AS is_sidechain,
+  (ss.parent_session_id IS NOT NULL)               AS is_sidechain,
+  (json_extract_string(m.data, '$.role') = 'user' AND coalesce(syn.n > 0 AND syn.n = syn.n_synthetic, false)) AS is_meta,
   to_timestamp(m.time_created/1000.0)::timestamp   AS timestamp,
   json_extract_string(m.data, '$.role')            AS record_type,
   NULL::varchar                                    AS api_message_id,
@@ -112,7 +120,8 @@ SELECT
   ss.date                                          AS date
 FROM oc_message m
 JOIN stg_sessions ss ON m.session_id::varchar = ss.session_id
-LEFT JOIN txt ON txt.message_id = m.id;
+LEFT JOIN txt ON txt.message_id = m.id
+LEFT JOIN syn ON syn.message_id = m.id;
 
 -- ---------------------------------------------------------------------------
 -- api_calls: the ccusage UsageEntry spine. Grain = one assistant MESSAGE (the

@@ -39,6 +39,16 @@ pattern = "%<local-command-stdout>%"
 
 [[row]]
 kind = "noise"
+name = "bash_stdout"
+pattern = "%<bash-stdout>%"
+
+[[row]]
+kind = "noise"
+name = "bash_stderr"
+pattern = "%<bash-stderr>%"
+
+[[row]]
+kind = "noise"
 name = "local_command_caveat"
 pattern = "%<local-command-caveat>%"
 

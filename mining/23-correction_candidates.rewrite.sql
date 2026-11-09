@@ -2,6 +2,8 @@
 -- assistant draft but is not identical, the operator restating the model.
 -- Jaccard on lowercased word unigrams, banded to [0.5, 0.9). A score near 1.0 is
 -- an echo, the operator pasting model text forward, which is a different signal.
+-- Subagent (is_sidechain) and harness-written (is_meta) rows are not operator speech
+-- and never fire.
 -- Candidate id: md5 of detector, runtime, session and message, so adjudications
 -- keep their keys. Version: the hash of this file.
 
@@ -27,7 +29,7 @@ FROM (
         WHERE role = 'assistant' AND text IS NOT NULL
         QUALIFY row_number() OVER (PARTITION BY runtime, session_id, message_id ORDER BY text) = 1) pm
     ON pm.runtime = ctx.runtime AND pm.session_id = ctx.session_id AND pm.message_id = ctx.prior_asst_uuid
-  WHERE ctx.is_operator
+  WHERE ctx.is_operator AND NOT ctx.is_sidechain AND NOT ctx.is_meta
     AND length(trim(pm.text)) >= 20 AND length(trim(ctx.body)) >= 20
     AND lower(trim(ctx.body)) <> lower(trim(pm.text))
 ) s
