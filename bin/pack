@@ -24,7 +24,7 @@ plain_files() {
     for pat in "${pats[@]}"; do
       [ -z "$pat" ] || find "$mirror/$name" -type f -name "$pat" ! -name '*.zst' -print0
     done
-  done < <("$yq" -p toml -o=tsv '(.row // [])[] | [.name, (.include | join(",")), ((.replace // []) | join(","))]' "$data/runtimes.toml")
+  done < <("$yq" -p toml -o=tsv '(.row // [])[] | [.name, (.include | join(",")), ((.replace // []) | join(","))]' "$data/runtimes.toml") | sort -z -u
 }
 
 # guard: stop when memory or disk runs short.
