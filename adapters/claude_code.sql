@@ -1,5 +1,5 @@
 -- varve Claude Code adapter. Near-pure SQL, per ADR-0002. Reads the mirrored
--- Claude Code JSONL and derives the four normalized tables stg_sessions,
+-- Claude Code JSONL (kept as .jsonl.zst frames, ADR-0011) and derives the four normalized tables stg_sessions,
 -- stg_messages, stg_api_calls and stg_tool_calls; the build copies them to the
 -- lake.
 --
@@ -10,8 +10,9 @@
 -- Source shape (Claude Code v2.1.x):
 --   * ~/.claude/projects/<dashed-cwd>/<session_id>.jsonl  = main session
 --   * .../<session_id>/subagents/agent-*.jsonl            = subagent (sidechain)
+--     (the mirror stores each of these as <name>.jsonl.zst)
 --     traffic; these carry the SAME sessionId as the parent, isSidechain=true.
---     The glob therefore MUST recurse (projects/**/*.jsonl) or subagent api
+--     The glob therefore MUST recurse (projects/**/*.jsonl.zst) or subagent api
 --     calls are silently lost.
 --   * message.usage = {input_tokens, output_tokens, cache_read_input_tokens,
 --     cache_creation_input_tokens} -- exactly the ccusage UsageEntry grain.
@@ -25,12 +26,12 @@
 -- ---------------------------------------------------------------------------
 -- Raw read with an explicit schema: inference over the whole corpus collapses
 -- to a single MAP column once rare top-level keys accumulate. Only main session
--- files (<project>/<id>.jsonl) and subagent transcripts are read; other JSONL
+-- files (<project>/<id>.jsonl.zst) and subagent transcripts are read; other JSONL
 -- (workflow journals, tool output) is skipped. Values that do not fit the
 -- schema read as NULL (ignore_errors).
 CREATE OR REPLACE VIEW _cc_raw AS
 SELECT * FROM read_json(
-  getvariable('mirror_dir') || '/**/*.jsonl',
+  getvariable('mirror_dir') || '/**/*.jsonl.zst',
   format              = 'newline_delimited',
   records             = true,
   ignore_errors       = true,
@@ -55,7 +56,7 @@ SELECT * FROM read_json(
 )
 WHERE regexp_matches(
   ltrim(filename[length(getvariable('mirror_dir')) + 1:], '/'),
-  '^[^/]+/[^/]+\.jsonl$|^[^/]+/[^/]+/subagents/(.+/)?agent-[^/]+\.jsonl$'
+  '^[^/]+/[^/]+\.jsonl\.zst$|^[^/]+/[^/]+/subagents/(.+/)?agent-[^/]+\.jsonl\.zst$'
 );
 
 -- ---------------------------------------------------------------------------

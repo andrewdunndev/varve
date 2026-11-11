@@ -2,7 +2,10 @@
 # Rebuild the lake from the mirror, one process per runtime, then swap.
 # Run it as: bin/duck locked bin/build
 #
-#   1. each runtime's adapter writes its four tables into lake.new
+#   1. each runtime's adapter writes its four tables into lake.new. The mirror
+#      holds NAME.zst frames (ADR-0011): an adapter streams *.jsonl.zst in place;
+#      a runtime with a `replace` set (a SQLite file cannot be read compressed)
+#      is decompressed to state/unpack.PID/NAME for the length of its run
 #   2. a runtime that built owns its partitions, empty tables included. A runtime
 #      that was not built keeps its last good partitions: one whose adapter
 #      failed, one with an empty mirror (unless every session it published is
@@ -36,11 +39,22 @@ yq="$("$repo/bin/tool" yq)" || exit 2
 rm -rf "$new"
 mkdir -p "$new"
 
+# A SIGKILL skips the EXIT trap; the lock is held, so an unpack dir of a dead pid is leftover.
+mkdir -p "$data/state"
+for d in "$data"/state/unpack.*; do
+  [ -d "$d" ] || continue
+  pid="${d##*/unpack.}"
+  case "$pid" in ''|*[!0-9]*) continue ;; esac
+  kill -0 "$pid" 2>/dev/null || rm -rf "$d"
+done
+unpack="$data/state/unpack.$$"
+trap 'rm -rf "$unpack"' EXIT
+
 failed=""
 built=" "
 dropped=" "
-rows="$("$yq" -p toml -o=tsv '(.row // [])[] | [.name, .adapter]' "$data/runtimes.toml")"
-while IFS=$'\t' read -r name adapter; do
+rows="$("$yq" -p toml -o=tsv '(.row // [])[] | [.name, .adapter, ((.replace // []) | join(","))]' "$data/runtimes.toml")"
+while IFS=$'\t' read -r name adapter replace; do
   [ -n "$name" ] || continue
   dir="$mirror/$name"
   if [ ! -d "$dir" ] || [ -z "$(find "$dir" -type f -print -quit)" ]; then
@@ -61,13 +75,33 @@ while IFS=$'\t' read -r name adapter; do
   file="$data/adapters/$adapter"
   [ -f "$file" ] || file="$repo/adapters/$adapter"
   [ -f "$file" ] || die "$name: no adapter $adapter in $data/adapters or $repo/adapters"
+  if [ -n "$replace" ]; then
+    zstd="$("$repo/bin/tool" zstd)" || exit 2
+    rm -rf "$unpack"
+    upok=1
+    ifs="$IFS"; IFS=,
+    for r in $replace; do
+      if [ -f "$dir/$r.zst" ]; then
+        mkdir -p "$unpack/$name/$(dirname "$r")"
+        "$zstd" -q -d -c -- "$dir/$r.zst" > "$unpack/$name/$r" || { upok=0; break; }
+      fi
+    done
+    IFS="$ifs"
+    if [ "$upok" = 0 ]; then
+      rm -rf "$unpack"
+      echo "varve: build $name: could not decompress its mirror, keeping its published partitions" >&2
+      failed="$failed $name"
+      continue
+    fi
+    dir="$unpack/$name"
+  fi
   args=(-c "SET VARIABLE mirror_dir='$dir'" -f "$repo/sql/prelude.sql" -f "$file")
   for t in $tables; do
-    args+=(-c "COPY (SELECT * FROM stg_$t ANTI JOIN forgotten USING (session_id)) TO '$new/$t' (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd);")
+    args+=(-c "COPY (SELECT * FROM stg_$t ANTI JOIN forgotten USING (session_id)) TO '$new/$t' (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd, COMPRESSION_LEVEL 19);")
   done
   rc=0
   VARVE_LAKE="$new" "$repo/bin/duck" "build $name" "${args[@]}" || rc=$?
-  if [ "$rc" -eq 1 ]; then rm -rf "$new"; exit 1; fi
+  if [ "$rc" -eq 1 ]; then rm -rf "$new" "$unpack"; exit 1; fi
   if [ "$rc" -ne 0 ]; then
     for t in $tables; do rm -rf "$new/$t/runtime=$name"; done
     echo "varve: build $name: adapter failed, keeping its published partitions" >&2
@@ -75,6 +109,7 @@ while IFS=$'\t' read -r name adapter; do
   else
     built="$built$name "
   fi
+  rm -rf "$unpack"
 done <<< "$rows"
 
 if [ -d "$lake" ]; then

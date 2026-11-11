@@ -13,7 +13,7 @@
 --   mirror_dir : this runtime's mirror folder (no trailing slash)
 --
 -- Source shape (pi v3 spec):
---   * Path: <dir-encoded-cwd>/<timestamp>_<id>.jsonl.
+--   * Path: <dir-encoded-cwd>/<timestamp>_<id>.jsonl (the mirror stores it as .jsonl.zst, ADR-0011).
 --   * Line 1 header: {"type":"session","version":3,"id":<uuid>,
 --     "timestamp":<ISO>,"cwd":<path>}. The session id + cwd live ONLY here;
 --     entries carry no sessionId, so entries link to their session by FILENAME.
@@ -37,7 +37,7 @@
 
 CREATE OR REPLACE TABLE _pi_raw AS
 SELECT * FROM read_json(
-  getvariable('mirror_dir') || '/**/*.jsonl',
+  getvariable('mirror_dir') || '/**/*.jsonl.zst',
   format              = 'newline_delimited',
   records             = true,
   ignore_errors       = true,

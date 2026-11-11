@@ -1,6 +1,6 @@
 # ADR-0011: Compressed mirror
 
-- **Status:** proposed
+- **Status:** accepted
 - **Supersedes:** the plain-copy parts of ADR-0008 (`cp -p`, never-shorter on mirror file bytes, `build` reading the mirrored database in place)
 - **Date:** 2026-11-11
 - **Deciders:** maintainer
@@ -42,11 +42,11 @@
 - For a runtime with a replace set, `build` decompresses the set into `state/unpack.<pid>/<runtime>/`, runs the adapter with that as `mirror_dir`, and removes it when the runtime finishes. The opencode adapter does not change. Stale unpack directories of dead pids go at the next build, as run directories do.
 - The lake is written with `COMPRESSION_LEVEL 19`. On sample 2 that cut it 12% (62.4MB to 55.0MB).
 - `zstd` is pinned in `mise.toml` and resolved by `bin/tool`. The registry has no `zstd` entry, so the pin uses the conda backend.
-- The plain mirror goes by `bin/pack`, a one-shot used once and then deleted: compress every mirror file, verify each by decompress-and-hash against its plain twin, and only then may the operator remove the plain files. Later syncs find equal mtimes and copy nothing.
+- The plain mirror goes by `bin/pack`, a one-shot: it writes `NAME.zst` beside each plain file and never touches the plain file; `bin/pack --verify` checks each pair by decompress-and-hash. Only then does the operator remove the plain files. Later syncs find equal mtimes and copy nothing. Delete `bin/pack` once the migration is done.
 
 **Rejected**
 - gzip: 2.74x against 3.45x, 26% larger, but no new dependency. zstd gives 1.2G less on the full mirror.
-- Parquet line table or one solid stream: 9% to 29% smaller, but adapters would read a table instead of files, an appended session needs part files and compaction, and ADR-0008's files primitive goes.
+- Parquet line table or one solid stream: 9% to 29% smaller (measured floor: claude-code about 3G, data home about 4G; the operator ruled per-file zstd 19 at about 5.2G), but adapters would read a table instead of files, an appended session needs part files and compaction, and ADR-0008's files primitive goes.
 - Frame append: see above.
 - zstd dictionaries: DuckDB's reader cannot use them.
 - Decompress the whole mirror to scratch each build: 15G written per build, against streaming reads at +14% build time.
@@ -60,7 +60,7 @@
 - Proofs: a session deleted at source stays queryable from its `.zst`; the lake rebuilds from the mirror alone, with no source and no plain file.
 
 **Negative**
-- The proof target of under 3G is not met: lossless retention floors near 5G. Base64 images are 31% to 43% of the compressed mirror. Dropping them breaks ADR-0003 and still leaves about 3.5G to 4G; it needs the operator.
+- A target of under 3G is not met: lossless retention floors near 5G. Base64 images are 31% to 43% of the compressed mirror. Dropping them breaks ADR-0003 and still leaves about 3.5G to 4G; it needs the operator.
 - First conversion: about 26 to 37 min of CPU at zstd 19 on one process, about 15 to 19 min on two; opencode adds 40s.
 - A corrupt frame fails its runtime's build, which keeps its published partitions. Sync tests each frame before the rename.
 - Rebuild of the full corpus: about 2.0 min plain, 2.3 min from `.zst` (linear from sample 1), plus 0.85G written once for opencode.

@@ -129,6 +129,8 @@ stats *ARGS:
 # at this scale, the watch is the control).
 disk:
     @du -sh {{data_home}} 2>/dev/null || echo "no lake yet at {{data_home}}"
+    @du -sh {{data_home}}/mirror 2>/dev/null | sed 's/\t.*/  mirror/' || true
+    @du -sh {{lake}} 2>/dev/null | sed 's/\t.*/  lake/' || true
     @kb="$(du -sk {{data_home}} 2>/dev/null | cut -f1)"; if [ "${kb:-0}" -ge 104857600 ]; then echo "varve disk: TRIPWIRE -- data home exceeds ~100 GB (ADR-0003 disk watch)"; fi
 
 # CI/local lint. `just --evaluate` parses every recipe body and evaluates the
@@ -169,11 +171,15 @@ test:
 
     mkdir -p "$VARVE_DATA/checks" "$VARVE_DATA/mining" "$VARVE_MIRROR"
     cp -R "{{repo}}/tests/fixtures/mirror/." "$VARVE_MIRROR/"
+    zstd="$({{repo}}/bin/tool zstd)"
+    # The mirror holds frames (ADR-0011): compress the plain fixtures into the retained form.
+    find "$VARVE_MIRROR" -name '*.jsonl' -exec "$zstd" -q -19 --rm {} +
     mkdir -p "$VARVE_MIRROR/opencode"
     echo "varve test: seeding synthetic opencode fixture db" >&2
     {{repo}}/bin/duck seed \
       -c "INSTALL sqlite; LOAD sqlite; ATTACH '$VARVE_MIRROR/opencode/opencode.db' AS oc (TYPE sqlite);" \
       -f "{{repo}}/tests/fixtures/opencode_seed.sql"
+    "$zstd" -q -19 --rm "$VARVE_MIRROR/opencode/opencode.db"
     for f in "{{repo}}"/adapters/*.example.toml "{{repo}}"/mining/*.example.toml; do
       cp "$f" "$VARVE_DATA/$(basename "$f" .example.toml).toml"
     done
@@ -279,9 +285,9 @@ test:
     fi
 
     # A build that drops messages inside a surviving session fails row_counts and leaves the lake alone.
-    pi_file="$VARVE_MIRROR/pi/testproj/20260801T000000_pi-session-1.jsonl"
-    cp "$pi_file" "$tmp/pi-session.jsonl"
-    sed -i.bak '$d' "$pi_file"; rm -f "$pi_file.bak"
+    pi_file="$VARVE_MIRROR/pi/testproj/20260801T000000_pi-session-1.jsonl.zst"
+    cp "$pi_file" "$tmp/pi-session.jsonl.zst"
+    "$zstd" -q -d -c -- "$pi_file" | sed '$d' | "$zstd" -q -19 -f -o "$pi_file"
     rc=0; just build 2>"$tmp/build.err" || rc=$?
     if [ "$rc" -ne 1 ] || ! grep -q 'check row_counts: messages rows for pi fell' "$tmp/build.err"; then
       echo "FAIL: a build that loses messages should fail row_counts, got exit $rc" >&2; tail -5 "$tmp/build.err" >&2; fail=1
@@ -289,10 +295,10 @@ test:
     if [ -e "$lake.new" ] || [ "$(sums "$lake")" != "$before" ]; then
       echo "FAIL: a failed row_counts left lake.new behind or changed the lake" >&2; fail=1
     fi
-    cp "$tmp/pi-session.jsonl" "$pi_file"
+    cp "$tmp/pi-session.jsonl.zst" "$pi_file"
 
     # A lost session fails the build and leaves the lake alone; forget then passes.
-    mv "$VARVE_MIRROR/claude-code/testproj/session-noise.jsonl" "$tmp/session-noise.jsonl"
+    mv "$VARVE_MIRROR/claude-code/testproj/session-noise.jsonl.zst" "$tmp/session-noise.jsonl.zst"
     rc=0; just build 2>"$tmp/build.err" || rc=$?
     if [ "$rc" -ne 1 ] || ! grep -q 'check no_lost_sessions' "$tmp/build.err"; then
       echo "FAIL: a lost session should fail no_lost_sessions, got exit $rc" >&2; tail -5 "$tmp/build.err" >&2; fail=1
@@ -391,6 +397,7 @@ test:
     sed "s/'claude-code'/'scratch-rt'/" "{{repo}}/adapters/claude_code.sql" > "$own/data/adapters/scratch_rt.sql"
     printf '[[row]]\nname = "scratch-rt"\nadapter = "scratch_rt.sql"\n' > "$own/data/runtimes.toml"
     cp -R "{{repo}}/tests/fixtures/mirror/claude-code/." "$own/mirror/scratch-rt/"
+    find "$own/mirror/scratch-rt" -name '*.jsonl' -exec "$zstd" -q -19 --rm {} +
     rc=0; VARVE_DATA="$own/data" VARVE_MIRROR="$own/mirror" VARVE_LAKE="$own/data/lake" {{repo}}/bin/duck locked {{repo}}/bin/build 2>"$tmp/own.err" || rc=$?
     n="$(VARVE_DATA="$own/data" VARVE_LAKE="$own/data/lake" {{repo}}/bin/duck own -noheader -list -c "SELECT count(DISTINCT session_id) FROM sessions WHERE runtime = 'scratch-rt';")"
     if [ "$rc" -ne 0 ] || [ "$n" = "0" ]; then
@@ -431,7 +438,33 @@ test:
     fi
     mv "$tmp/opencode-mirror" "$VARVE_MIRROR/opencode"
 
-    # A real SQLite WAL, as the opencode adapter reads it: rows held only in the -wal of a live store reach the mirror and read back through sqlite_scan, a clean close drops the -wal from the mirror, and reading never changes the mirror's database or -wal.
+    # Retention proofs (ADR-0011) over a source tree: a session deleted at the source stays queryable from its frame, the lake rebuilds from the frames alone, and forget removes a frame by id.
+    echo "varve test: retention (source deleted, lake rebuilt from frames alone, forget removes a frame)" >&2
+    pr="$tmp/proof"; mkdir -p "$pr/data" "$pr/src/testproj"
+    for f in attribution pricing; do cp "{{repo}}/adapters/$f.example.toml" "$pr/data/$f.toml"; done
+    printf '[[row]]\nname = "claude-code"\nadapter = "claude_code.sql"\nsource = "%s"\ninclude = ["*.jsonl"]\n' "$pr/src" > "$pr/data/runtimes.toml"
+    cp "{{repo}}/tests/fixtures/mirror/claude-code/testproj/session-scope.jsonl" "$pr/src/testproj/test-session-scope.jsonl"
+    cp "{{repo}}/tests/fixtures/mirror/claude-code/testproj/session-2023.jsonl" "$pr/src/testproj/test-session-2023.jsonl"
+    pr_env() { VARVE_DATA="$pr/data" VARVE_MIRROR="$pr/data/mirror" VARVE_LAKE="$pr/data/lake" "$@"; }
+    pr_counts() { pr_env {{repo}}/bin/duck prc -noheader -list -c "SELECT (SELECT count(DISTINCT session_id) FROM sessions) || '/' || (SELECT count(*) FROM messages) || '/' || (SELECT count(*) FROM api_calls) || '/' || (SELECT count(*) FROM tool_calls);"; }
+    pr_env {{repo}}/bin/sync 2>/dev/null
+    if ! pr_env {{repo}}/bin/duck locked {{repo}}/bin/build 2>"$tmp/proof.err"; then echo "FAIL: the retention proof build failed" >&2; tail -5 "$tmp/proof.err" >&2; fail=1; fi
+    c0="$(pr_counts)"
+    rm -rf "$pr/src"
+    pr_env {{repo}}/bin/sync 2>/dev/null
+    if [ -n "$(find "$pr/data/mirror" -name '*.jsonl' -print -quit)" ]; then echo "FAIL: the mirror holds a plain file" >&2; fail=1; fi
+    if ! pr_env {{repo}}/bin/duck locked {{repo}}/bin/build 2>"$tmp/proof.err"; then echo "FAIL: a build after the source was deleted failed" >&2; tail -5 "$tmp/proof.err" >&2; fail=1; fi
+    n="$(pr_env {{repo}}/bin/duck prc -noheader -list -c "SELECT count(*) FROM sessions WHERE session_id = 'test-session-scope';")"
+    if [ "$n" != "1" ] || [ "$(pr_counts)" != "$c0" ]; then echo "FAIL: a session deleted at the source left the lake: $n, counts $(pr_counts) vs $c0" >&2; fail=1; fi
+    rm -rf "$pr/data/lake" "$pr/data/lake.old"
+    if ! pr_env {{repo}}/bin/duck locked {{repo}}/bin/build 2>"$tmp/proof.err"; then echo "FAIL: the lake did not rebuild from the frames alone" >&2; tail -5 "$tmp/proof.err" >&2; fail=1; fi
+    if [ "$(pr_counts)" != "$c0" ] || [ "$c0" = "0/0/0/0" ]; then echo "FAIL: the rebuilt lake counts $(pr_counts), want $c0" >&2; fail=1; fi
+    if ! pr_env {{repo}}/bin/duck locked {{repo}}/bin/forget test-session-scope 2>"$tmp/proof.err"; then echo "FAIL: forget did not complete" >&2; tail -5 "$tmp/proof.err" >&2; fail=1; fi
+    if [ -e "$pr/data/mirror/claude-code/testproj/test-session-scope.jsonl.zst" ]; then echo "FAIL: forget left the session's frame" >&2; fail=1; fi
+    if [ ! -e "$pr/data/mirror/claude-code/testproj/test-session-2023.jsonl.zst" ]; then echo "FAIL: forget removed another session's frame" >&2; fail=1; fi
+    if [ -n "$(find "$pr/data/state" -name 'unpack.*' -print -quit 2>/dev/null)" ]; then echo "FAIL: a build left an unpack directory" >&2; fail=1; fi
+
+    # A real SQLite WAL, as the opencode adapter reads it: rows held only in the -wal of a live store reach the mirror as frames and read back through sqlite_scan on an unpacked copy, a clean close drops the -wal frame from the mirror, and the mirror's frames stay byte-identical across a read.
     echo "varve test: opencode store through a real WAL" >&2
     if ! command -v sqlite3 >/dev/null 2>&1; then
       echo "FAIL: the WAL test needs the sqlite3 command" >&2; fail=1
@@ -441,11 +474,15 @@ test:
         'include = ["store.db", "store.db-wal"]' 'replace = ["store.db", "store.db-wal"]' > "$w/data/runtimes.toml"
       wal_sync() { VARVE_DATA="$w/data" VARVE_MIRROR="$w/mirror" {{repo}}/bin/sync 2>/dev/null; }
       wal_rows() {
+        rm -rf "$w/unpack"; mkdir -p "$w/unpack"
+        for z in store.db store.db-wal; do
+          if [ -f "$w/mirror/oc/$z.zst" ]; then "$zstd" -q -d -c -- "$w/mirror/oc/$z.zst" > "$w/unpack/$z"; fi
+        done
         {{repo}}/bin/duck walrows -noheader -list \
           -c "INSTALL sqlite; LOAD sqlite;" \
-          -c "SELECT string_agg(id, ',' ORDER BY id) FROM sqlite_scan('$w/mirror/oc/store.db', 'item');"
+          -c "SELECT string_agg(id, ',' ORDER BY id) FROM sqlite_scan('$w/unpack/store.db', 'item');"
       }
-      wal_sums() { cksum "$w/mirror/oc/store.db"; if [ -s "$w/mirror/oc/store.db-wal" ]; then cksum "$w/mirror/oc/store.db-wal"; fi; }
+      wal_sums() { cksum "$w/mirror/oc/store.db.zst"; if [ -s "$w/mirror/oc/store.db-wal.zst" ]; then cksum "$w/mirror/oc/store.db-wal.zst"; fi; }
       {
         printf '%s\n' 'PRAGMA journal_mode=WAL;' 'CREATE TABLE item(id TEXT);' "INSERT INTO item VALUES ('main-1');" \
           'PRAGMA wal_checkpoint(TRUNCATE);' 'PRAGMA wal_autocheckpoint=0;' "INSERT INTO item VALUES ('wal-1'), ('wal-2');"
@@ -454,7 +491,7 @@ test:
       holder=$!
       n=0; while [ ! -s "$w/src/store.db-wal" ] && [ "$n" -lt 100 ]; do sleep 0.1; n=$((n + 1)); done
       wal_sync
-      if [ ! -s "$w/mirror/oc/store.db-wal" ]; then
+      if [ ! -s "$w/mirror/oc/store.db-wal.zst" ]; then
         echo "FAIL: the live store's -wal did not reach the mirror" >&2; fail=1
       fi
       sums0="$(wal_sums)"
@@ -466,7 +503,7 @@ test:
       touch "$w/release"; wait "$holder" || true
       if [ -s "$w/src/store.db-wal" ]; then echo "FAIL: a clean close left data in the source -wal" >&2; fail=1; fi
       wal_sync
-      if [ -s "$w/mirror/oc/store.db-wal" ]; then echo "FAIL: the mirror kept a -wal the source emptied" >&2; fail=1; fi
+      if [ -f "$w/mirror/oc/store.db-wal.zst" ] && [ -n "$("$zstd" -q -d -c -- "$w/mirror/oc/store.db-wal.zst" | head -c 1)" ]; then echo "FAIL: the mirror kept a -wal the source emptied" >&2; fail=1; fi
       sums0="$(wal_sums)"
       got="$(wal_rows)"
       if [ "$got" != "main-1,wal-1,wal-2" ]; then echo "FAIL: rows did not read back after a clean close, got: $got" >&2; fail=1; fi

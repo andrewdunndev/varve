@@ -29,9 +29,9 @@ can serve as simulation evidence and leak-free benchmark material.
 
 ## Architecture
 
-`just sync` copies sources into a mirror. `just build` rebuilds the lake from it, checks it, swaps it in, then runs the mines (ADR-0008 to ADR-0010).
+`just sync` compresses sources into a mirror of zstd frames. `just build` streams them into a rebuilt lake, checks it, swaps it in, then runs the mines (ADR-0008 to ADR-0010).
 
-![The runtime stores are copied into the mirror, built into a new lake, checked, swapped in and mined; the data home sits apart from the repo.](docs/img/system.svg)
+![The runtime stores are compressed into the mirror, built into a new lake, checked, swapped in and mined; the data home sits apart from the repo.](docs/img/system.svg)
 
 Sync never opens the engine.
 
@@ -50,7 +50,7 @@ A new runtime is a row in `runtimes.toml` and an adapter, both in the data home.
 
 ![The per-file decision in bin/sync and the replace set that moves a database and its journal together.](docs/img/sync.svg)
 
-A copy only ever grows, except the replace set, which is swapped as a unit.
+A retained frame only ever grows, except the replace set, which is swapped as a unit. A session deleted at its source stays in the mirror and the lake.
 
 ![One build as a sequence: a failed runtime keeps its published partitions, a failed check before the swap leaves the lake untouched, a rename swaps the new lake in.](docs/img/build.svg)
 
@@ -75,10 +75,10 @@ One wrapper bounds every DuckDB process.
 | `docs/` | Goals (`prd.md`), ADRs (`adr/`), the correction-mining method (`rfc/`), query index |
 | `checks/` | Checks that run on every build |
 | `tests/` | Synthetic three-runtime fixtures and expected output for `just test` |
-| `bin/` | The runner (`duck`) and the scripts behind `sync`, `build`, `check`, `forget` and `mine` |
+| `bin/` | The runner (`duck`) and the scripts behind `sync` (compresses into the mirror), `build` (streams it), `check`, `forget` and `mine`; `pack` is the one-shot that converts a plain mirror |
 | `justfile` | `sync`, `build`, `check`, `forget`, `mine`, `review`, `interventions`, `stats`, `sql`, `lint`, `test`, `disk` |
 
-`mise install` provisions the pinned `duckdb`, `just` and `yq` from `mise.toml`. A `duckdb` or `yq` on `PATH` is used only when it reports the pinned version.
+`mise install` provisions the pinned `duckdb`, `just`, `yq` and `zstd` from `mise.toml`. A `duckdb`, `yq` or `zstd` on `PATH` is used only when it reports the pinned version.
 
 To start, copy the examples into the data home, delete the `runtimes.toml` rows for tools you do not use, then sync and build. `just` must be on `PATH`, for example through `mise activate`.
 

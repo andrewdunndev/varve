@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 640" width="720" height="640" role="img" aria-labelledby="sys-t sys-d">
   <title id="sys-t">The whole path, with the data home drawn apart from the repo</title>
-  <desc id="sys-d">Runtime stores are copied by bin/sync, limited to the include list in runtimes.toml, into the mirror in the data home. bin/sync never opens the engine. Inside the bin/duck boundary, bin/build reads the mirror into lake.new, bin/check grades lake.new against the published lake, a rename swaps lake.new in and keeps the old lake as lake.old, then bin/mine runs. Queries read the lake. The repo holds code only; the mirror, the config files and the mined data live in the data home.</desc>
+  <desc id="sys-d">Runtime stores are compressed by bin/sync, limited to the include list in runtimes.toml, into the mirror in the data home. bin/sync never opens the engine. Inside the bin/duck boundary, bin/build reads the mirror into lake.new, bin/check grades lake.new against the published lake, a rename swaps lake.new in and keeps the old lake as lake.old, then bin/mine runs. Queries read the lake. The repo holds code only; the mirror, the config files and the mined data live in the data home.</desc>
   <style>
     svg { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
     .box { fill: #f4f4f4; stroke: #c4c4c4; stroke-width: 1; }
@@ -58,7 +58,7 @@
 
   <!-- arrow labels -->
   <text class="lbl" x="95" y="86" dx="2" dy="-4">include list only</text>
-  <text class="lbl" x="95" y="262">copy</text>
+  <text class="lbl" x="95" y="262">compress</text>
   <text class="lbl" x="250" y="312">writes</text>
   <text class="lbl" x="360" y="256" text-anchor="middle">grades</text>
   <text class="lbl" x="540" y="264" text-anchor="middle">after the swap</text>

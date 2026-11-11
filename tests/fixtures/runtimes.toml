@@ -1,4 +1,4 @@
-# Test runtimes: the build reads the mirror in place, so no source or include.
+# Test runtimes: the build reads the compressed mirror in place, so no source or include.
 
 [[row]]
 name = "claude-code"
@@ -11,3 +11,4 @@ adapter = "pi.sql"
 [[row]]
 name = "opencode"
 adapter = "opencode.sql"
+replace = ["opencode.db", "opencode.db-wal"]
