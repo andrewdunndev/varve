@@ -2,6 +2,7 @@ oc-session-1,oc-msg-2,NULL,NULL,2026-08-03 00:00:01,claude-sonnet-5,anthropic,10
 oc-session-2023,oc-msg-4,NULL,NULL,2023-06-01 00:00:01,claude-sonnet-5,anthropic,100,50,0,0,0.001,false,2023-06-01,opencode
 oc-session-child,oc-msg-c2,NULL,NULL,2023-06-05 00:00:11,claude-sonnet-5,anthropic,100,50,0,0,0.001,false,2023-06-05,opencode
 oc-session-scope,oc-msg-s2,NULL,NULL,2023-06-05 00:00:01,claude-sonnet-5,anthropic,100,50,0,0,0.001,false,2023-06-05,opencode
+oc-session-skill,oc-msg-k2,NULL,NULL,2023-06-12 00:00:01,claude-sonnet-5,anthropic,100,50,0,0,0.001,false,2023-06-12,opencode
 pi-session-1,e2,NULL,NULL,2026-08-01 00:00:01,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2026-08-01,pi
 session_id,message_id,api_message_id,request_id,timestamp,model,provider,input,output,cache_read,cache_write,cost_usd,unpriced_model,date,runtime
 test-session-0,22222222-2222-2222-2222-222222222222,msg_1,req-1,2026-08-01 00:00:01,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2026-08-01,claude-code
@@ -30,3 +31,11 @@ test-session-ny,b0000000-0000-0000-0000-000000000004,msg_ny_8,req-ny-8,2026-01-0
 test-session-scope,s0000000-0000-0000-0000-000000000002,msg_s_1,req-s-1,2023-06-05 00:00:02,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-05,claude-code
 test-session-scope,s0000000-0000-0000-0000-000000000006,msg_s_2,req-s-2,2023-06-05 00:00:06,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-05,claude-code
 test-session-scope,s1000000-0000-0000-0000-000000000002,msg_s_3,req-s-3,2023-06-05 00:00:11,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-05,claude-code
+test-session-skill,k0000000-0000-0000-0000-000000000002,msg_k_2,req-k-2,2023-06-12 00:00:02,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-12,claude-code
+test-session-skill,k0000000-0000-0000-0000-000000000004,msg_k_4,req-k-4,2023-06-12 00:00:04,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-12,claude-code
+test-session-skill,k0000000-0000-0000-0000-000000000006,msg_k_6,req-k-6,2023-06-12 00:00:06,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-12,claude-code
+test-session-skill,k0000000-0000-0000-0000-000000000009,msg_k_9,req-k-9,2023-06-12 00:00:09,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-12,claude-code
+test-session-skill,k0000000-0000-0000-0000-000000000013,msg_k_13,req-k-13,2023-06-12 00:00:13,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-12,claude-code
+test-session-skill,k0000000-0000-0000-0000-000000000018,msg_k_18,req-k-18,2023-06-12 00:00:18,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-12,claude-code
+test-session-skill,k0000000-0000-0000-0000-000000000019,msg_k_19,req-k-19,2023-06-12 00:00:19,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-12,claude-code
+test-session-skill,k0000000-0000-0000-0000-000000000021,msg_k_21,req-k-21,2023-06-12 00:00:21,claude-sonnet-5,anthropic,100,50,0,0,0.0007,false,2023-06-12,claude-code

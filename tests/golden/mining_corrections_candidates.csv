@@ -3,17 +3,18 @@
 2023-06-01,rewrite,1
 2023-06-01,tool_reject,2
 2023-06-05,lexical,1
+2023-06-12,lexical,2
 2026-08-01,lexical,1
-claude-code,47,4,8.511,OVER 5% -- TIGHTEN MARKERS
+claude-code,63,6,9.524,OVER 5% -- TIGHTEN MARKERS
 claude-code,interrupt_redirect,4025d67e104eb7e1c0f918791ea274c2,3
-claude-code,lexical,ebd090ceab9f8abfb9f774006fd5fe60,4
-claude-code,negation,3
+claude-code,lexical,ebd090ceab9f8abfb9f774006fd5fe60,6
+claude-code,negation,5
 claude-code,rewrite,6d2e848c0bfc896ae594c519e76c6907,1
 claude-code,tool_reject,a86f6bb963b9e37a647d7c05fd37d17a,1
 claude-code,wait,1
 day,detector,candidates
 estate,harness,detector,candidates,sessions
-opencode,6,1,16.667,OVER 5% -- TIGHTEN MARKERS
+opencode,7,1,14.286,OVER 5% -- TIGHTEN MARKERS
 opencode,lexical,ebd090ceab9f8abfb9f774006fd5fe60,1
 opencode,negation,1
 opencode,tool_reject,a86f6bb963b9e37a647d7c05fd37d17a,1
@@ -22,6 +23,6 @@ runtime,detector,detector_version,candidates
 runtime,lexical_marker,candidates
 runtime,user_msgs,lexical_hits,lexical_pct,gate
 unknown,unknown,interrupt_redirect,3,1
-unknown,unknown,lexical,5,4
+unknown,unknown,lexical,7,5
 unknown,unknown,rewrite,1,1
 unknown,unknown,tool_reject,2,2

@@ -19,6 +19,7 @@ Run one with `just sql -f <path>`.
 | `mining/queries/` | `adjudication_sample.sql` | Which correction candidates should be labelled for precision? |
 | `mining/queries/` | `corrections_candidates.sql` | How many correction candidates did mining produce, by detector? |
 | `mining/queries/` | `recall_floor_sample.sql` | How many corrections did mining miss? |
+| `mining/queries/` | `skill_usage.sql` | Which skills fire per week and runtime, and how often do corrections and tool failures follow? |
 | `mining/queries/` | `stats_year.sql` | What did the year look like, one day per cell? |
 
 Keep personal queries outside the repo and run them the same way.
