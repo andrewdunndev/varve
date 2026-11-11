@@ -63,10 +63,10 @@ T
 want "forgotten not copied" "no" "$([ -e "$m/proj/gone-session-9.jsonl.zst" ] && echo yes || echo no)"
 
 
-# Shims on PATH: mise hides its own zstd so bin/tool resolves the shim, which
+# Shims on PATH: a zstd shim
 # runs the real one, logs each compress, and can grow the watched source after
 # the compress has read it.
-realzstd="$(command -v zstd)"; realmise="$(command -v mise 2>/dev/null || true)"
+realzstd="$(command -v zstd)"
 shim="$tmp/shim"; mkdir -p "$shim"
 cat > "$shim/zstd" <<S
 #!/bin/sh
@@ -80,12 +80,7 @@ case " \$* " in *" -19 "*)
   fi ;;
 esac
 S
-cat > "$shim/mise" <<S
-#!/bin/sh
-if [ "\$1 \$2" = "which zstd" ]; then exit 1; fi
-exec ${realmise:-false} "\$@"
-S
-chmod +x "$shim/zstd" "$shim/mise"
+chmod +x "$shim/zstd"
 export SHIM_LOG="$tmp/zlog" SHIM_TIMES="$tmp/times"
 : > "$SHIM_LOG"; echo 0 > "$SHIM_TIMES"
 

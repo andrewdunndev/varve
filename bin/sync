@@ -20,7 +20,7 @@ die() { echo "varve: sync: $*" >&2; exit 2; }
 yq="$("$repo/bin/tool" yq)" || exit 2
 [ -f "$data/runtimes.toml" ] || die "no $data/runtimes.toml (copy runtimes.example.toml there)"
 
-zstd="$("$repo/bin/tool" zstd)" || exit 2
+zstd="$(command -v zstd)" || { echo "varve: zstd is not on PATH (install zstd)" >&2; exit 2; }
 
 # stn: size and nanosecond mtime, to tell whether a source changed while it was
 # being read. mtn: nanosecond mtime alone, to compare a source with its frame.

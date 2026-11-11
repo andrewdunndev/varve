@@ -76,7 +76,7 @@ while IFS=$'\t' read -r name adapter replace; do
   [ -f "$file" ] || file="$repo/adapters/$adapter"
   [ -f "$file" ] || die "$name: no adapter $adapter in $data/adapters or $repo/adapters"
   if [ -n "$replace" ]; then
-    zstd="$("$repo/bin/tool" zstd)" || exit 2
+    zstd="$(command -v zstd)" || { echo "varve: zstd is not on PATH (install zstd)" >&2; exit 2; }
     rm -rf "$unpack"
     upok=1
     ifs="$IFS"; IFS=,

@@ -41,7 +41,7 @@
 - Adapters read `**/*.jsonl.zst`; the repo's claude-code and pi adapters change their glob and path regexes. A data-home adapter that globs `*.jsonl` reads nothing and must change the same way.
 - For a runtime with a replace set, `build` decompresses the set into `state/unpack.<pid>/<runtime>/`, runs the adapter with that as `mirror_dir`, and removes it when the runtime finishes. The opencode adapter does not change. Stale unpack directories of dead pids go at the next build, as run directories do.
 - The lake is written with `COMPRESSION_LEVEL 19`. On sample 2 that cut it 12% (62.4MB to 55.0MB).
-- `zstd` is pinned in `mise.toml` and resolved by `bin/tool`. The registry has no `zstd` entry, so the pin uses the conda backend.
+- `zstd` is a system dependency beside `sqlite3`, called from `PATH`; the scripts exit 2 with a one-line message when it is missing.
 - The plain mirror goes by `bin/pack`, a one-shot: it writes `NAME.zst` beside each plain file and never touches the plain file; `bin/pack --verify` checks each pair by decompress-and-hash. Only then does the operator remove the plain files. Later syncs find equal mtimes and copy nothing. Delete `bin/pack` once the migration is done.
 
 **Rejected**

@@ -12,7 +12,7 @@ mirror="${MIRROR:-${VARVE_MIRROR:-$data/mirror}}"
 mode="${1:-pack}"
 export repo
 yq="$("$repo/bin/tool" yq)" || exit 2
-zstd="$("$repo/bin/tool" zstd)" || exit 2
+zstd="$(command -v zstd)" || { echo "varve: zstd is not on PATH (install zstd)" >&2; exit 2; }
 export zstd
 
 # plain_files: every plain mirror file the runtimes' globs name, NUL separated.

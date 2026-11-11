@@ -171,7 +171,7 @@ test:
 
     mkdir -p "$VARVE_DATA/checks" "$VARVE_DATA/mining" "$VARVE_MIRROR"
     cp -R "{{repo}}/tests/fixtures/mirror/." "$VARVE_MIRROR/"
-    zstd="$({{repo}}/bin/tool zstd)"
+    zstd="$(command -v zstd)" || { echo "varve: zstd is not on PATH (install zstd)" >&2; exit 2; }
     # The mirror holds frames (ADR-0011): compress the plain fixtures into the retained form.
     find "$VARVE_MIRROR" -name '*.jsonl' -exec "$zstd" -q -19 --rm {} +
     mkdir -p "$VARVE_MIRROR/opencode"
