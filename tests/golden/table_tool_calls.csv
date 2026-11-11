@@ -3,6 +3,8 @@ oc-session-1,oc-msg-2,call-4,bash,2026-08-03 00:00:01.8,NULL,NULL,running,"{""co
 oc-session-2023,oc-msg-4,call-2,bash,2023-06-01 00:00:01.6,2023-06-01 00:00:01.7,100,denied,"{""command"":""rm -r build""}",NULL,oc-msg-4,2023-06-01,opencode
 oc-session-2023,oc-msg-4,call-3,bash,2023-06-01 00:00:01.7,2023-06-01 00:00:01.8,100,error,"{""command"":""false""}",exit 1,oc-msg-4,2023-06-01,opencode
 oc-session-child,oc-msg-c2,call-c1,bash,2023-06-05 00:00:11.6,2023-06-05 00:00:11.7,100,denied,"{""command"":""rm -r cache""}",NULL,oc-msg-c2,2023-06-05,opencode
+oc-session-skill,oc-msg-k2,call-k1,skill,2023-06-12 00:00:01.5,2023-06-12 00:00:01.6,100,ok,"{""name"":""alpha""}",loaded,oc-msg-k2,2023-06-12,opencode
+oc-session-skill,oc-msg-k2,call-k2,skill,2023-06-12 00:00:01.7,2023-06-12 00:00:01.8,100,error,"{""name"":""nonesuch""}",unknown skill,oc-msg-k2,2023-06-12,opencode
 pi-session-1,e3,call-1,bash,2026-08-01 00:00:01.5,NULL,NULL,ok,"{""command"":""echo hi""}",ok,e3,2026-08-01,pi
 session_id,message_id,tool_use_id,tool_name,started_at,ended_at,duration_ms,outcome,arguments,result_text,result_message_id,date,runtime
 test-session-0,22222222-2222-2222-2222-222222222222,tool_1,Bash,2026-08-01 00:00:01,NULL,NULL,NULL,{},NULL,NULL,2026-08-01,claude-code
@@ -19,3 +21,10 @@ test-session-ny,a0000000-0000-0000-0000-000000000002,tool_ny_1,Read,2025-12-30 1
 test-session-ny,a0000000-0000-0000-0000-000000000008,tool_ny_2,Bash,2026-01-01 12:00:05,NULL,NULL,error,{},exit 1,a0000000-0000-0000-0000-000000000009,2025-12-30,claude-code
 test-session-ny,b0000000-0000-0000-0000-000000000002,tool_ny_4,Grep,2026-01-02 12:00:12,NULL,NULL,ok,{},1 match,b0000000-0000-0000-0000-000000000003,2025-12-30,claude-code
 test-session-scope,s0000000-0000-0000-0000-000000000006,tool_s1,Bash,2023-06-05 00:00:06,NULL,NULL,ok,"{""command"":""ls adapters""}",claude_code.sql,s0000000-0000-0000-0000-000000000007,2023-06-05,claude-code
+test-session-skill,k0000000-0000-0000-0000-000000000002,tool_k1,Skill,2023-06-12 00:00:02,NULL,NULL,ok,"{""skill"":""alpha""}",done,k0000000-0000-0000-0000-000000000003,2023-06-12,claude-code
+test-session-skill,k0000000-0000-0000-0000-000000000004,tool_k2,Bash,2023-06-12 00:00:04,NULL,NULL,error,"{""command"":""false""}",exit 1,k0000000-0000-0000-0000-000000000005,2023-06-12,claude-code
+test-session-skill,k0000000-0000-0000-0000-000000000006,tool_k3,Skill,2023-06-12 00:00:06,NULL,NULL,error,"{""skill"":""nonesuch""}",Unknown skill: nonesuch,k0000000-0000-0000-0000-000000000007,2023-06-12,claude-code
+test-session-skill,k0000000-0000-0000-0000-000000000009,tool_k5,Skill,2023-06-12 00:00:09,NULL,NULL,ok,"{""skill"":""voice""}",done,k0000000-0000-0000-0000-000000000010,2023-06-12,claude-code
+test-session-skill,k0000000-0000-0000-0000-000000000013,tool_k6,Bash,2023-06-12 00:00:13,NULL,NULL,ok,"{""command"":""true""}",done,k0000000-0000-0000-0000-000000000014,2023-06-12,claude-code
+test-session-skill,k0000000-0000-0000-0000-000000000018,tool_k4,Skill,2023-06-12 00:00:18,NULL,NULL,NULL,"{""skill"":""sidechain-only""}",NULL,NULL,2023-06-12,claude-code
+test-session-skill-copy,k0000000-0000-0000-0000-000000000002,tool_k1,Skill,2023-06-12 00:00:02,NULL,NULL,ok,"{""skill"":""alpha""}",done,k0000000-0000-0000-0000-000000000003,2023-06-12,claude-code

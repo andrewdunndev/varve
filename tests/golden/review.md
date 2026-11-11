@@ -1,6 +1,6 @@
 # varve -- correction adjudication review (round 1)
 
-_Generated <ts>._ Candidates to adjudicate: 11 -- recall-floor sample: 11 (already-adjudicated loci are skipped).
+_Generated <ts>._ Candidates to adjudicate: 13 -- recall-floor sample: 15 (already-adjudicated loci are skipped).
 
 For each candidate below: read the FULL prior draft and FULL corrective message, then copy the adjudication line into your adjudications ledger and fill `verdict` (true_positive | false_positive | unclear) and `context_judgment` (had_context | lacked_context | ambiguous). The ADVISORY line is the model's suggestion, NOT a verdict.
 
@@ -110,6 +110,27 @@ Adjudication line (copy into adjudications.jsonl; fill verdict + context_judgmen
     {"candidate_id":"cand-4c09a86e542db6448befc592233461aa","verdict":"","context_judgment":"","note":""}
 
 ---
+### lexical -- cand-70b2f1be4874ff044cbdbfceaa164efc
+
+- locus (corrective message): `lake:test-session-skill/k0000000-0000-0000-0000-000000000022`
+- locus (prior draft): `lake:test-session-skill/k0000000-0000-0000-0000-000000000021`
+- model_id: claude-sonnet-5
+- attribution: unknown / unknown / 
+- features: `{"marker":"negation"}`
+
+**ADVISORY:** none (candidate not in the worksheet).
+
+--- PRIOR ASSISTANT DRAFT (full) ---
+Appendix added.
+
+--- CORRECTIVE OPERATOR MESSAGE (full) ---
+no, drop the appendix
+
+Adjudication line (copy into adjudications.jsonl; fill verdict + context_judgment):
+
+    {"candidate_id":"cand-70b2f1be4874ff044cbdbfceaa164efc","verdict":"","context_judgment":"","note":""}
+
+---
 ### lexical -- cand-7912e6d22052c186c8f29199f27c0fb7
 
 - locus (corrective message): `lake:test-session-2023/c0000000-0000-0000-0000-000000000010`
@@ -171,6 +192,27 @@ okay wait, the parser should return an error instead of an empty list
 Adjudication line (copy into adjudications.jsonl; fill verdict + context_judgment):
 
     {"candidate_id":"cand-980d5a3d13b97acada432161dea638e0","verdict":"","context_judgment":"","note":""}
+
+---
+### lexical -- cand-ad04fb862ec5d5d5a7f874768b719906
+
+- locus (corrective message): `lake:test-session-skill/k0000000-0000-0000-0000-000000000008`
+- locus (prior draft): `lake:test-session-skill/k0000000-0000-0000-0000-000000000006`
+- model_id: claude-sonnet-5
+- attribution: unknown / unknown / 
+- features: `{"marker":"negation"}`
+
+**ADVISORY:** none (candidate not in the worksheet).
+
+--- PRIOR ASSISTANT DRAFT (full) ---
+Here is the draft report.
+
+--- CORRECTIVE OPERATOR MESSAGE (full) ---
+no, use the short form
+
+Adjudication line (copy into adjudications.jsonl; fill verdict + context_judgment):
+
+    {"candidate_id":"cand-ad04fb862ec5d5d5a7f874768b719906","verdict":"","context_judgment":"","note":""}
 
 ---
 ### rewrite -- cand-cca0f9570ca491771bf51ba3487add5f
@@ -279,6 +321,19 @@ Adjudication line (copy into adjudications.jsonl; fill verdict + context_judgmen
     {"message_uuid":"11111111-1111-1111-1111-111111111111","selection":"sampled","verdict":"","context_judgment":"","note":""}
 
 ---
+### recall-floor -- k0000000-0000-0000-0000-000000000020
+
+- locus: `lake:test-session-skill/k0000000-0000-0000-0000-000000000020`
+- attribution: unknown / unknown / 
+
+--- OPERATOR MESSAGE (full) ---
+continue with the appendix
+
+Adjudication line (copy into adjudications.jsonl; fill verdict + context_judgment):
+
+    {"message_uuid":"k0000000-0000-0000-0000-000000000020","selection":"sampled","verdict":"","context_judgment":"","note":""}
+
+---
 ### recall-floor -- a0000000-0000-0000-0000-000000000007
 
 - locus: `lake:test-session-ny/a0000000-0000-0000-0000-000000000007`
@@ -331,6 +386,19 @@ Adjudication line (copy into adjudications.jsonl; fill verdict + context_judgmen
     {"message_uuid":"n0000000-0000-0000-0000-000000000001","selection":"sampled","verdict":"","context_judgment":"","note":""}
 
 ---
+### recall-floor -- k0000000-0000-0000-0000-000000000001
+
+- locus: `lake:test-session-skill/k0000000-0000-0000-0000-000000000001`
+- attribution: unknown / unknown / 
+
+--- OPERATOR MESSAGE (full) ---
+build the report
+
+Adjudication line (copy into adjudications.jsonl; fill verdict + context_judgment):
+
+    {"message_uuid":"k0000000-0000-0000-0000-000000000001","selection":"sampled","verdict":"","context_judgment":"","note":""}
+
+---
 ### recall-floor -- c0000000-0000-0000-0000-000000000001
 
 - locus: `lake:test-session-2023/c0000000-0000-0000-0000-000000000001`
@@ -357,6 +425,19 @@ Adjudication line (copy into adjudications.jsonl; fill verdict + context_judgmen
     {"message_uuid":"oc-msg-3","selection":"sampled","verdict":"","context_judgment":"","note":""}
 
 ---
+### recall-floor -- k0000000-0000-0000-0000-000000000017
+
+- locus: `lake:test-session-skill/k0000000-0000-0000-0000-000000000017`
+- attribution: unknown / unknown / 
+
+--- OPERATOR MESSAGE (full) ---
+thanks, that works
+
+Adjudication line (copy into adjudications.jsonl; fill verdict + context_judgment):
+
+    {"message_uuid":"k0000000-0000-0000-0000-000000000017","selection":"sampled","verdict":"","context_judgment":"","note":""}
+
+---
 ### recall-floor -- a0000000-0000-0000-0000-000000000011
 
 - locus: `lake:test-session-ny/a0000000-0000-0000-0000-000000000011`
@@ -368,6 +449,19 @@ fix the failing test
 Adjudication line (copy into adjudications.jsonl; fill verdict + context_judgment):
 
     {"message_uuid":"a0000000-0000-0000-0000-000000000011","selection":"sampled","verdict":"","context_judgment":"","note":""}
+
+---
+### recall-floor -- oc-msg-k1
+
+- locus: `lake:oc-session-skill/oc-msg-k1`
+- attribution: unknown / unknown / 
+
+--- OPERATOR MESSAGE (full) ---
+draft the changelog
+
+Adjudication line (copy into adjudications.jsonl; fill verdict + context_judgment):
+
+    {"message_uuid":"oc-msg-k1","selection":"sampled","verdict":"","context_judgment":"","note":""}
 
 ---
 ### recall-floor -- s0000000-0000-0000-0000-000000000001

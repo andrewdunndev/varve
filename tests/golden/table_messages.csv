@@ -1,3 +1,4 @@
+
 11111111-1111-1111-1111-111111111111,test-session-1,user,NULL,false,false,2026-08-01 00:00:00,user,NULL,operator,please write a hello function,false,2026-08-01,claude-code
 22222222-2222-2222-2222-222222222222,test-session-0,assistant,11111111-1111-1111-1111-111111111111,false,false,2026-08-01 00:00:01,assistant,msg_1,model,"Sure, here's a hello function using print().",false,2026-08-01,claude-code
 22222222-2222-2222-2222-222222222222,test-session-1,assistant,11111111-1111-1111-1111-111111111111,false,false,2026-08-01 00:00:01,assistant,msg_1,model,"Sure, here's a hello function using print().",false,2026-08-01,claude-code
@@ -7,6 +8,9 @@
 44444444-4444-4444-4444-444444444444,test-session-1,assistant,33333333-3333-3333-3333-333333333333,false,false,2026-08-01 00:00:03,assistant,msg_2,model,Updated to use console.log().,false,2026-08-01,claude-code
 55555555-5555-5555-5555-555555555555,test-session-2023,assistant,NULL,true,false,2023-06-03 00:00:05,assistant,msg_sub_1,model,Listed the files.,false,2023-06-01,claude-code
 66666666-6666-6666-6666-666666666666,test-session-2023,assistant,NULL,true,false,2023-06-03 00:00:06,assistant,msg_sub_2,model,Read the config.,false,2023-06-01,claude-code
+<command-args></command-args>",false,2023-06-12,claude-code
+<command-args></command-args>",false,2023-06-12,claude-code
+Use beta carefully.",false,2023-06-12,claude-code
 a0000000-0000-0000-0000-000000000001,test-session-ny,user,NULL,false,false,2025-12-30 12:00:00,user,NULL,operator,summarize the build log,false,2025-12-30,claude-code
 a0000000-0000-0000-0000-000000000002,test-session-ny,assistant,a0000000-0000-0000-0000-000000000001,false,false,2025-12-30 12:00:05,assistant,msg_ny_1,model,NULL,false,2025-12-30,claude-code
 a0000000-0000-0000-0000-000000000003,test-session-ny,user,a0000000-0000-0000-0000-000000000002,false,false,2025-12-30 12:00:06,user,NULL,tool_result,NULL,false,2025-12-30,claude-code
@@ -52,6 +56,31 @@ c0000000-0000-0000-0000-000000000026,test-session-2023,user,c0000000-0000-0000-0
 e1,pi-session-1,user,NULL,false,false,2026-08-01 00:00:00.5,user,NULL,operator,please write a hello function,NULL,2026-08-01,pi
 e2,pi-session-1,assistant,e1,false,false,2026-08-01 00:00:01,assistant,NULL,model,Sure thing.,NULL,2026-08-01,pi
 e3,pi-session-1,toolResult,e2,false,false,2026-08-01 00:00:01.5,toolResult,NULL,tool_result,NULL,NULL,2026-08-01,pi
+k0000000-0000-0000-0000-000000000001,test-session-skill,user,NULL,false,false,2023-06-12 00:00:01,user,NULL,operator,build the report,false,2023-06-12,claude-code
+k0000000-0000-0000-0000-000000000001,test-session-skill-copy,user,NULL,false,false,2023-06-12 00:00:01,user,NULL,operator,build the report,false,2023-06-12,claude-code
+k0000000-0000-0000-0000-000000000002,test-session-skill,assistant,k0000000-0000-0000-0000-000000000001,false,false,2023-06-12 00:00:02,assistant,msg_k_2,model,NULL,false,2023-06-12,claude-code
+k0000000-0000-0000-0000-000000000002,test-session-skill-copy,assistant,k0000000-0000-0000-0000-000000000001,false,false,2023-06-12 00:00:02,assistant,msg_k_2,model,NULL,false,2023-06-12,claude-code
+k0000000-0000-0000-0000-000000000003,test-session-skill,user,k0000000-0000-0000-0000-000000000002,false,false,2023-06-12 00:00:03,user,NULL,tool_result,NULL,false,2023-06-12,claude-code
+k0000000-0000-0000-0000-000000000003,test-session-skill-copy,user,k0000000-0000-0000-0000-000000000002,false,false,2023-06-12 00:00:03,user,NULL,tool_result,NULL,false,2023-06-12,claude-code
+k0000000-0000-0000-0000-000000000004,test-session-skill,assistant,k0000000-0000-0000-0000-000000000003,false,false,2023-06-12 00:00:04,assistant,msg_k_4,model,NULL,false,2023-06-12,claude-code
+k0000000-0000-0000-0000-000000000005,test-session-skill,user,k0000000-0000-0000-0000-000000000004,false,false,2023-06-12 00:00:05,user,NULL,tool_result,NULL,false,2023-06-12,claude-code
+k0000000-0000-0000-0000-000000000006,test-session-skill,assistant,k0000000-0000-0000-0000-000000000005,false,false,2023-06-12 00:00:06,assistant,msg_k_6,model,Here is the draft report.,false,2023-06-12,claude-code
+k0000000-0000-0000-0000-000000000007,test-session-skill,user,k0000000-0000-0000-0000-000000000006,false,false,2023-06-12 00:00:07,user,NULL,tool_result,NULL,false,2023-06-12,claude-code
+k0000000-0000-0000-0000-000000000008,test-session-skill,user,k0000000-0000-0000-0000-000000000007,false,false,2023-06-12 00:00:08,user,NULL,operator,"no, use the short form",false,2023-06-12,claude-code
+k0000000-0000-0000-0000-000000000009,test-session-skill,assistant,k0000000-0000-0000-0000-000000000008,false,false,2023-06-12 00:00:09,assistant,msg_k_9,model,NULL,false,2023-06-12,claude-code
+k0000000-0000-0000-0000-000000000010,test-session-skill,user,k0000000-0000-0000-0000-000000000009,false,false,2023-06-12 00:00:10,user,NULL,tool_result,NULL,false,2023-06-12,claude-code
+k0000000-0000-0000-0000-000000000011,test-session-skill,user,k0000000-0000-0000-0000-000000000010,false,false,2023-06-12 00:00:11,user,NULL,operator,"<command-name>/beta</command-name>
+k0000000-0000-0000-0000-000000000012,test-session-skill,user,k0000000-0000-0000-0000-000000000011,false,true,2023-06-12 00:00:12,user,NULL,operator,"Base directory for this skill: /skills/beta
+k0000000-0000-0000-0000-000000000013,test-session-skill,assistant,k0000000-0000-0000-0000-000000000012,false,false,2023-06-12 00:00:13,assistant,msg_k_13,model,NULL,false,2023-06-12,claude-code
+k0000000-0000-0000-0000-000000000014,test-session-skill,user,k0000000-0000-0000-0000-000000000013,false,false,2023-06-12 00:00:14,user,NULL,tool_result,NULL,false,2023-06-12,claude-code
+k0000000-0000-0000-0000-000000000015,test-session-skill,user,k0000000-0000-0000-0000-000000000014,false,false,2023-06-12 00:00:15,user,NULL,operator,"<command-name>/voice</command-name>
+k0000000-0000-0000-0000-000000000016,test-session-skill,user,k0000000-0000-0000-0000-000000000015,false,true,2023-06-12 00:00:16,user,NULL,operator,<command-name>/gamma</command-name> injected by the harness,false,2023-06-12,claude-code
+k0000000-0000-0000-0000-000000000017,test-session-skill,user,k0000000-0000-0000-0000-000000000016,false,false,2023-06-12 00:00:17,user,NULL,operator,"thanks, that works",false,2023-06-12,claude-code
+k0000000-0000-0000-0000-000000000018,test-session-skill,assistant,k0000000-0000-0000-0000-000000000017,true,false,2023-06-12 00:00:18,assistant,msg_k_18,model,NULL,false,2023-06-12,claude-code
+k0000000-0000-0000-0000-000000000019,test-session-skill,assistant,k0000000-0000-0000-0000-000000000017,false,false,2023-06-12 00:00:19,assistant,msg_k_19,model,Anything else to change?,false,2023-06-12,claude-code
+k0000000-0000-0000-0000-000000000020,test-session-skill,user,k0000000-0000-0000-0000-000000000019,false,false,2023-06-12 00:00:20,user,NULL,operator,continue with the appendix,false,2023-06-12,claude-code
+k0000000-0000-0000-0000-000000000021,test-session-skill,assistant,k0000000-0000-0000-0000-000000000020,false,false,2023-06-12 00:00:21,assistant,msg_k_21,model,Appendix added.,false,2023-06-12,claude-code
+k0000000-0000-0000-0000-000000000022,test-session-skill,user,k0000000-0000-0000-0000-000000000021,false,false,2023-06-12 00:00:22,user,NULL,operator,"no, drop the appendix",false,2023-06-12,claude-code
 message_id,session_id,role,parent_id,is_sidechain,is_meta,timestamp,record_type,api_message_id,origin,text,interrupted,date,runtime
 n0000000-0000-0000-0000-000000000001,test-session-noise,user,NULL,false,false,2023-06-02 00:00:01,user,NULL,operator,list the project files,false,2023-06-02,claude-code
 n0000000-0000-0000-0000-000000000002,test-session-noise,assistant,n0000000-0000-0000-0000-000000000001,false,false,2023-06-02 00:00:02,assistant,msg_n_1,model,Here are the project files in the repository.,false,2023-06-02,claude-code
@@ -76,6 +105,8 @@ oc-msg-4,oc-session-2023,assistant,NULL,false,false,2023-06-01 00:00:01,assistan
 oc-msg-5,oc-session-2023,user,NULL,false,false,2023-06-01 00:00:05,user,NULL,operator,"no, use the other directory instead",NULL,2023-06-01,opencode
 oc-msg-c1,oc-session-child,user,NULL,true,false,2023-06-05 00:00:10,user,NULL,operator,"no, search only the mining folder",NULL,2023-06-05,opencode
 oc-msg-c2,oc-session-child,assistant,NULL,true,false,2023-06-05 00:00:11,assistant,NULL,model,Searching the mining folder.,NULL,2023-06-05,opencode
+oc-msg-k1,oc-session-skill,user,NULL,false,false,2023-06-12 00:00:00,user,NULL,operator,draft the changelog,NULL,2023-06-12,opencode
+oc-msg-k2,oc-session-skill,assistant,NULL,false,false,2023-06-12 00:00:01,assistant,NULL,model,NULL,NULL,2023-06-12,opencode
 oc-msg-s1,oc-session-scope,user,NULL,false,false,2023-06-05 00:00:00,user,NULL,operator,summarize the repository layout,NULL,2023-06-05,opencode
 oc-msg-s2,oc-session-scope,assistant,NULL,false,false,2023-06-05 00:00:01,assistant,NULL,model,The repository holds adapters and mining files.,NULL,2023-06-05,opencode
 oc-msg-s3,oc-session-scope,user,NULL,false,true,2023-06-05 00:00:05,user,NULL,operator,"no, this injected text was not typed",NULL,2023-06-05,opencode

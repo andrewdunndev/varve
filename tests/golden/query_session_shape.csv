@@ -3,6 +3,7 @@ oc-session-1,opencode,unknown,unknown,NULL,1,0.0,0.0
 oc-session-2023,opencode,unknown,unknown,NULL,1,0.1,0.0
 oc-session-child,opencode,unknown,unknown,NULL,1,0.0,0.0
 oc-session-scope,opencode,unknown,unknown,NULL,1,0.1,0.0
+oc-session-skill,opencode,unknown,unknown,NULL,1,0.0,0.0
 pi-session-1,pi,unknown,unknown,NULL,1,0.0,0.0
 session_id,runtime,estate,harness,campaign,n_calls,wall_min,cost_usd
 test-session-0,claude-code,unknown,unknown,NULL,2,0.0,0.0
@@ -11,6 +12,8 @@ test-session-2023,claude-code,unknown,unknown,NULL,12,2880.1,0.01
 test-session-noise,claude-code,unknown,unknown,NULL,1,0.3,0.0
 test-session-ny,claude-code,unknown,unknown,NULL,8,4320.5,0.01
 test-session-scope,claude-code,unknown,unknown,NULL,3,0.2,0.0
-unknown,claude-code,6,3.0,10.0,12,0.3,3600.3,4320.5,0.0,0.01,0.01
-unknown,opencode,4,1.0,1.0,1,0.1,0.1,0.1,0.0,0.0,0.0
+test-session-skill,claude-code,unknown,unknown,NULL,8,0.4,0.01
+test-session-skill-copy,claude-code,unknown,unknown,NULL,0,0.0,0.0
+unknown,claude-code,8,3.0,9.0,12,0.3,3312.2,4320.5,0.0,0.01,0.01
+unknown,opencode,5,1.0,1.0,1,0.0,0.1,0.1,0.0,0.0,0.0
 unknown,pi,1,1.0,1.0,1,0.0,0.0,0.0,0.0,0.0,0.0
