@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Copy runtime sources into the mirror. No SQL. A copy only ever grows: a
-# shorter source is skipped and counted, so an eroded source never shrinks the
-# mirror. Files named in a runtime's `replace` are exempt, because a stale
-# database/journal pair corrupts; they are copied as a stable pair or not at all.
+# Copy runtime sources into the mirror as zstd frames (ADR-0011): each included
+# file is kept as NAME.zst, level 19, carrying the source's nanosecond mtime. No
+# SQL. A retained file only ever grows: a source shorter than the bytes already
+# retained is skipped and counted, so an eroded source never shrinks the mirror.
+# Files named in a runtime's `replace` are exempt, because a stale database/journal
+# pair corrupts; they are compressed as a stable pair or not at all.
 # Config: $VARVE_DATA/runtimes.toml (see runtimes.example.toml). Sessions listed
 # in forgotten.toml are never copied.
 set -euo pipefail
@@ -18,11 +20,13 @@ die() { echo "varve: sync: $*" >&2; exit 2; }
 yq="$("$repo/bin/tool" yq)" || exit 2
 [ -f "$data/runtimes.toml" ] || die "no $data/runtimes.toml (copy runtimes.example.toml there)"
 
-# st: size and whole-second mtime, to compare a source with its copy. stn: size and
-# nanosecond mtime, to tell whether a source changed while it was being read.
-if stat --version >/dev/null 2>&1; then statfmt=(-c '%s %Y'); nsfmt=(-c '%s %.9Y'); else statfmt=(-f '%z %m'); nsfmt=(-f '%z %Fm'); fi
-st() { stat "${statfmt[@]}" "$1"; }
+zstd="$("$repo/bin/tool" zstd)" || exit 2
+
+# stn: size and nanosecond mtime, to tell whether a source changed while it was
+# being read. mtn: nanosecond mtime alone, to compare a source with its frame.
+if stat --version >/dev/null 2>&1; then nsfmt=(-c '%s %.9Y'); mtfmt=(-c '%.9Y'); else nsfmt=(-f '%z %Fm'); mtfmt=(-f '%Fm'); fi
 stn() { stat "${nsfmt[@]}" "$1"; }
+mtn() { stat "${mtfmt[@]}" "$1"; }
 
 while ! mkdir "$lock" 2>/dev/null; do
   holder="$(cat "$lock/pid" 2>/dev/null || true)"
@@ -53,38 +57,71 @@ is_forgotten() {
 
 in_list() { case ",$2," in *",$1,"*) return 0 ;; *) return 1 ;; esac; }
 
-# put SRC DEST: copy to a temp name, then rename. Returns 1, leaving DEST, when
-# the copy came out shorter than DEST; a source rewritten mid-copy cannot shrink
-# the mirror.
+# zsize FRAME: the decompressed size in the frame's header, read without decoding.
+zsize() { "$zstd" -lv -- "$1" 2>/dev/null | sed -n 's/^Decompressed Size:.*(\([0-9]*\) B)$/\1/p'; }
+
+# zput SRC TMP: compress SRC into TMP from the file path, so the header carries
+# the size. The source's size and mtime are read before and after; a change means
+# it moved mid-read, and the read repeats, three tries. Then the frame is tested
+# and its header size must equal the size read. TMP takes SRC's mtime. Returns 1
+# when SRC never held still, 2 on any other failure.
+zput() {
+  local try before after
+  for try in 1 2 3; do
+    before="$(stn "$1")"
+    "$zstd" -q -19 -T2 -f -c -- "$1" > "$2" || { rm -f "$2"; return 2; }
+    after="$(stn "$1")"
+    if [ "$before" = "$after" ]; then
+      "$zstd" -q -t -- "$2" || { rm -f "$2"; return 2; }
+      [ "$(zsize "$2")" = "${before%% *}" ] || { rm -f "$2"; return 2; }
+      touch -r "$1" "$2" || { rm -f "$2"; return 2; }
+      return 0
+    fi
+  done
+  rm -f "$2"
+  return 1
+}
+
+# put SRC DEST: compress to a temp name, then rename. Returns 1 when DEST holds
+# more bytes than SRC (leaving DEST), 3 when SRC would not hold still.
 put() {
-  local t="$2.tmp.$$" tsize dsize
+  local t="$2.tmp.$$" ssize dsize rc=0
   mkdir -p "$(dirname "$2")"
-  cp -p "$1" "$t" || { rm -f "$t"; return 2; }
+  ssize="$(stn "$1")"; ssize="${ssize%% *}"
   if [ -f "$2" ]; then
-    read -r tsize _ <<< "$(st "$t")"
-    read -r dsize _ <<< "$(st "$2")"
-    if [ "$tsize" -lt "$dsize" ]; then rm -f "$t"; return 1; fi
+    dsize="$(zsize "$2")"
+    if [ -n "$dsize" ] && [ "$ssize" -lt "$dsize" ]; then return 1; fi
   fi
+  zput "$1" "$t" || rc=$?
+  case "$rc" in 0) ;; 1) return 3 ;; *) return 2 ;; esac
   mv "$t" "$2" || return 2
 }
 
-# stage_set: copy every file of $todo (relative to $src) to its temp name in the
-# mirror, succeeding only when none of them changed between before the first
-# copy and after the last. Three tries; a failure leaves the temps for the caller.
+# stage_set: compress every file of $todo (relative to $src) to its temp name in
+# the mirror, succeeding only when none of them changed between before the first
+# read and after the last. Three tries; a failure leaves the temps for the caller.
 stage_set() {
-  local try r i ok before=()
+  local try r i t ok before=()
   for try in 1 2 3; do
     before=()
     for r in "${todo[@]}"; do before+=("$(stn "$src/$r")"); done
     ok=1
     for r in "${todo[@]}"; do
       mkdir -p "$(dirname "$mirror/$name/$r")"
-      cp -p "$src/$r" "$mirror/$name/$r.tmp.$$" || { ok=0; break; }
+      "$zstd" -q -19 -T2 -f -c -- "$src/$r" > "$mirror/$name/$r.zst.tmp.$$" || { ok=0; break; }
     done
     if [ "$ok" = 1 ]; then
       i=0
       for r in "${todo[@]}"; do
         if [ "$(stn "$src/$r")" != "${before[$i]}" ]; then ok=0; fi
+        i=$((i + 1))
+      done
+    fi
+    if [ "$ok" = 1 ]; then
+      i=0
+      for r in "${todo[@]}"; do
+        t="$mirror/$name/$r.zst.tmp.$$"
+        "$zstd" -q -t -- "$t" && [ "$(zsize "$t")" = "${before[$i]%% *}" ] && touch -r "$src/$r" "$t" || ok=0
         i=$((i + 1))
       done
     fi
@@ -133,18 +170,14 @@ while IFS=$'\t' read -r name source include replace; do
       rel="${f#"$src"/}"
       in_list "$(basename "$f")" "$replace" && continue
       if is_forgotten "$rel"; then continue; fi
-      dest="$mirror/$name/$rel"
-      read -r ssize smtime <<< "$(st "$f")"
-      if [ -f "$dest" ]; then
-        read -r dsize dmtime <<< "$(st "$dest")"
-        if [ "$ssize" -lt "$dsize" ]; then skipped=$((skipped + 1)); continue; fi
-        if [ "$ssize" -eq "$dsize" ] && [ "$smtime" = "$dmtime" ]; then continue; fi
-      fi
+      dest="$mirror/$name/$rel.zst"
+      if [ -f "$dest" ] && [ "$(mtn "$f")" = "$(mtn "$dest")" ]; then continue; fi
       prc=0; put "$f" "$dest" || prc=$?
       case "$prc" in
         0) copied=$((copied + 1)) ;;
-        1) skipped=$((skipped + 1)) ;;
-        *) die "$name: could not copy $f" ;;
+        1) skipped=$((skipped + 1)); echo "varve: sync $name: $rel is shorter than its retained copy, kept the copy" >&2 ;;
+        3) kept=$((kept + 1)) ;;
+        *) die "$name: could not compress $f" ;;
       esac
     done < <(find "$src" -type f -name "$pat" | LC_ALL=C sort)
   done
@@ -159,26 +192,26 @@ while IFS=$'\t' read -r name source include replace; do
     todo=(); changed=0
     for r in "${reps[@]}"; do
       f="$src/$r"
-      dest="$mirror/$name/$r"
+      dest="$mirror/$name/$r.zst"
       if [ ! -f "$f" ]; then
         if [ -s "$dest" ]; then changed=1; fi
         continue
       fi
       if ! inside "$f"; then echo "varve: sync $name: replace entry $r is a symlink or resolves outside the source, skipped" >&2; continue; fi
       todo+=("$r")
-      if [ ! -f "$dest" ] || [ "$(stn "$f")" != "$(stn "$dest")" ]; then changed=1; fi
+      if [ ! -f "$dest" ] || [ "$(mtn "$f")" != "$(mtn "$dest")" ]; then changed=1; fi
     done
     if [ "$changed" = 1 ] && [ "${#todo[@]}" -gt 0 ] && [ "${todo[0]}" = "${reps[0]}" ]; then
       if stage_set; then
         i=0
         for r in "${reps[@]}"; do
-          if [ "$i" -gt 0 ]; then rm -f "$mirror/$name/$r"; fi
+          if [ "$i" -gt 0 ]; then rm -f "$mirror/$name/$r.zst"; fi
           i=$((i + 1))
         done
-        for r in "${todo[@]}"; do mv "$mirror/$name/$r.tmp.$$" "$mirror/$name/$r"; done
+        for r in "${todo[@]}"; do mv "$mirror/$name/$r.zst.tmp.$$" "$mirror/$name/$r.zst"; done
         copied=$((copied + ${#todo[@]}))
       else
-        for r in "${todo[@]}"; do rm -f "$mirror/$name/$r.tmp.$$"; done
+        for r in "${todo[@]}"; do rm -f "$mirror/$name/$r.zst.tmp.$$"; done
         kept=$((kept + ${#todo[@]}))
       fi
     fi
