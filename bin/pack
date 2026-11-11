@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# One-shot migration (ADR-0011), deleted once run. bin/pack writes NAME.zst beside
+# each plain mirror file named by runtimes.toml include/replace globs; the plain
+# file is never touched. bin/pack --verify checks every pair by decompress-and-hash.
+# MIRROR defaults to $VARVE_DATA/mirror. Prints counts and sizes, and the names of
+# any mismatch; exit 1 on a gap. An existing .zst that verifies is never rewritten.
+set -euo pipefail
+
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+data="${VARVE_DATA:-$HOME/.local/share/varve}"
+mirror="${MIRROR:-${VARVE_MIRROR:-$data/mirror}}"
+mode="${1:-pack}"
+export repo
+yq="$("$repo/bin/tool" yq)" || exit 2
+zstd="$("$repo/bin/tool" zstd)" || exit 2
+export zstd
+
+# plain_files: every plain mirror file the runtimes' globs name, NUL separated.
+plain_files() {
+  local name include replace pat
+  while IFS=$'\t' read -r name include replace; do
+    [ -n "$name" ] && [ -d "$mirror/$name" ] || continue
+    IFS=, read -r -a pats <<< "$include,$replace"
+    for pat in "${pats[@]}"; do
+      [ -z "$pat" ] || find "$mirror/$name" -type f -name "$pat" ! -name '*.zst' -print0
+    done
+  done < <("$yq" -p toml -o=tsv '(.row // [])[] | [.name, (.include | join(",")), ((.replace // []) | join(","))]' "$data/runtimes.toml")
+}
+
+# guard: stop when memory or disk runs short.
+guard() {
+  local free
+  free="$(memory_pressure 2>/dev/null | sed -n 's/.*free percentage: \([0-9]*\)%.*/\1/p')"
+  if [ -n "$free" ] && [ "$free" -lt 25 ]; then echo "varve: pack: memory free ${free}%, stopping" >&2; return 1; fi
+  if [ "$(df -g / | awk 'NR==2 {print $4}')" -lt 20 ]; then echo "varve: pack: under 20G disk free, stopping" >&2; return 1; fi
+}
+export -f guard
+
+one() {
+  local f="$1" z="$1.zst"
+  guard || exit 255
+  if [ -f "$z" ] && "$zstd" -q -t -- "$z" 2>/dev/null; then return 0; fi
+  "$zstd" -q -19 -T1 -f -c -- "$f" > "$z.tmp.$$" && "$zstd" -q -t -- "$z.tmp.$$" && touch -r "$f" "$z.tmp.$$" && mv "$z.tmp.$$" "$z" || { rm -f "$z.tmp.$$"; echo "varve: pack: failed $f" >&2; return 1; }
+}
+export -f one
+
+sum() { shasum -a 256 | cut -d' ' -f1; }
+check() {
+  local f="$1"
+  [ -f "$f.zst" ] || { echo "missing: $f.zst"; return; }
+  [ "$("$zstd" -dc -- "$f.zst" | sum)" = "$(sum < "$f")" ] || echo "mismatch: $f"
+}
+export -f check sum
+
+[ -f "$data/runtimes.toml" ] || { echo "varve: pack: no $data/runtimes.toml" >&2; exit 2; }
+
+if [ "$mode" = "--verify" ]; then
+  plain=0; pairs=0
+  while IFS= read -r -d '' f; do plain=$((plain + 1)); if [ -f "$f.zst" ]; then pairs=$((pairs + 1)); fi; done < <(plain_files)
+  bad="$(plain_files | xargs -0 -n1 -P2 nice -n 19 bash -c 'check "$1"' _)"
+  echo "varve: pack verify: $plain plain, $pairs with a frame" >&2
+  if [ -n "$bad" ]; then printf '%s\n' "$bad"; exit 1; fi
+  [ "$plain" = "$pairs" ] || exit 1
+  echo "varve: pack verify: $pairs of $plain match" >&2
+  exit 0
+fi
+
+plain_files | xargs -0 -n1 -P2 nice -n 19 bash -c 'one "$1"' _
+pp=0; pz=0
+while IFS= read -r -d '' f; do
+  pp=$((pp + $(stat -f %z "$f"))); if [ -f "$f.zst" ]; then pz=$((pz + $(stat -f %z "$f.zst"))); fi
+done < <(plain_files)
+echo "varve: pack: plain $pp bytes, frames $pz bytes" >&2
