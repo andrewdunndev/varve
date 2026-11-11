@@ -1,6 +1,6 @@
 # ADR-0008: File mirror and whole build
 
-- **Status:** accepted
+- **Status:** accepted; partly superseded by ADR-0011 (the mirror stores compressed files)
 - **Date:** 2026-11-06
 - **Deciders:** maintainer
 
