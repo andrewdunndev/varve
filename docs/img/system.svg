@@ -73,7 +73,7 @@
   <text class="sub" x="85" y="55" text-anchor="middle">read only</text>
   <rect class="box" x="30" y="132" width="110" height="48" rx="6"/>
   <text class="nm" x="85" y="152" text-anchor="middle">bin/sync</text>
-  <text class="sub" x="85" y="168" text-anchor="middle">no engine, cp only</text>
+  <text class="sub" x="85" y="168" text-anchor="middle">no engine, zstd only</text>
   <rect class="box" x="210" y="132" width="110" height="48" rx="6"/>
   <text class="nm" x="265" y="152" text-anchor="middle">bin/build</text>
   <text class="sub" x="265" y="168" text-anchor="middle">adapter per runtime</text>

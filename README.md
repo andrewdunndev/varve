@@ -78,7 +78,7 @@ One wrapper bounds every DuckDB process.
 | `bin/` | The runner (`duck`) and the scripts behind `sync` (compresses into the mirror), `build` (streams it), `check`, `forget` and `mine`; `pack` is the one-shot that converts a plain mirror |
 | `justfile` | `sync`, `build`, `check`, `forget`, `mine`, `review`, `interventions`, `stats`, `sql`, `lint`, `test`, `disk` |
 
-`mise install` provisions the pinned `duckdb`, `just` and `yq` from `mise.toml`. A `duckdb` or `yq` on `PATH` is used only when it reports the pinned version.
+`mise install` provisions the pinned `duckdb`, `just` and `yq` from `mise.toml`. A `duckdb` or `yq` on `PATH` is used only when it reports the pinned version. `sync` and `build` also need `zstd` on `PATH`, and `sqlite3` for opencode.
 
 To start, copy the examples into the data home, delete the `runtimes.toml` rows for tools you do not use, then sync and build. `just` must be on `PATH`, for example through `mise activate`.
 

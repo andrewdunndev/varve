@@ -77,6 +77,19 @@ while IFS=$'\t' read -r name adapter replace; do
   [ -f "$file" ] || die "$name: no adapter $adapter in $data/adapters or $repo/adapters"
   if [ -n "$replace" ]; then
     zstd="$(command -v zstd)" || { echo "varve: zstd is not on PATH (install zstd)" >&2; exit 2; }
+    need=0
+    ifs="$IFS"; IFS=,
+    for r in $replace; do
+      [ -f "$dir/$r.zst" ] && need=$((need + $("$zstd" -lv -- "$dir/$r.zst" 2>/dev/null | sed -n 's/^Decompressed Size:.*(\([0-9]*\) B)$/\1/p')))
+    done
+    IFS="$ifs"
+    cap="$(printf '%s' "${VARVE_MAX_SPILL:-20GB}" | awk '{ u = toupper($0); n = u + 0; m = 1; if (u ~ /KIB/) m = 1024; else if (u ~ /MIB/) m = 1024^2; else if (u ~ /GIB/) m = 1024^3; else if (u ~ /TIB/) m = 1024^4; else if (u ~ /KB/) m = 1e3; else if (u ~ /MB/) m = 1e6; else if (u ~ /GB/) m = 1e9; else if (u ~ /TB/) m = 1e12; printf "%.0f", n * m }')"
+    free="$(( $(df -k "$data" | awk 'NR==2 {print $4}') * 1024 - 5000000000 ))"
+    if [ "$need" -gt "$cap" ] || [ "$need" -gt "$free" ]; then
+      echo "varve: build $name: its replace set unpacks to $need bytes, over VARVE_MAX_SPILL or the disk floor, keeping its published partitions" >&2
+      failed="$failed $name"
+      continue
+    fi
     rm -rf "$unpack"
     upok=1
     ifs="$IFS"; IFS=,

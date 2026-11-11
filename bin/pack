@@ -39,7 +39,7 @@ export -f guard
 one() {
   local f="$1" z="$1.zst"
   guard || exit 255
-  if [ -f "$z" ] && "$zstd" -q -t -- "$z" 2>/dev/null; then return 0; fi
+  if [ -f "$z" ] && [ "$(stat -f %m "$z")" = "$(stat -f %m "$f")" ] && "$zstd" -q -t -- "$z" 2>/dev/null; then return 0; fi
   "$zstd" -q -19 -T1 -f -c -- "$f" > "$z.tmp.$$" && "$zstd" -q -t -- "$z.tmp.$$" && touch -r "$f" "$z.tmp.$$" && mv "$z.tmp.$$" "$z" || { rm -f "$z.tmp.$$"; echo "varve: pack: failed $f" >&2; return 1; }
 }
 export -f one

@@ -3,7 +3,7 @@
 - **Status:** accepted
 - **Supersedes:** the plain-copy parts of ADR-0008 (`cp -p`, never-shorter on mirror file bytes, `build` reading the mirrored database in place)
 - **Date:** 2026-11-11
-- **Deciders:** maintainer
+- **Deciders:** maintainer. The per-file zstd 19 choice (about 5.2G, over the 3G target) is recorded as ruled; the operator's explicit acceptance of 5.2G is unconfirmed here.
 
 ## Context
 
@@ -39,10 +39,10 @@
 - A source deleted after sync leaves its `.zst`. Nothing removes a mirror file except `just forget`.
 - The replace set is staged compressed as a unit, under the stat check of ADR-0008, and renamed together. Names are `<file>.zst`.
 - Adapters read `**/*.jsonl.zst`; the repo's claude-code and pi adapters change their glob and path regexes. A data-home adapter that globs `*.jsonl` reads nothing and must change the same way.
-- For a runtime with a replace set, `build` decompresses the set into `state/unpack.<pid>/<runtime>/`, runs the adapter with that as `mirror_dir`, and removes it when the runtime finishes. The opencode adapter does not change. Stale unpack directories of dead pids go at the next build, as run directories do.
+- For a runtime with a replace set, `build` decompresses the set into `state/unpack.<pid>/<runtime>/`, runs the adapter with that as `mirror_dir`, and removes it when the runtime finishes. The opencode adapter does not change. Stale unpack directories of dead pids go at the next build, as run directories do. The unpack counts against `VARVE_MAX_SPILL` and a 5G disk floor: before unpacking, `build` sums the frame headers' decompressed sizes, and over either bound it keeps that runtime's published partitions and says so on stderr.
 - The lake is written with `COMPRESSION_LEVEL 19`. On sample 2 that cut it 12% (62.4MB to 55.0MB).
 - `zstd` is a system dependency beside `sqlite3`, called from `PATH`; the scripts exit 2 with a one-line message when it is missing.
-- The plain mirror goes by `bin/pack`, a one-shot: it writes `NAME.zst` beside each plain file and never touches the plain file; `bin/pack --verify` checks each pair by decompress-and-hash. Only then does the operator remove the plain files. Later syncs find equal mtimes and copy nothing. Delete `bin/pack` once the migration is done.
+- The plain mirror goes by `bin/pack`, a one-shot: it writes `NAME.zst` beside each plain file and never touches the plain file; `bin/pack --verify` checks each pair by decompress-and-hash. `pack` skips a frame only when it passes `zstd -t` and carries the plain file's mtime, so a plain file that grew is recompressed. `--verify` lists only mismatches and prints a count on success. Only after `--verify` exits 0 does the operator remove plain files, and only those that have a frame: `find mirror -name '*.jsonl' | while read -r f; do [ -f "$f.zst" ] && rm "$f"; done`. Later syncs find equal mtimes and copy nothing. Delete `bin/pack` once the migration is done.
 
 **Rejected**
 - gzip: 2.74x against 3.45x, 26% larger, but no new dependency. zstd gives 1.2G less on the full mirror.

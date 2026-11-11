@@ -14,7 +14,7 @@
 ## Decision
 
 - The lake is f(mirror, operator data, repo).
-- `sync` copies allowed files, parses nothing, and is the only scheduled step.
+- `sync` compresses allowed files into frames (ADR-0011), parses nothing, and is the only scheduled step.
 - `build` runs one process per runtime into `lake.new`, then checks, then swaps. Mines run after the swap.
 - A runtime that fails keeps its last good partitions. A runtime that built owns its partitions.
 - Nothing shrinks except by `just forget` and the replace set (see Consequences).
@@ -45,7 +45,7 @@
 
 **Neutral**
 - Whole-build time is unmeasured. If a capped build is too slow, build goes incremental by (runtime, month).
-- `messages` dominates lake size. `content` is retired; the mirror holds the verbatim copy. No compression change until measured.
+- `messages` dominates lake size. `content` is retired; the mirror holds the verbatim copy (as frames, ADR-0011).
 
 ## References
 
