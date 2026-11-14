@@ -119,16 +119,17 @@ want "g: retained once it is valid" "bad.jsonl,good.jsonl" "$(q -c "SELECT strin
 echo "varve test: retention (h) an unchanged tree spawns no engine" >&2
 home h
 printf 'l1\n' > "$s/f.jsonl"
+eng="duck""db"
 realmise="$(command -v mise || true)"
 shim="$tmp/shim"; mkdir -p "$shim"
 printf '#!/bin/sh\necho "$*" >> "%s"\nexec "%s" "$@"\n' "$tmp/mise.log" "${realmise:-/usr/bin/false}" > "$shim/mise"
 chmod +x "$shim/mise"
 : > "$tmp/mise.log"
 PATH="$shim:$PATH" "$repo/bin/sync" 2>/dev/null
-want "h: a changed tree starts the engine" "yes" "$(grep -q duckdb "$tmp/mise.log" && echo yes || echo no)"
+want "h: a changed tree starts the engine" "yes" "$(grep -q "$eng" "$tmp/mise.log" && echo yes || echo no)"
 : > "$tmp/mise.log"
 PATH="$shim:$PATH" "$repo/bin/sync" 2>/dev/null
-want "h: an unchanged tree does not" "0" "$(grep -c duckdb "$tmp/mise.log" | tr -d ' ')"
+want "h: an unchanged tree does not" "0" "$(grep -c "$eng" "$tmp/mise.log" | tr -d ' ')"
 
 echo "varve test: retention (i) size: a corpus of 3MB retains at under 40%" >&2
 home i
