@@ -252,6 +252,7 @@ test:
     {{repo}}/tests/caps.sh || fail=1
     {{repo}}/tests/views.sh || fail=1
     {{repo}}/tests/sync.sh || fail=1
+    {{repo}}/tests/retain.sh || fail=1
 
     echo "varve test: build behavior" >&2
     sums() { (cd "$1" && find . -type f | LC_ALL=C sort | xargs cksum); }
