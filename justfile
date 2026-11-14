@@ -152,7 +152,7 @@ lint:
     fi
     echo "varve lint: OK"
 
-# CI/local test: a build over fixtures. The mirror fixtures go through the real
+# CI/local test: a build over fixtures. The source fixtures go through the real
 # build under a scratch VARVE_DATA, so the operator's lake is never touched.
 # Assertions are checks. Then every query and the review run against the result,
 # outputs are diffed against tests/golden and tests/snapshots, and the behavior
@@ -170,7 +170,7 @@ test:
     lake="$VARVE_DATA/lake"
 
     mkdir -p "$VARVE_DATA/checks" "$VARVE_DATA/mining" "$VARVE_MIRROR" "$tmp/src/opencode"
-    cp -R "{{repo}}/tests/fixtures/mirror/." "$tmp/src/"
+    cp -R "{{repo}}/tests/fixtures/source/." "$tmp/src/"
     zstd="$(command -v zstd)" || { echo "varve: zstd is not on PATH (install zstd)" >&2; exit 2; }
     echo "varve test: seeding synthetic opencode fixture db" >&2
     {{repo}}/bin/duck seed \
@@ -396,7 +396,7 @@ test:
     for f in attribution pricing; do mv "$own/data/$f.example.toml" "$own/data/$f.toml"; done
     sed "s/'claude-code'/'scratch-rt'/" "{{repo}}/adapters/claude_code.sql" > "$own/data/adapters/scratch_rt.sql"
     printf '[[row]]\nname = "scratch-rt"\nadapter = "scratch_rt.sql"\nsource = "%s"\ninclude = ["*.jsonl"]\n' "$own/src/scratch-rt" > "$own/data/runtimes.toml"
-    cp -R "{{repo}}/tests/fixtures/mirror/claude-code/." "$own/src/scratch-rt/"
+    cp -R "{{repo}}/tests/fixtures/source/claude-code/." "$own/src/scratch-rt/"
     VARVE_DATA="$own/data" VARVE_MIRROR="$own/mirror" {{repo}}/bin/sync 2>/dev/null
     rc=0; VARVE_DATA="$own/data" VARVE_MIRROR="$own/mirror" VARVE_LAKE="$own/data/lake" {{repo}}/bin/duck locked {{repo}}/bin/build 2>"$tmp/own.err" || rc=$?
     n="$(VARVE_DATA="$own/data" VARVE_LAKE="$own/data/lake" {{repo}}/bin/duck own -noheader -list -c "SELECT count(DISTINCT session_id) FROM sessions WHERE runtime = 'scratch-rt';")"
@@ -443,8 +443,8 @@ test:
     pr="$tmp/proof"; mkdir -p "$pr/data" "$pr/src/testproj"
     for f in attribution pricing; do cp "{{repo}}/adapters/$f.example.toml" "$pr/data/$f.toml"; done
     printf '[[row]]\nname = "claude-code"\nadapter = "claude_code.sql"\nsource = "%s"\ninclude = ["*.jsonl"]\n' "$pr/src" > "$pr/data/runtimes.toml"
-    cp "{{repo}}/tests/fixtures/mirror/claude-code/testproj/session-scope.jsonl" "$pr/src/testproj/test-session-scope.jsonl"
-    cp "{{repo}}/tests/fixtures/mirror/claude-code/testproj/session-2023.jsonl" "$pr/src/testproj/test-session-2023.jsonl"
+    cp "{{repo}}/tests/fixtures/source/claude-code/testproj/session-scope.jsonl" "$pr/src/testproj/test-session-scope.jsonl"
+    cp "{{repo}}/tests/fixtures/source/claude-code/testproj/session-2023.jsonl" "$pr/src/testproj/test-session-2023.jsonl"
     pr_env() { VARVE_DATA="$pr/data" VARVE_MIRROR="$pr/data/mirror" VARVE_LAKE="$pr/data/lake" "$@"; }
     pr_counts() { pr_env {{repo}}/bin/duck prc -noheader -list -c "SELECT (SELECT count(DISTINCT session_id) FROM sessions) || '/' || (SELECT count(*) FROM messages) || '/' || (SELECT count(*) FROM api_calls) || '/' || (SELECT count(*) FROM tool_calls);"; }
     pr_env {{repo}}/bin/sync 2>/dev/null

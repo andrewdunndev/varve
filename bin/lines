@@ -39,7 +39,7 @@ sweep() {
     fi
     rm -rf "$dir/lines"; echo "gen 0"; return
   fi
-  o="$(duck "sweep $dir" -noheader -list -separator $'\t' "${mdir[@]}" -f "$repo/sql/live.sql" -f "$repo/sql/orphans.sql")" || die "sweep: the manifest in $dir cannot be read; nothing was deleted"
+  o="$(duck "sweep $dir" -noheader -list -separator $'\t' "${mdir[@]}" -f "$repo/sql/live.sql" -f "$repo/sql/orphans.sql")" || { [ "$?" = 1 ] && exit 1; die "sweep: the manifest in $dir cannot be read; nothing was deleted"; }
   while IFS=$'\t' read -r k a b; do
     case "$k" in
       gen) echo "gen $a" ;;

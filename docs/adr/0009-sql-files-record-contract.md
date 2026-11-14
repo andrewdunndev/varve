@@ -17,7 +17,7 @@ Three primitives: files, SQL files, one runner (`bin/duck`). Everything extensib
 
 | Kind | Reads | Rows become |
 |------|-------|-------------|
-| adapter | the mirror | the four tables |
+| adapter | the retained sources | the four tables |
 | check | the tables | failures (any row) |
 | mine | the tables | a saved table |
 | query | the tables | printed output |

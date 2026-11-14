@@ -147,8 +147,8 @@ want "i: the retained form is under 40% of the plain bytes ($kept of $plain)" "y
 proof_home() {
   home "$1"
   mkdir -p "$s/testproj"
-  cp "$repo/tests/fixtures/mirror/claude-code/testproj/session-scope.jsonl" "$s/testproj/test-session-scope.jsonl"
-  cp "$repo/tests/fixtures/mirror/claude-code/testproj/session-2023.jsonl" "$s/testproj/test-session-2023.jsonl"
+  cp "$repo/tests/fixtures/source/claude-code/testproj/session-scope.jsonl" "$s/testproj/test-session-scope.jsonl"
+  cp "$repo/tests/fixtures/source/claude-code/testproj/session-2023.jsonl" "$s/testproj/test-session-2023.jsonl"
   touch -t 202601050000 "$s/testproj/test-session-scope.jsonl"
   touch -t 202603050000 "$s/testproj/test-session-2023.jsonl"
   mkdir -p "$d/checks"
@@ -189,8 +189,8 @@ echo "varve test: retention (l) every retained file reconstructs to its source b
 home l
 export VARVE_MIRROR="$d/mirror"
 mkdir -p "$VARVE_MIRROR/claude-code/p"
-cp "$repo/tests/fixtures/mirror/claude-code/testproj/session-scope.jsonl" "$VARVE_MIRROR/claude-code/p/x.jsonl"
-cp "$repo/tests/fixtures/mirror/claude-code/testproj/session-2023.jsonl" "$VARVE_MIRROR/claude-code/p/y.jsonl"
+cp "$repo/tests/fixtures/source/claude-code/testproj/session-scope.jsonl" "$VARVE_MIRROR/claude-code/p/x.jsonl"
+cp "$repo/tests/fixtures/source/claude-code/testproj/session-2023.jsonl" "$VARVE_MIRROR/claude-code/p/y.jsonl"
 "$repo/bin/pack" 2>/dev/null
 rc=0; "$repo/bin/pack" --verify 2>"$tmp/err" || rc=$?
 want "l: pack --verify passes" "0" "$rc"

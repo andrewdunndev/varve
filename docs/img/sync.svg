@@ -146,5 +146,5 @@
   <text class="asub" x="548" y="603" text-anchor="middle">staged and checked first</text>
 
   <text class="sub" x="20" y="640">Replace sets run no engine. Temp frames stranded by a killed run</text>
-  <text class="sub" x="20" y="656">are deleted at the start, under the sync lock.</text>
+  <text class="sub" x="20" y="656">are deleted at the start, under the lock.</text>
 </svg>

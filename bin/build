@@ -64,7 +64,7 @@ while IFS=$'\t' read -r name adapter replace; do
   elif [ -z "$replace" ]; then
     if [ ! -f "$dir/manifest.parquet" ]; then empty=1
     else
-      "$repo/bin/lines" sweep "$dir" > /dev/null
+      "$repo/bin/lines" sweep "$dir" > /dev/null || { rc=$?; rm -rf "$new" "$unpack"; exit "$rc"; }
       [ "$("$repo/bin/duck" "build $name" -noheader -list -c "SELECT count(*) FROM read_parquet('$dir/manifest.parquet');")" != 0 ] || empty=1
     fi
   elif [ -z "$(find "$dir" -type f -print -quit)" ]; then empty=1
