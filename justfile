@@ -251,6 +251,7 @@ test:
     echo "varve test: runner caps, startup views and sync" >&2
     {{repo}}/tests/caps.sh || fail=1
     {{repo}}/tests/views.sh || fail=1
+    {{repo}}/tests/cc_lines.sh || fail=1
     {{repo}}/tests/sync.sh || fail=1
     {{repo}}/tests/retain.sh || fail=1
 

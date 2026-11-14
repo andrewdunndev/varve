@@ -122,7 +122,7 @@ while IFS=$'\t' read -r name adapter replace; do
   fi
   args=(-c "SET VARIABLE mirror_dir='$dir'" -f "$repo/sql/prelude.sql" -f "$file")
   for t in $tables; do
-    args+=(-c "COPY (SELECT * FROM stg_$t ANTI JOIN forgotten USING (session_id)) TO '$new/$t' (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd, COMPRESSION_LEVEL 19);")
+    args+=(-c "COPY (SELECT * FROM stg_$t ANTI JOIN forgotten USING (session_id)) TO '$new/$t' (FORMAT parquet, PARTITION_BY (runtime, date), FILENAME_PATTERN 'part', OVERWRITE_OR_IGNORE, COMPRESSION zstd, COMPRESSION_LEVEL 19, ROW_GROUP_SIZE 20000, ROW_GROUP_SIZE_BYTES '16MB');")
   done
   rc=0
   VARVE_LAKE="$new" "$repo/bin/duck" "build $name" "${args[@]}" || rc=$?

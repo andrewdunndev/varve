@@ -63,7 +63,7 @@
 **Negative**
 - `sync` needs the engine; ADR-0010's "sync never opens DuckDB" is amended.
 - First conversion about 45 min at nice 19 on 2 threads (the 314MB sample, 1.42GB peak resident, extrapolated by bytes), verify about 2.5 min (3s for the sample), opencode about 1 min.
-- Build is slower and larger than over plain files: 19.7s under load and 1.35GB peak resident against 7.6s and 1.07GB for a build over the plain files on the same sample; 4.6s against 1.5s on the large files. Full corpus about 2.5 to 3.5 min against 2.0.
+- Build is slower and larger than over plain files: 19.7s under load and 1.35GB peak resident against 7.6s and 1.07GB for a build over the plain files on the same sample; 4.6s against 1.5s on the large files. Full corpus (24570 files, 3.6GB of Parquet): about 6 min and 2.3GB peak resident at 2 threads under memory_limit 3GB, against 2 min and 3.6GB over the plain files. Each JSON function holds the parse of its last chunk and the optimizer repeats a parse into every filter above it, so the adapter ends each parse in a streaming limit, cuts image payloads before parsing, runs the message and tool stages on one thread into a temp file, and finds repeats and pairs on keys alone.
 - Peak resident is about 1.4GB in sync at 2 threads, measured over a sample holding the 122MB and 75MB files. A file whose pass would not fit is not retained, named, and fails the sync.
 - A source rewritten in place stops being followed; the retained copy is the old bytes.
 - A data-home adapter that reads files breaks once.
