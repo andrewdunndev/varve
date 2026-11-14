@@ -15,6 +15,8 @@
 #                   exit 1 on any mismatch
 #   --from-mirror   read each runtime's plain files out of its mirror folder
 #                   (bin/pack, the one-shot migration)
+#   --delete-plain  with --from-mirror --verify: delete a runtime's plain files when
+#                   every one of them verified against its lines
 # Config: $VARVE_DATA/runtimes.toml (see runtimes.example.toml). Sessions listed
 # in forgotten.toml are never retained. Runs under bin/duck locked, niced.
 set -euo pipefail
@@ -29,15 +31,17 @@ mirror="${VARVE_MIRROR:-$data/mirror}"
 die() { echo "varve: sync: $*" >&2; exit 2; }
 qs() { printf '%s' "$1" | sed "s/'/''/g"; }
 
-compact=0; verify=0; frommirror=0
+compact=0; verify=0; frommirror=0; deleteplain=0
 for a in "$@"; do
   case "$a" in
     --compact) compact=1 ;;
     --verify) verify=1 ;;
     --from-mirror) frommirror=1 ;;
+    --delete-plain) deleteplain=1 ;;
     *) die "unknown argument $a" ;;
   esac
 done
+if [ "$deleteplain" = 1 ] && { [ "$frommirror" = 0 ] || [ "$verify" = 0 ]; }; then die "--delete-plain needs --from-mirror and --verify"; fi
 
 export VARVE_THREADS="${VARVE_THREADS:-2}" VARVE_MEMORY_LIMIT="${VARVE_MEMORY_LIMIT:-3GB}"
 maxfile="${VARVE_MAX_FILE:-160000000}"
@@ -61,6 +65,14 @@ fi
 stn() { stat "${nsfmt[@]}" "$1"; }
 mtn() { stat "${mtfmt[@]}" "$1"; }
 
+# A SIGKILL skips the EXIT trap; the lock is held, so a work dir of a dead pid is leftover.
+mkdir -p "$data/state"
+for d in "$data"/state/sync.*; do
+  [ -d "$d" ] || continue
+  pid="${d##*/sync.}"
+  case "$pid" in ''|*[!0-9]*) continue ;; esac
+  kill -0 "$pid" 2>/dev/null || rm -rf "$d"
+done
 work="${data:?}/state/sync.$$"
 mkdir -p "$work"
 trap 'rm -rf "${work:?}"' EXIT
@@ -162,6 +174,7 @@ retain_lines() {
     { if (cum > 0 && cum + $2 > cap) { n++; cum = 0 }; cum += $2; print > (dir "/batch." n) }' "$cand"
   if [ -s "$work/toolarge" ]; then
     toolarge="$(wc -l < "$work/toolarge" | tr -d ' ')"
+    toolfail=1
     while IFS=$'\t' read -r k v; do echo "varve: sync $name: $k is $v bytes, over VARVE_MAX_FILE, not retained" >&2; done < "$work/toolarge"
   fi
   for b in "$work"/batch.*; do [ -e "$b" ] && batches+=("$b"); done
@@ -171,7 +184,7 @@ retain_lines() {
     for b in "${batches[@]}"; do
       g=$((gen + 1))
       rm -rf "${mdir:?}/lines.tmp"; mkdir -p "$mdir/lines.tmp"
-      sed "s/@GEN@/$g/g" "$repo/sql/retain.sql" > "$work/retain.sql"
+      sed -e "s/@GEN@/$g/g" -e "s|^-- @RACE@\$|${VARVE_RACE:+.shell $VARVE_RACE}|" "$repo/sql/retain.sql" > "$work/retain.sql"
       args=(-c "SET VARIABLE scan='$(qs "$b")'; SET VARIABLE src='$(qs "$src")/'; SET VARIABLE out='$(qs "$mdir/lines.tmp")'; SET VARIABLE mdir='$(qs "$mdir")';" -f "$repo/sql/manifest.sql")
       if [ -f "$mdir/manifest.parquet" ]; then args+=(-c "INSERT INTO m SELECT * FROM read_parquet('$(qs "$mdir/manifest.parquet")');"); fi
       out="$("$repo/bin/duck" "sync $name" -noheader -list "${args[@]}" -f "$work/retain.sql")" || { rm -rf "${mdir:?}/lines.tmp"; die "$name: retention failed"; }
@@ -212,11 +225,19 @@ check_lines() {
   read -r k ok bad <<< "$r"
   echo "varve: sync $name: verify $ok of $((ok + bad)) match${missing:+, $missing plain without a retained twin}" >&2
   if [ "$bad" -gt 0 ] || [ "${missing:-0}" -gt 0 ]; then verifyfail=1; fi
+  if [ "$deleteplain" = 1 ] && [ "$bad" = 0 ] && [ "${missing:-0}" = 0 ]; then
+    n=0
+    while IFS=$'\t' read -r r k ok; do
+      safe_rel "$r" && rm -f "$src/$r" && n=$((n + 1))
+    done < "$work/scan"
+    find "$src" -mindepth 1 -type d -empty -delete
+    echo "varve: sync $name: deleted $n plain files, each rebuilt from its lines to the same sha256" >&2
+  fi
 }
 
 rows="$("$yq" -p toml -o=tsv '(.row // [])[] | [.name, .source, (.include | join(",")), ((.replace // []) | join(","))]' "$data/runtimes.toml")"
 
-verifyfail=0
+verifyfail=0; toolfail=0
 while IFS=$'\t' read -r name source include replace; do
   [ -n "$name" ] || continue
   src="${source/#\~/$HOME}"
@@ -277,4 +298,5 @@ while IFS=$'\t' read -r name source include replace; do
   echo "varve: sync $name: $stats" >&2
 done <<< "$rows"
 
-exit "$verifyfail"
+if [ "$toolfail" = 1 ]; then echo "varve: sync: a file over VARVE_MAX_FILE is not retained; exiting 1" >&2; fi
+exit $((verifyfail | toolfail))

@@ -1,12 +1,14 @@
 -- Which files under a runtime's lines/ the committed manifest names.
 -- Variables: mdir (the runtime's mirror folder, no trailing slash).
 -- Needs mdir/manifest.parquet. Defines:
---   gen   the committed generation, from the manifest's key-value metadata
---   lf    every file under lines/: path, bucket, kind (c or d), g
+--   gen   the committed generation, from the manifest's key-value metadata;
+--         a manifest without it is an error
+--   lf   every file under lines/: path, bucket, kind (c or d), g
 --   live  per bucket the newest compacted file c-<g> with g <= gen, plus the
 --         deltas d-<g> with that g < d <= gen
 CREATE TEMP TABLE gen AS
-SELECT coalesce(max(decode(value)::BIGINT), 0) AS g
+SELECT CASE WHEN count(*) = 0 THEN error('the manifest has no gen metadata, so no file can be called an orphan')
+            ELSE max(decode(value)::BIGINT) END AS g
 FROM parquet_kv_metadata(getvariable('mdir') || '/manifest.parquet') WHERE decode(key) = 'gen';
 CREATE TEMP TABLE lf AS
 SELECT file AS path,

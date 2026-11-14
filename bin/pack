@@ -9,9 +9,13 @@
 #                       same sha256, every replace-set file must have an intact
 #                       frame of the same bytes, and no plain file may lack a
 #                       twin. Prints counts; exit 1 on any gap.
+#   bin/pack --delete-plain
+#                       the same verification, and each plain file that verified is
+#                       deleted: a runtime's line files when all of them did, a
+#                       replace-set file when its frame matched. Frames and lines
+#                       are never touched.
 #
-# MIRROR defaults to $VARVE_DATA/mirror. The operator deletes the plain files
-# after --verify exits 0.
+# MIRROR defaults to $VARVE_DATA/mirror.
 set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -21,15 +25,19 @@ mirror="$VARVE_MIRROR"
 yq="$("$repo/bin/tool" yq)" || exit 2
 [ -f "$data/runtimes.toml" ] || { echo "varve: pack: no $data/runtimes.toml" >&2; exit 2; }
 
-if [ "${1:-pack}" != "--verify" ]; then
-  exec "$repo/bin/sync" --from-mirror --compact
-fi
+mode="${1:-pack}"
+case "$mode" in
+  pack) exec "$repo/bin/sync" --from-mirror --compact ;;
+  --verify|--delete-plain) ;;
+  *) echo "varve: pack: unknown argument $mode" >&2; exit 2 ;;
+esac
+del=""; if [ "$mode" = "--delete-plain" ]; then del="--delete-plain"; fi
 
 zstd="$(command -v zstd)" || { echo "varve: zstd is not on PATH (install zstd)" >&2; exit 2; }
 sum() { shasum -a 256 | cut -d' ' -f1; }
 
 fail=0
-"$repo/bin/sync" --from-mirror --verify || fail=1
+"$repo/bin/sync" --from-mirror --verify $del || fail=1
 
 # A replace set's plain files, each against the frame beside it.
 plain=0; pairs=0; bad=0
@@ -42,7 +50,9 @@ while IFS=$'\t' read -r name replace; do
     plain=$((plain + 1))
     if [ -f "$f.zst" ]; then
       pairs=$((pairs + 1))
-      [ "$("$zstd" -dc -- "$f.zst" | sum)" = "$(sum < "$f")" ] || bad=$((bad + 1))
+      if [ "$("$zstd" -dc -- "$f.zst" | sum)" = "$(sum < "$f")" ]; then
+        if [ -n "$del" ]; then rm -f -- "$f"; fi
+      else bad=$((bad + 1)); fi
     fi
   done
 done < <("$yq" -p toml -o=tsv '(.row // [])[] | [.name, ((.replace // []) | join(","))]' "$data/runtimes.toml")

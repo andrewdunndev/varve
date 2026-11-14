@@ -12,8 +12,9 @@
 #                                    rebuild every file from its lines; sha256 must
 #                                    equal the manifest (and the plain file under SRC)
 #
-# The manifest is the only commit. VARVE_CRASH=delta stops commit after the data
-# files are renamed and before the manifest is, for the crash test.
+# The manifest is the only commit. For the tests: VARVE_CRASH=delta stops commit
+# after the data files are renamed and before the manifest is; VARVE_CRASH=row makes
+# compact write one line of its output changed.
 set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -30,16 +31,22 @@ man="$dir/manifest.parquet"
 mdir=(-c "SET VARIABLE mdir='$(qs "$dir")'")
 
 sweep() {
-  local k a b
+  local k a b o
   rm -rf "$st"
-  if [ ! -f "$man" ]; then rm -rf "$dir/lines"; echo "gen 0"; return; fi
+  if [ ! -f "$man" ]; then
+    if [ -n "$(find "$dir/lines" -name '*.parquet' -print -quit 2>/dev/null)" ]; then
+      die "sweep: $dir has lines but no manifest; nothing was deleted"
+    fi
+    rm -rf "$dir/lines"; echo "gen 0"; return
+  fi
+  o="$(duck "sweep $dir" -noheader -list -separator $'\t' "${mdir[@]}" -f "$repo/sql/live.sql" -f "$repo/sql/orphans.sql")" || die "sweep: the manifest in $dir cannot be read; nothing was deleted"
   while IFS=$'\t' read -r k a b; do
     case "$k" in
       gen) echo "gen $a" ;;
       orphan) case "$a" in "$dir"/lines/*) rm -f "$a" ;; esac ;;
       deltas) echo "deltas $a $b" ;;
     esac
-  done < <(duck "sweep $dir" -noheader -list -separator $'\t' "${mdir[@]}" -f "$repo/sql/live.sql" -f "$repo/sql/orphans.sql")
+  done <<< "$o"
   if [ -d "$dir/lines" ]; then find "$dir/lines" -mindepth 1 -type d -empty -delete; fi
 }
 
@@ -68,7 +75,7 @@ compact() {
     sed "s/@GEN@/$g/g" "$repo/sql/compact.sql" > "$st/run.sql"
     out="$st/bucket=$b/c-$g.parquet"
     duck "compact $b" -noheader -list "${mdir[@]}" \
-      -c "SET VARIABLE bucket='$(qs "$b")'; SET VARIABLE drop='$(qs "$drop")'; SET VARIABLE out='$(qs "$out")'; SET VARIABLE staging='$(qs "$st")';" \
+      -c "SET VARIABLE bucket='$(qs "$b")'; SET VARIABLE drop='$(qs "$drop")'; SET VARIABLE alter='${VARVE_CRASH:-}'; SET VARIABLE out='$(qs "$out")'; SET VARIABLE staging='$(qs "$st")';" \
       -f "$repo/sql/live.sql" -f "$st/run.sql" >/dev/null || { rm -rf "$st"; die "compact $b: refused, the retained files are unchanged"; }
     rm "$st/run.sql"
     commit

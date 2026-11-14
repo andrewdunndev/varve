@@ -7,7 +7,9 @@
 -- k<TAB>v counts.
 -- The source bytes are handed to read_blob through maps keyed by path, never a
 -- join with todo: a join buffers the blob side (4.2GB against 3.0GB peak).
--- Empty lists are typed because read_blob(NULL) fails.
+-- Empty lists are typed because read_blob(NULL) fails. The line "-- @RACE@" is where
+-- bin/sync puts the test hook VARVE_RACE (a program run with its arguments between the hash
+-- pass and the copy, to change a source there).
 CREATE TEMP TABLE scan AS
 SELECT * FROM read_csv(getvariable('scan'), delim = E'\t', header = false, quote = '', escape = '',
                        columns = {'rel': 'VARCHAR', 'size': 'BIGINT', 'mtime': 'VARCHAR'});
@@ -52,6 +54,7 @@ SET VARIABLE n2 = (SELECT map(list(path), list(n)) FROM res WHERE prefix_ok AND 
 SET VARIABLE sha2 = (SELECT map(list(path), list(sha)) FROM res WHERE prefix_ok AND utf8);
 SET VARIABLE ol2 = (SELECT map(list(path), list(ol)) FROM res WHERE prefix_ok AND utf8);
 SET VARIABLE bk2 = (SELECT map(list(path), list(bucket)) FROM res WHERE prefix_ok AND utf8);
+-- @RACE@
 COPY (
   SELECT rel_path, (ol + generate_subscripts(p, 1))::BIGINT AS line_no, unnest(p) AS line, bucket
   FROM (SELECT substr(filename, length(getvariable('src')) + 1) AS rel_path,
@@ -80,7 +83,7 @@ WHERE rel_path NOT IN (SELECT rel FROM good) AND rel_path NOT IN (SELECT rel FRO
 UNION ALL
 SELECT rel, bucket, n, ol + nl, tail, sha, size, mtime, 'ok' FROM good
 UNION ALL
-SELECT m.rel_path, m.bucket, m.bytes, m.lines, m.tail, m.sha256, r.size, r.mtime, 'diverged'
+SELECT m.rel_path, m.bucket, m.bytes, m.lines, m.tail, m.sha256, m.src_size, m.src_mtime, 'diverged'
 FROM res r JOIN m ON m.rel_path = r.rel WHERE NOT r.prefix_ok AND NOT r.is_new;
 COPY (SELECT * FROM mnew ORDER BY rel_path) TO (getvariable('out') || '/manifest.parquet')
   (FORMAT parquet, COMPRESSION zstd, KV_METADATA {gen: @GEN@});

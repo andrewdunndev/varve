@@ -208,4 +208,119 @@ rc=0; "$repo/bin/sync" --verify 2>/dev/null || rc=$?
 want "l: sync --verify fails on a mutated row" "1" "$rc"
 unset VARVE_MIRROR
 
+echo "varve test: retention (m) sweep fails closed when the manifest or its gen is missing" >&2
+home m
+printf 'l1\nl2\n' > "$s/f.jsonl"; sync
+printf 'l3\n' >> "$s/f.jsonl"; sync
+nfiles() { find "$m/lines" -name '*.parquet' | wc -l | tr -d ' '; }
+n0="$(nfiles)"
+q -c "COPY (SELECT * FROM read_parquet('$m/manifest.parquet')) TO '$m/manifest.plain' (FORMAT parquet);" > /dev/null
+mv "$m/manifest.parquet" "$m/manifest.keep"; mv "$m/manifest.plain" "$m/manifest.parquet"
+rc=0; "$repo/bin/lines" sweep "$m" > /dev/null 2>&1 || rc=$?
+want "m: a manifest without gen is refused" "2" "$rc"
+want "m: and no line file is deleted" "$n0" "$(nfiles)"
+printf 'l4\n' >> "$s/f.jsonl"
+rc=0; sync || rc=$?
+want "m: sync refuses it too" "2" "$rc"
+want "m: and keeps every line file" "$n0" "$(nfiles)"
+rm "$m/manifest.parquet"
+rc=0; "$repo/bin/lines" sweep "$m" > /dev/null 2>&1 || rc=$?
+want "m: lines without a manifest are refused" "2" "$rc"
+want "m: and none is deleted" "$n0" "$(nfiles)"
+mv "$m/manifest.keep" "$m/manifest.parquet"
+rc=0; "$repo/bin/lines" sweep "$m" > /dev/null 2>&1 || rc=$?
+want "m: the real manifest sweeps" "0" "$rc"
+want "m: and keeps its files" "$n0" "$(nfiles)"
+
+echo "varve test: retention (n) compaction refuses an output whose rows differ from its inputs" >&2
+home n
+printf 'l1\nl2\n' > "$s/f.jsonl"; sync
+printf 'l3\nl4\n' >> "$s/f.jsonl"; sync
+bucket="$(manifest bucket f.jsonl)"
+files_before="$(tree_sums "$m")"
+rc=0; VARVE_CRASH=row "$repo/bin/lines" compact "$m" "$bucket" 2>"$tmp/err" || rc=$?
+want "n: compact refuses" "yes" "$([ "$rc" -ne 0 ] && echo yes || echo no)"
+want "n: for the hash" "yes" "$(grep -q 'differs from its inputs' "$tmp/err" && echo yes || echo no)"
+want "n: the old files stay" "$files_before" "$(tree_sums "$m")"
+rc=0; "$repo/bin/lines" compact "$m" "$bucket" 2>/dev/null || rc=$?
+want "n: without the fault it compacts" "0" "$rc"
+
+echo "varve test: retention (o) a source that grows between the hash pass and the copy is not retained" >&2
+home o
+printf 'l1\nl2\n' > "$s/f.jsonl"
+printf '#!/bin/sh\necho l3 >> "$1"\n' > "$tmp/race.sh"; chmod +x "$tmp/race.sh"
+VARVE_RACE="$tmp/race.sh $s/f.jsonl" sync
+want "o: the file is reported unstable" "yes" "$(grep -q 'unstable 1' "$tmp/err" && echo yes || echo no)"
+want "o: no half of it is retained" "0" "$(find "$m/lines" -name '*.parquet' 2>/dev/null | wc -l | tr -d ' ')"
+sync
+want "o: the next sync retains it whole" "3" "$(nrows)"
+want "o: no line twice" "$(nrows)" "$(q -c "SELECT count(DISTINCT (rel_path, line_no)) FROM $(lines_glob);")"
+want "o: it verifies" "1 of 1" "$("$repo/bin/sync" --verify 2>&1 | sed -n 's/.*verify \([0-9]*\) of \([0-9]*\) match.*/\1 of \2/p')"
+
+echo "varve test: retention (p) a diverged file is named on every sync and fails the check" >&2
+home p
+export VARVE_LAKE="$d/lake"
+printf 'aaaa\nbbbb\n' > "$s/f.jsonl"; sync
+"$repo/bin/check" 2>"$tmp/err" || true
+want "p: a healthy mirror passes the diverged check" "no" "$(grep -q 'check diverged' "$tmp/err" && echo yes || echo no)"
+printf 'aaaa\n' > "$s/f.jsonl"; touch -t 203001010000 "$s/f.jsonl"
+sync
+want "p: the first sync names it" "yes" "$(grep -q 'diverged 1' "$tmp/err" && echo yes || echo no)"
+sync
+want "p: the second sync names it again" "yes" "$(grep -q 'diverged 1' "$tmp/err" && echo yes || echo no)"
+rc=0; "$repo/bin/check" 2>"$tmp/err" || rc=$?
+want "p: the check fails" "1" "$rc"
+want "p: and says why" "yes" "$(grep -q 'check diverged' "$tmp/err" && echo yes || echo no)"
+unset VARVE_LAKE
+
+echo "varve test: retention (q) a file over VARVE_MAX_FILE fails the sync" >&2
+home q
+printf 'a long enough line\n' > "$s/big.jsonl"
+printf 'x\n' > "$s/small.jsonl"
+rc=0; VARVE_MAX_FILE=10 sync || rc=$?
+want "q: the sync exits 1" "1" "$rc"
+want "q: the file is named" "yes" "$(grep -q 'big.jsonl' "$tmp/err" && echo yes || echo no)"
+want "q: the small file is retained" "small.jsonl" "$(q -c "SELECT string_agg(rel_path, ',') FROM read_parquet('$m/manifest.parquet');")"
+rc=0; sync || rc=$?
+want "q: under the cap the sync passes" "0" "$rc"
+
+echo "varve test: retention (r) pack --delete-plain removes only what verified" >&2
+home r
+export VARVE_MIRROR="$d/mirror"
+printf '[[row]]\nname = "oc"\nadapter = "opencode.sql"\nsource = "%s"\ninclude = ["store.db", "store.db-wal"]\nreplace = ["store.db", "store.db-wal"]\n' "$tmp/r/ocsrc" >> "$d/runtimes.toml"
+mkdir -p "$VARVE_MIRROR/claude-code/p" "$VARVE_MIRROR/oc"
+printf 'l1\nl2\n' > "$VARVE_MIRROR/claude-code/p/x.jsonl"
+printf 'db bytes' > "$VARVE_MIRROR/oc/store.db"
+printf 'wal bytes' > "$VARVE_MIRROR/oc/store.db-wal"
+"$repo/bin/pack" 2>/dev/null
+"$repo/bin/pack" --delete-plain 2>/dev/null
+want "r: the plain line file is gone" "no" "$([ -e "$VARVE_MIRROR/claude-code/p/x.jsonl" ] && echo yes || echo no)"
+want "r: the plain database is gone" "no" "$([ -e "$VARVE_MIRROR/oc/store.db" ] && echo yes || echo no)"
+want "r: the frames stay" "2" "$(find "$VARVE_MIRROR/oc" -name '*.zst' | wc -l | tr -d ' ')"
+want "r: the lines still verify" "1 of 1" "$("$repo/bin/sync" --verify 2>&1 | sed -n 's/.*verify \([0-9]*\) of \([0-9]*\) match.*/\1 of \2/p' | head -1)"
+mkdir -p "$VARVE_MIRROR/claude-code/p"
+printf 'l1\nl2\n' > "$VARVE_MIRROR/claude-code/p/y.jsonl"
+"$repo/bin/pack" 2>/dev/null
+drop_row "$(find "$m/lines" -name '*.parquet' -print -quit)" p/y.jsonl 1
+printf 'more\n' > "$VARVE_MIRROR/claude-code/p/z.jsonl"
+rc=0; "$repo/bin/pack" --delete-plain 2>/dev/null || rc=$?
+want "r: a runtime with a bad file fails" "1" "$rc"
+want "r: and loses no plain file" "2" "$(find "$VARVE_MIRROR/claude-code/p" -name '*.jsonl' | wc -l | tr -d ' ')"
+unset VARVE_MIRROR
+
+echo "varve test: retention (s) build refuses a replace set over VARVE_MAX_SPILL and keeps its frames" >&2
+home s
+export VARVE_LAKE="$d/lake"
+printf '[[row]]\nname = "oc"\nadapter = "opencode.sql"\nsource = "%s"\ninclude = ["store.db"]\nreplace = ["store.db"]\n' "$tmp/s/ocsrc" >> "$d/runtimes.toml"
+mkdir -p "$tmp/s/ocsrc" "$d/checks"
+head -c 200000 /dev/urandom > "$tmp/s/ocsrc/store.db"
+sync
+frames="$(tree_sums "$d/mirror/oc")"
+rc=0; VARVE_MAX_SPILL=1KB "$repo/bin/duck" locked "$repo/bin/build" 2>"$tmp/build.err" || rc=$?
+want "s: the build reports a failed runtime" "1" "$rc"
+want "s: it names the cap" "yes" "$(grep -q 'unpacks to 200000 bytes, over VARVE_MAX_SPILL' "$tmp/build.err" && echo yes || echo no)"
+want "s: the frames are unchanged" "$frames" "$(tree_sums "$d/mirror/oc")"
+want "s: no unpack directory is left" "" "$(find "$d/state" -name 'unpack.*' 2>/dev/null)"
+unset VARVE_LAKE
+
 exit $fail

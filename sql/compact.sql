@@ -1,5 +1,6 @@
 -- Rewrites one bucket as a single sorted file, level 19, and the next manifest.
--- Variables: mdir, bucket, drop (a session id whose files leave, or ''), out
+-- Variables: mdir, bucket, drop (a session id whose files leave, or ''), alter
+-- ('row' changes one output line, for the tests), out
 -- (the new file's path under the staging folder), staging (its folder).
 -- Placeholder @GEN@: the new generation. Needs live.sql. Fails, writing no
 -- manifest, unless the rows and their hash equal the inputs and every file's
@@ -12,7 +13,8 @@ CREATE TEMP TABLE inp AS
 SELECT count(*) AS n, coalesce(sum(hash(rel_path, line_no, line)::HUGEINT), 0) AS h
 FROM read_parquet(getvariable('inputs'), hive_partitioning = false)
 WHERE getvariable('drop') = '' OR NOT contains(rel_path, getvariable('drop'));
-COPY (SELECT rel_path, line_no, line FROM read_parquet(getvariable('inputs'), hive_partitioning = false)
+COPY (SELECT rel_path, line_no, line || CASE WHEN getvariable('alter') = 'row' AND line_no = 1 THEN 'x' ELSE '' END AS line
+      FROM read_parquet(getvariable('inputs'), hive_partitioning = false)
       WHERE getvariable('drop') = '' OR NOT contains(rel_path, getvariable('drop'))
       ORDER BY rel_path, line_no)
   TO (getvariable('out')) (FORMAT parquet, COMPRESSION zstd, COMPRESSION_LEVEL 19, ROW_GROUP_SIZE 20000, ROW_GROUP_SIZE_BYTES '64MB');
