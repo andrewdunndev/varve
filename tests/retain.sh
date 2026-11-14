@@ -29,6 +29,7 @@ nrows() { q -c "SELECT count(*) FROM $(lines_glob);"; }
 manifest() { q -c "SELECT $1 FROM read_parquet('$m/manifest.parquet') WHERE rel_path = '$2';"; }
 sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
 tree_sums() { (cd "$1" && find . -type f | LC_ALL=C sort | xargs shasum -a 256); }
+mtimes() { if stat --version >/dev/null 2>&1; then stat -c %Y "$@"; else stat -f %m "$@"; fi; }
 # drop_row FILE REL LINE_NO: rewrite a parquet file without one row.
 drop_row() {
   q -c "COPY (SELECT * FROM read_parquet('$1') WHERE NOT (rel_path = '$2' AND line_no = $3)) TO '$1.new' (FORMAT parquet);" > /dev/null
@@ -163,9 +164,9 @@ sync; build || { tail -5 "$tmp/build.err" >&2; fail=1; }
 other="$(manifest bucket testproj/test-session-2023.jsonl)"
 mine="$(manifest bucket testproj/test-session-scope.jsonl)"
 want "f: the two sessions sit in different buckets" "yes" "$([ "$other" != "$mine" ] && echo yes || echo no)"
-other_before="$(tree_sums "$m/lines/bucket=$other"; stat -f %m "$m/lines/bucket=$other"/* 2>/dev/null || stat -c %Y "$m/lines/bucket=$other"/*)"
+other_before="$(tree_sums "$m/lines/bucket=$other"; mtimes "$m/lines/bucket=$other"/*)"
 "$repo/bin/duck" locked "$repo/bin/forget" test-session-scope 2>"$tmp/forget.err" || { tail -5 "$tmp/forget.err" >&2; fail=1; }
-want "f: the other bucket is untouched" "$other_before" "$(tree_sums "$m/lines/bucket=$other"; stat -f %m "$m/lines/bucket=$other"/* 2>/dev/null || stat -c %Y "$m/lines/bucket=$other"/*)"
+want "f: the other bucket is untouched" "$other_before" "$(tree_sums "$m/lines/bucket=$other"; mtimes "$m/lines/bucket=$other"/*)"
 want "f: the session's lines are gone" "0" "$(q -c "SELECT count(*) FROM $(lines_glob) WHERE contains(rel_path, 'test-session-scope');")"
 want "f: the session is gone from the lake" "0" "$(q -c "SELECT count(*) FROM sessions WHERE session_id = 'test-session-scope';")"
 
