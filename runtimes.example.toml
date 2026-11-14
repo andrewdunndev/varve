@@ -1,10 +1,11 @@
 # SAMPLE. Copy to $VARVE_DATA/runtimes.toml and edit. One [[row]] per agent runtime.
-#   name     runtime column value and mirror folder (stores each file as NAME.zst)
+#   name     runtime column value and mirror folder
 #   adapter  file in adapters/ (the data home's adapters/ wins)
 #   source   where the runtime keeps its sessions
-#   include  find -name allow-list; nothing else is copied
-#   replace  optional; files exempt from never-shorter (a stale database and
-#            journal pair corrupts), compressed together or not at all
+#   include  find -name allow-list; nothing else is retained
+#   replace  optional; files kept as zstd frames, together or not at all, because
+#            a stale database and journal pair corrupts. Every other include file
+#            is retained as lines of a Parquet table.
 
 [[row]]
 name = "claude-code"

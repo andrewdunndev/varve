@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 740" width="720" height="740" role="img" aria-labelledby="syn-t syn-d">
-  <title id="syn-t">A retained frame only ever grows, except the replace set, which is swapped as a unit</title>
-  <desc id="syn-d">The per-file decision in bin/sync, top to bottom: config entries must be relative without parent references; find lists only regular files matching the include list, so symlinks are never retained; names in the replace list are skipped here; a forgotten session is skipped; an equal nanosecond mtime between source and frame is already current and spawns nothing; a source shorter than the frame's header size is skipped and counted; otherwise the file is compressed from its path to a temp name, retried up to three times if its size or mtime moved while it was read, tested, checked against the header size, and renamed into place. After the include pass the replace list is walked: each entry is checked for symlinks, staged together under temp names, and checked unchanged from before the first read to after the last with three tries, all or none up to there; then the journal frames are cleared, also when the source dropped the journal, and each temp is renamed into place. No engine runs.</desc>
+  <title id="syn-t">A retained line file only ever grows, except the replace set, which is swapped as a unit</title>
+  <desc id="syn-d">The per-file decision in bin/sync, top to bottom: config entries must be relative without parent references; find lists only regular files matching the include list, so symlinks are never retained; names in the replace list are skipped here; a forgotten session is skipped; a size and nanosecond mtime equal to the manifest row is already current and starts no engine; a source whose first retained bytes no longer hash to the manifest is kept as retained and counted diverged; otherwise the lines from the last complete line are written as a Parquet delta under lines.tmp, read back, and checked for line and byte counts, then the deltas and then the manifest are renamed into place. After the line files the replace list is walked: each entry is checked for symlinks, staged together under temp names, and checked unchanged from before the first read to after the last with three tries, all or none up to there; then the journal frames are cleared, also when the source dropped the journal, and each temp is renamed into place.</desc>
   <style>
     svg { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
     .box { fill: #f4f4f4; stroke: #c4c4c4; stroke-width: 1; }
@@ -59,7 +59,7 @@
   <text class="lbl" x="133" y="236">no</text>
   <text class="lbl" x="133" y="312">differs</text>
   <text class="lbl" x="133" y="388">no</text>
-  <text class="lbl" x="133" y="464">compressed</text>
+  <text class="lbl" x="133" y="464">written</text>
   <text class="lbl" x="133" y="540">no</text>
   <text class="lbl" x="304" y="36" text-anchor="middle">then the replace list</text>
   <text class="lbl" x="250" y="188" text-anchor="middle">yes</text>
@@ -78,20 +78,20 @@
   <text class="nm" x="125" y="191" text-anchor="middle">session forgotten?</text>
   <text class="sub" x="125" y="207" text-anchor="middle">id in the path: never retained</text>
   <rect class="box" x="20" y="248" width="210" height="44" rx="6"/>
-  <text class="nm" x="125" y="267" text-anchor="middle">same ns mtime?</text>
-  <text class="sub" x="125" y="283" text-anchor="middle">skips with no process spawned</text>
+  <text class="nm" x="125" y="267" text-anchor="middle">same size and mtime?</text>
+  <text class="sub" x="125" y="283" text-anchor="middle">equals manifest row: no engine</text>
   <rect class="box" x="20" y="324" width="210" height="44" rx="6"/>
-  <text class="nm" x="125" y="343" text-anchor="middle">source shorter than frame?</text>
-  <text class="sub" x="125" y="359" text-anchor="middle">size from the frame header, no decode</text>
+  <text class="nm" x="125" y="343" text-anchor="middle">prefix hash equals manifest?</text>
+  <text class="sub" x="125" y="359" text-anchor="middle">the retained bytes, else diverged</text>
   <rect class="box" x="20" y="400" width="210" height="44" rx="6"/>
-  <text class="nm" x="125" y="419" text-anchor="middle">zstd -19 to name.zst.tmp.PID</text>
-  <text class="sub" x="125" y="435" text-anchor="middle">from the file path; test, header size</text>
+  <text class="nm" x="125" y="419" text-anchor="middle">new lines to lines.tmp/</text>
+  <text class="sub" x="125" y="435" text-anchor="middle">from the last complete line; level 9</text>
   <rect class="box" x="20" y="476" width="210" height="44" rx="6"/>
-  <text class="nm" x="125" y="495" text-anchor="middle">source unchanged while read?</text>
-  <text class="sub" x="125" y="511" text-anchor="middle">size, ns mtime; 3 tries, else kept</text>
+  <text class="nm" x="125" y="495" text-anchor="middle">lines and bytes read back?</text>
+  <text class="sub" x="125" y="511" text-anchor="middle">per file; else unstable, retried</text>
   <rect class="acc" x="20" y="552" width="210" height="44" rx="6"/>
-  <text class="anm" x="125" y="571" text-anchor="middle">mv temp over name.zst</text>
-  <text class="asub" x="125" y="587" text-anchor="middle">rename: never a partial file</text>
+  <text class="anm" x="125" y="571" text-anchor="middle">rename deltas, then manifest</text>
+  <text class="asub" x="125" y="587" text-anchor="middle">the manifest rename is the commit</text>
 
   <!-- outcomes -->
   <rect class="out" x="270" y="172" width="100" height="44" rx="6"/>
@@ -102,9 +102,9 @@
   <text class="sub" x="320" y="283" text-anchor="middle">already current</text>
   <rect class="out" x="270" y="324" width="100" height="44" rx="6"/>
   <text class="nm" x="320" y="343" text-anchor="middle">skip</text>
-  <text class="sub" x="320" y="359" text-anchor="middle">counted shorter</text>
+  <text class="sub" x="320" y="359" text-anchor="middle">counted diverged</text>
   <rect class="out" x="270" y="476" width="100" height="44" rx="6"/>
-  <text class="nm" x="320" y="495" text-anchor="middle">drop temp</text>
+  <text class="nm" x="320" y="495" text-anchor="middle">drop delta</text>
   <text class="sub" x="320" y="511" text-anchor="middle">kept unstable</text>
 
   <!-- replace set arrows -->
@@ -145,6 +145,6 @@
   <text class="anm" x="548" y="587" text-anchor="middle">rename each temp into place</text>
   <text class="asub" x="548" y="603" text-anchor="middle">staged and checked first</text>
 
-  <text class="sub" x="20" y="640">No engine runs. Temp frames stranded by a killed run</text>
+  <text class="sub" x="20" y="640">Replace sets run no engine. Temp frames stranded by a killed run</text>
   <text class="sub" x="20" y="656">are deleted at the start, under the sync lock.</text>
 </svg>

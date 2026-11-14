@@ -15,7 +15,7 @@ state     := data_home + "/state"
 default:
     @just --list
 
-# Copy runtime sources into the mirror (no engine, nice 19).
+# Retain runtime sources in the mirror: Parquet lines, nice 19, under the lock.
 sync:
     {{repo}}/bin/sync
 

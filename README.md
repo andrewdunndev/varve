@@ -29,17 +29,17 @@ can serve as simulation evidence and leak-free benchmark material.
 
 ## Architecture
 
-`just sync` compresses sources into a mirror of zstd frames. `just build` streams them into a rebuilt lake, checks it, swaps it in, then runs the mines (ADR-0008 to ADR-0010).
+`just sync` retains sources in the mirror: a Parquet table of the lines of each JSONL runtime, compressed and queryable in SQL. `just build` reads them into a rebuilt lake, checks it, swaps it in, then runs the mines (ADR-0008 to ADR-0011).
 
 ![The runtime stores are compressed into the mirror, built into a new lake, checked, swapped in and mined; the data home sits apart from the repo.](docs/img/system.svg)
 
-Sync never opens the engine.
+Sync opens the engine only through `bin/duck`, so it shares the lock and the bounds with the build.
 
 Three primitives: files, SQL files, one runner (`bin/duck`). Everything extensible is a SQL file, run in a fixed order: adapters, checks, swap, mines.
 
 | Kind | Reads | Rows become |
 |------|-------|-------------|
-| adapter | the mirror | the four tables |
+| adapter | the retained lines | the four tables |
 | check | the tables | failures |
 | mine | the tables | a saved table |
 | query | the tables | printed output |
@@ -50,7 +50,7 @@ A new runtime is a row in `runtimes.toml` and an adapter, both in the data home.
 
 ![The per-file decision in bin/sync and the replace set that moves a database and its journal together.](docs/img/sync.svg)
 
-A retained frame only ever grows, except the replace set, which is swapped as a unit. A session deleted at its source stays in the mirror and the lake.
+A retained file only ever grows, except the replace set, which is swapped as a unit. A source that is rewritten or shorter keeps its retained bytes and is named. A session deleted at its source stays in the mirror and the lake, and the lake rebuilds from the retained lines alone.
 
 ![One build as a sequence: a failed runtime keeps its published partitions, a failed check before the swap leaves the lake untouched, a rename swaps the new lake in.](docs/img/build.svg)
 
@@ -75,10 +75,10 @@ One wrapper bounds every DuckDB process.
 | `docs/` | Goals (`prd.md`), ADRs (`adr/`), the correction-mining method (`rfc/`), query index |
 | `checks/` | Checks that run on every build |
 | `tests/` | Synthetic three-runtime fixtures and expected output for `just test` |
-| `bin/` | The runner (`duck`) and the scripts behind `sync` (compresses into the mirror), `build` (streams it), `check`, `forget` and `mine`; `pack` is the one-shot that converts a plain mirror |
+| `bin/` | The runner (`duck`) and the scripts behind `sync` (retains lines in the mirror), `lines` (sweep, commit, compact, verify), `build` (reads them), `check`, `forget` and `mine`; `pack` is the one-shot that converts a plain mirror |
 | `justfile` | `sync`, `build`, `check`, `forget`, `mine`, `review`, `interventions`, `stats`, `sql`, `lint`, `test`, `disk` |
 
-`mise install` provisions the pinned `duckdb`, `just` and `yq` from `mise.toml`. A `duckdb` or `yq` on `PATH` is used only when it reports the pinned version. `sync` and `build` also need `zstd` on `PATH`, and `sqlite3` for opencode.
+`mise install` provisions the pinned `duckdb`, `just` and `yq` from `mise.toml`. A `duckdb` or `yq` on `PATH` is used only when it reports the pinned version. A runtime with a `replace` set (opencode) also needs `zstd` and `sqlite3` on `PATH`.
 
 To start, copy the examples into the data home, delete the `runtimes.toml` rows for tools you do not use, then sync and build. `just` must be on `PATH`, for example through `mise activate`.
 

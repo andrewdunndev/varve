@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 812" width="720" height="812" role="img" aria-labelledby="bld-t bld-d">
   <title id="bld-t">One build, in order: a failed runtime keeps its published partitions, a failed check before the swap leaves lake/ untouched</title>
-  <desc id="bld-d">A sequence between bin/build, bin/duck (one process per runtime), the adapter, lake.new, bin/check, lake/ and bin/mine. A build first restores lake/ from lake.old if lake/ is missing. Runtime A runs its adapter, which streams the mirror's zstd frames, and writes four tables into lake.new. Runtime B's adapter fails with exit 2, its output is removed from lake.new, and its published partitions are copied back from lake/. A cap hit (exit 1) abandons the build. bin/check reads lake.new against the published lake; a failing check removes lake.new and leaves lake/ untouched. A passing check renames lake to lake.old and lake.new to lake, then bin/mine runs and saves its tables into lake/.</desc>
+  <desc id="bld-d">A sequence between bin/build, bin/duck (one process per runtime), the adapter, lake.new, bin/check, lake/ and bin/mine. A build first restores lake/ from lake.old if lake/ is missing. Runtime A runs its adapter, which reads the mirror's retained lines, and writes four tables into lake.new. Runtime B's adapter fails with exit 2, its output is removed from lake.new, and its published partitions are copied back from lake/. A cap hit (exit 1) abandons the build. bin/check reads lake.new against the published lake; a failing check removes lake.new and leaves lake/ untouched. A passing check renames lake to lake.old and lake.new to lake, then bin/mine runs and saves its tables into lake/.</desc>
   <style>
     svg { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
     .box { fill: #f4f4f4; stroke: #c4c4c4; stroke-width: 1; }
@@ -77,7 +77,7 @@
   <path class="ln" d="M60,168 H160" marker-end="url(#bld-ar)"/>
   <text class="lbl" x="110" y="162" text-anchor="middle">spawn A</text>
   <path class="ln" d="M160,192 H260" marker-end="url(#bld-ar)"/>
-  <text class="lbl" x="210" y="186" text-anchor="middle">reads A frames</text>
+  <text class="lbl" x="210" y="186" text-anchor="middle">reads A lines</text>
   <path class="ln" d="M260,216 H360" marker-end="url(#bld-ar)"/>
   <text class="lbl" x="310" y="210" text-anchor="middle">writes 4 tables</text>
   <path class="rt" d="M160,238 H60" marker-end="url(#bld-ar)"/>
@@ -87,7 +87,7 @@
   <path class="ln" d="M60,298 H160" marker-end="url(#bld-ar)"/>
   <text class="lbl" x="110" y="292" text-anchor="middle">spawn B</text>
   <path class="ln" d="M160,322 H260" marker-end="url(#bld-ar)"/>
-  <text class="lbl" x="210" y="316" text-anchor="middle">reads B frames</text>
+  <text class="lbl" x="210" y="316" text-anchor="middle">reads B lines</text>
   <path class="err" d="M260,346 H160" marker-end="url(#bld-er)"/>
   <text class="elb" x="210" y="340" text-anchor="middle">SQL error</text>
   <path class="err" d="M160,370 H60" marker-end="url(#bld-er)"/>

@@ -45,7 +45,7 @@
 
 **Neutral**
 - Whole-build time is unmeasured. If a capped build is too slow, build goes incremental by (runtime, month).
-- `messages` dominates lake size. `content` is retired; the mirror holds the verbatim copy (as frames, ADR-0011).
+- `messages` dominates lake size. `content` is retired; the mirror holds the verbatim copy (as Parquet lines, ADR-0011).
 
 ## References
 
