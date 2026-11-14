@@ -56,13 +56,13 @@
 ## Consequences
 
 **Positive**
-- Mirror 15.7G to about 3.5G; data home 17G to about 4.5G (claude-code 3.4G to 3.5G, opencode 0.06G to 0.08G, lake 0.9G to 1.0G), 26% of today.
+- Mirror 15.7G to about 3.0G to 3.5G; data home 17G to about 4.0G to 4.5G (claude-code 2.9G to 3.4G, opencode 0.06G to 0.08G, lake 0.9G to 1.0G), under 27% of today. The migration sample (1181 files, 310MB from 20 projects, built by `bin/pack`) kept 59.5MB, 5.2x; the 2308-file sample above kept 4.4x.
 - A session deleted at its source stays queryable in SQL straight from the retained lines; the lake rebuilds from them alone.
-- Routine sync: 22633 stats in 0.26s; a no-change run under 1s; 100 grown files (34MB) in 0.4s.
+- Routine sync: a no-change run over 1181 files takes 0.13s and starts no engine; 100 grown files (26MB) take 1.5s.
 
 **Negative**
 - `sync` needs the engine; ADR-0010's "sync never opens DuckDB" is amended.
-- First conversion about 27 min at nice 19 on 2 threads: deltas at level 9 about 5 min, compaction at level 19 about 20 min, verify about 3 min, opencode about 1 min. Extrapolated from the 755MB sample.
+- First conversion about 45 min at nice 19 on 2 threads (56s for the 310MB sample, 1.5GB peak resident, extrapolated by bytes), verify about 2.5 min (3s for the sample), opencode about 1 min.
 - Build is slower and larger than over plain files: 7.6s and 2.6GB peak resident against 4.6s and 1.6GB on the sample; 4.6s against 1.5s on the large files. Full corpus about 2.5 to 3.5 min against 2.0.
 - Peak resident is about 3GB in sync at 2 threads with a 122MB file. A file whose pass would not fit is skipped and named.
 - A source rewritten in place stops being followed; the retained copy is the old bytes.
