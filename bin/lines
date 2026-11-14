@@ -8,9 +8,8 @@
 #   bin/lines compact DIR [--drop ID] BUCKET...
 #                                    rewrite each bucket as one verified file; --drop
 #                                    leaves out the files whose path contains ID
-#   bin/lines verify DIR [--plain SRC]
-#                                    rebuild every file from its lines; sha256 must
-#                                    equal the manifest (and the plain file under SRC)
+#   bin/lines verify DIR            rebuild every file from its lines; sha256 must
+#                                    equal the manifest
 #
 # The manifest is the only commit. For the tests: VARVE_CRASH=delta stops commit
 # after the data files are renamed and before the manifest is; VARVE_CRASH=row makes
@@ -85,13 +84,12 @@ compact() {
 }
 
 verify() {
-  local src="" b=0 nb=1 ok=0 bad=0 o
-  if [ "${1:-}" = --plain ]; then src="${2%/}/"; fi
+  local b=0 nb=1 ok=0 bad=0 o
   [ -f "$man" ] || { echo "verify 0 0"; return; }
   if [ -z "$(find "$dir/lines" -name '*.parquet' -print -quit 2>/dev/null)" ]; then echo "verify 0 0"; return; fi
   while [ "$b" -lt "$nb" ]; do
     o="$(duck "verify $dir" -noheader -list -separator ' ' "${mdir[@]}" \
-      -c "SET VARIABLE batch=$b; SET VARIABLE cap=${VARVE_VERIFY_BATCH:-256000000}; SET VARIABLE src='$(qs "$src")';" \
+      -c "SET VARIABLE batch=$b; SET VARIABLE cap=${VARVE_VERIFY_BATCH:-256000000};" \
       -f "$repo/sql/live.sql" -f "$repo/sql/verify.sql")" || die "verify: the engine failed"
     set -- $o
     ok=$((ok + $1)); bad=$((bad + $2)); nb="$3"
@@ -104,6 +102,6 @@ case "$cmd" in
   sweep) sweep ;;
   commit) commit ;;
   compact) compact "$@" ;;
-  verify) verify "$@" ;;
+  verify) verify ;;
   *) die "unknown command $cmd" ;;
 esac

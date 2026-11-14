@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Retain runtime sources in the mirror (ADR-0011).
 #
-#   bin/sync [--compact] [--verify] [--from-mirror]
+#   bin/sync [--compact] [--verify]
 #
 # A runtime without a `replace` set is kept as Parquet line tables: one manifest
 # row per source file (size, mtime, sha256 of every retained byte, the partial
@@ -13,10 +13,6 @@
 #   --compact       also rewrite every bucket that holds deltas
 #   --verify        rebuild every retained file from its lines and compare sha256;
 #                   exit 1 on any mismatch
-#   --from-mirror   read each runtime's plain files out of its mirror folder
-#                   (bin/pack, the one-shot migration)
-#   --delete-plain  with --from-mirror --verify: delete a runtime's plain files when
-#                   every one of them verified against its lines
 # Config: $VARVE_DATA/runtimes.toml (see runtimes.example.toml). Sessions listed
 # in forgotten.toml are never retained. Runs under bin/duck locked, niced.
 set -euo pipefail
@@ -31,17 +27,14 @@ mirror="${VARVE_MIRROR:-$data/mirror}"
 die() { echo "varve: sync: $*" >&2; exit 2; }
 qs() { printf '%s' "$1" | sed "s/'/''/g"; }
 
-compact=0; verify=0; frommirror=0; deleteplain=0
+compact=0; verify=0
 for a in "$@"; do
   case "$a" in
     --compact) compact=1 ;;
     --verify) verify=1 ;;
-    --from-mirror) frommirror=1 ;;
-    --delete-plain) deleteplain=1 ;;
     *) die "unknown argument $a" ;;
   esac
 done
-if [ "$deleteplain" = 1 ] && { [ "$frommirror" = 0 ] || [ "$verify" = 0 ]; }; then die "--delete-plain needs --from-mirror and --verify"; fi
 
 export VARVE_THREADS="${VARVE_THREADS:-2}" VARVE_MEMORY_LIMIT="${VARVE_MEMORY_LIMIT:-3GB}"
 maxfile="${VARVE_MAX_FILE:-160000000}"
@@ -211,28 +204,11 @@ retain_lines() {
 
 # check_lines: --verify for one runtime; a mismatch fails the run.
 check_lines() {
-  local mdir="$mirror/$name" r k ok bad missing=""
-  if [ "$frommirror" = 1 ]; then
-    r="$("$repo/bin/lines" verify "$mdir" --plain "$src")"
-    scan_files > "$work/scan"
-    if [ -f "$mdir/manifest.parquet" ]; then
-      "$repo/bin/duck" "sync $name" -noheader -list -c "SELECT rel_path FROM read_parquet('$(qs "$mdir/manifest.parquet")');" | LC_ALL=C sort > "$work/rels"
-    else : > "$work/rels"; fi
-    missing="$(cut -f1 "$work/scan" | LC_ALL=C comm -23 - "$work/rels" | wc -l | tr -d ' ')"
-  else
-    r="$("$repo/bin/lines" verify "$mdir")"
-  fi
+  local mdir="$mirror/$name" r k ok bad
+  r="$("$repo/bin/lines" verify "$mdir")"
   read -r k ok bad <<< "$r"
-  echo "varve: sync $name: verify $ok of $((ok + bad)) match${missing:+, $missing plain without a retained twin}" >&2
-  if [ "$bad" -gt 0 ] || [ "${missing:-0}" -gt 0 ]; then verifyfail=1; fi
-  if [ "$deleteplain" = 1 ] && [ "$bad" = 0 ] && [ "${missing:-0}" = 0 ]; then
-    n=0
-    while IFS=$'\t' read -r r k ok; do
-      safe_rel "$r" && rm -f "$src/$r" && n=$((n + 1))
-    done < "$work/scan"
-    find "$src" -mindepth 1 -type d -empty -delete
-    echo "varve: sync $name: deleted $n plain files, each rebuilt from its lines to the same sha256" >&2
-  fi
+  echo "varve: sync $name: verify $ok of $((ok + bad)) match" >&2
+  if [ "$bad" -gt 0 ]; then verifyfail=1; fi
 }
 
 rows="$("$yq" -p toml -o=tsv '(.row // [])[] | [.name, .source, (.include | join(",")), ((.replace // []) | join(","))]' "$data/runtimes.toml")"
@@ -241,7 +217,6 @@ verifyfail=0; toolfail=0
 while IFS=$'\t' read -r name source include replace; do
   [ -n "$name" ] || continue
   src="${source/#\~/$HOME}"
-  if [ "$frommirror" = 1 ]; then src="$mirror/$name"; fi
   src="${src%/}"
   if [ ! -d "$src" ]; then echo "varve: sync $name: no source at $src" >&2; continue; fi
   realsrc="$(cd "$src" && pwd -P)"

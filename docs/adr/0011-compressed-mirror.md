@@ -40,12 +40,12 @@
 - **Commit.** Sync works in batches of at most 256MB of source bytes. A batch writes its deltas under `lines.tmp/`, reads them back and checks per file the row count and byte count, renames the delta files into place, then renames the new manifest with `gen + 1`. The manifest is the only commit. A file in `lines/` whose gen is above the manifest's, or that a newer `c-` file replaced, is garbage; every sync, build and forget sweeps it first. A crash at any point leaves the previous manifest and its files valid. The sweep deletes nothing, and exits 2, when the manifest has no `gen` or when `lines/` holds files and there is no manifest.
 - **Compaction.** When a bucket holds 8 deltas, or on `--compact`, sync rewrites that bucket as one `c-<gen>.parquet` sorted by `(rel_path, line_no)` at level 19, from the old `c-` and its deltas. Before the manifest rename it checks that the row count and `sum(hash(rel_path, line_no, line))` equal the inputs and that every file's line count equals the manifest. Memory is the sort of one bucket.
 - **Levels.** Deltas are level 9 (a 755MB sync takes 14s against 110s at level 19; 5% larger); compacted buckets level 19; row groups 20000 rows or 64MB.
-- **Exact check.** `bin/sync --verify` rebuilds each file from its lines in batches of 256MB and compares its sha256 with the manifest. `bin/pack --verify` also compares it with the plain file.
+- **Exact check.** `bin/sync --verify` rebuilds each file from its lines in batches of 256MB and compares its sha256 with the manifest.
 - **Build.** The claude-code and pi adapters read `lines/*/*.parquet` and parse JSON from `line` with `json_transform` and `json_valid`; `rel_path` is the old `filename`. Tool blocks come from their own narrow parse of only the lines that contain `"tool_use"` or `"tool_result"`; parsing every line wide ran out of the 3GB limit on image payloads.
 - **forget.** A session's files are found in the manifest by `contains(rel_path, id)`. Each affected bucket is compacted without them, verified as above, and committed with their rows gone. Other buckets are untouched.
 - **opencode.** The replace set stays a verified `.db.zst` frame pair unpacked per build (zstd 19 gives 15.5x, 848MB to 55MB); a Parquet form of rows would add a lossless-round-trip proof for no saving.
 - `sync` opens the engine only through `bin/duck`, so it shares the lock and the caps of ADR-0010; it and `build` never overlap.
-- The plain mirror goes by `bin/pack`, a one-shot: it retains the plain `*.jsonl` of each such runtime in place with the sync code, writes `.zst` beside the replace set, and `--verify` checks every file by sha256 against the plain file and prints counts. `bin/pack --delete-plain` runs the same verification and deletes each plain file that passed: a runtime's line files when all of them match their lines, a replace-set file when its frame decompresses to the same bytes. Frames and lines are never deleted. The operator runs no other delete.
+- The live plain mirror was converted once and deleted: 22633 files migrated, every one sha256-verified against its source bytes; data home 5.5G including a 1.0G build rollback copy; compaction deferred.
 
 **Rejected**
 - Per-file zstd 19 (ruled earlier): 3.45x to 4.2x, and adapters stay on files. The operator chose the table.
@@ -56,14 +56,14 @@
 ## Consequences
 
 **Positive**
-- Mirror 15.7G to about 3.0G to 3.5G; data home 17G to about 4.3G to 4.7G (claude-code 3.5G, opencode 0.06G, lake 1.0G), under 28% of today. The migration sample (314.6MB from 20 projects, including the 122MB and 75MB files, built by `bin/pack`) kept 73.25MB, 4.29x; the 2308-file sample above kept 4.4x. The ratio is sample-specific: an earlier 310MB sample of 1181 files kept 5.2x.
+- Mirror 15.7G to about 3.0G to 3.5G; data home 17G to about 4.3G to 4.7G (claude-code 3.5G, opencode 0.06G, lake 1.0G), under 28% of today. The migration sample (314.6MB from 20 projects, including the 122MB and 75MB files,) kept 73.25MB, 4.29x; the 2308-file sample above kept 4.4x. The ratio is sample-specific: an earlier 310MB sample of 1181 files kept 5.2x.
 - A session deleted at its source stays queryable in SQL straight from the retained lines; the lake rebuilds from them alone.
 - Routine sync: a no-change run over 1181 files takes 0.13s and starts no engine; 100 grown files (26MB) take 1.5s.
 
 **Negative**
 - `sync` needs the engine; ADR-0010's "sync never opens DuckDB" is amended.
 - First conversion about 45 min at nice 19 on 2 threads (the 314MB sample, 1.42GB peak resident, extrapolated by bytes), verify about 2.5 min (3s for the sample), opencode about 1 min.
-- Build is slower and larger than over plain files: 19.7s under load and 1.35GB peak resident against 7.6s and 1.07GB for a build over the plain files on the same sample; 4.6s against 1.5s on the large files. Full corpus (24570 files, 3.6GB of Parquet): about 6 min and 2.3GB peak resident at 2 threads under memory_limit 3GB, against 2 min and 3.6GB over the plain files. Each JSON function holds the parse of its last chunk and the optimizer repeats a parse into every filter above it, so the adapter ends each parse in a streaming limit, cuts image payloads before parsing, runs the message and tool stages on one thread into a temp file, and finds repeats and pairs on keys alone.
+- Build is slower and larger than over plain files: 19.7s under load and 1.35GB peak resident against 7.6s and 1.07GB for a full `bin/build` over the plain files on the same sample; 4.6s against 1.5s on the large files. Full corpus (24570 files, 3.6GB of Parquet): about 6 min and 2.3GB peak resident at 2 threads under memory_limit 3GB, against 2 min and 3.6GB for a full `bin/build` over the plain files. Each JSON function holds the parse of its last chunk and the optimizer repeats a parse into every filter above it, so the adapter ends each parse in a streaming limit, cuts image payloads before parsing, runs the message and tool stages on one thread into a temp file, and finds repeats and pairs on keys alone.
 - Peak resident is about 1.4GB in sync at 2 threads, measured over a sample holding the 122MB and 75MB files. A file whose pass would not fit is not retained, named, and fails the sync.
 - A source rewritten in place stops being followed; the retained copy is the old bytes.
 - A data-home adapter that reads files breaks once.

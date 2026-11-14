@@ -187,26 +187,16 @@ unset VARVE_LAKE
 
 echo "varve test: retention (l) every retained file reconstructs to its source bytes" >&2
 home l
-export VARVE_MIRROR="$d/mirror"
-mkdir -p "$VARVE_MIRROR/claude-code/p"
-cp "$repo/tests/fixtures/source/claude-code/testproj/session-scope.jsonl" "$VARVE_MIRROR/claude-code/p/x.jsonl"
-cp "$repo/tests/fixtures/source/claude-code/testproj/session-2023.jsonl" "$VARVE_MIRROR/claude-code/p/y.jsonl"
-"$repo/bin/pack" 2>/dev/null
-rc=0; "$repo/bin/pack" --verify 2>"$tmp/err" || rc=$?
-want "l: pack --verify passes" "0" "$rc"
-want "l: pack --verify counts every file" "yes" "$(grep -q 'verify 2 of 2 match' "$tmp/err" && echo yes || echo no)"
+mkdir -p "$s/p"
+cp "$repo/tests/fixtures/source/claude-code/testproj/session-scope.jsonl" "$s/p/x.jsonl"
+cp "$repo/tests/fixtures/source/claude-code/testproj/session-2023.jsonl" "$s/p/y.jsonl"
+sync
 rc=0; "$repo/bin/sync" --verify 2>"$tmp/err" || rc=$?
 want "l: sync --verify passes" "0" "$rc"
-printf 'extra\n' > "$VARVE_MIRROR/claude-code/p/z.jsonl"
-rc=0; "$repo/bin/pack" --verify 2>/dev/null || rc=$?
-want "l: pack --verify fails on a plain file with no twin" "1" "$rc"
-"$repo/bin/pack" 2>/dev/null
+want "l: sync --verify counts every file" "yes" "$(grep -q 'verify 2 of 2 match' "$tmp/err" && echo yes || echo no)"
 drop_row "$(find "$m/lines" -name '*.parquet' -print -quit)" p/x.jsonl 1
-rc=0; "$repo/bin/pack" --verify 2>/dev/null || rc=$?
-want "l: pack --verify fails on a mutated row" "1" "$rc"
 rc=0; "$repo/bin/sync" --verify 2>/dev/null || rc=$?
 want "l: sync --verify fails on a mutated row" "1" "$rc"
-unset VARVE_MIRROR
 
 echo "varve test: retention (m) sweep fails closed when the manifest or its gen is missing" >&2
 home m
@@ -283,30 +273,6 @@ want "q: the file is named" "yes" "$(grep -q 'big.jsonl' "$tmp/err" && echo yes 
 want "q: the small file is retained" "small.jsonl" "$(q -c "SELECT string_agg(rel_path, ',') FROM read_parquet('$m/manifest.parquet');")"
 rc=0; sync || rc=$?
 want "q: under the cap the sync passes" "0" "$rc"
-
-echo "varve test: retention (r) pack --delete-plain removes only what verified" >&2
-home r
-export VARVE_MIRROR="$d/mirror"
-printf '[[row]]\nname = "oc"\nadapter = "opencode.sql"\nsource = "%s"\ninclude = ["store.db", "store.db-wal"]\nreplace = ["store.db", "store.db-wal"]\n' "$tmp/r/ocsrc" >> "$d/runtimes.toml"
-mkdir -p "$VARVE_MIRROR/claude-code/p" "$VARVE_MIRROR/oc"
-printf 'l1\nl2\n' > "$VARVE_MIRROR/claude-code/p/x.jsonl"
-printf 'db bytes' > "$VARVE_MIRROR/oc/store.db"
-printf 'wal bytes' > "$VARVE_MIRROR/oc/store.db-wal"
-"$repo/bin/pack" 2>/dev/null
-"$repo/bin/pack" --delete-plain 2>/dev/null
-want "r: the plain line file is gone" "no" "$([ -e "$VARVE_MIRROR/claude-code/p/x.jsonl" ] && echo yes || echo no)"
-want "r: the plain database is gone" "no" "$([ -e "$VARVE_MIRROR/oc/store.db" ] && echo yes || echo no)"
-want "r: the frames stay" "2" "$(find "$VARVE_MIRROR/oc" -name '*.zst' | wc -l | tr -d ' ')"
-want "r: the lines still verify" "1 of 1" "$("$repo/bin/sync" --verify 2>&1 | sed -n 's/.*verify \([0-9]*\) of \([0-9]*\) match.*/\1 of \2/p' | head -1)"
-mkdir -p "$VARVE_MIRROR/claude-code/p"
-printf 'l1\nl2\n' > "$VARVE_MIRROR/claude-code/p/y.jsonl"
-"$repo/bin/pack" 2>/dev/null
-drop_row "$(find "$m/lines" -name '*.parquet' -print -quit)" p/y.jsonl 1
-printf 'more\n' > "$VARVE_MIRROR/claude-code/p/z.jsonl"
-rc=0; "$repo/bin/pack" --delete-plain 2>/dev/null || rc=$?
-want "r: a runtime with a bad file fails" "1" "$rc"
-want "r: and loses no plain file" "2" "$(find "$VARVE_MIRROR/claude-code/p" -name '*.jsonl' | wc -l | tr -d ' ')"
-unset VARVE_MIRROR
 
 echo "varve test: retention (s) build refuses a replace set over VARVE_MAX_SPILL and keeps its frames" >&2
 home s

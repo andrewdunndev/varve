@@ -75,7 +75,7 @@ One wrapper bounds every DuckDB process.
 | `docs/` | Goals (`prd.md`), ADRs (`adr/`), the correction-mining method (`rfc/`), query index |
 | `checks/` | Checks that run on every build |
 | `tests/` | Synthetic three-runtime fixtures and expected output for `just test` |
-| `bin/` | The runner (`duck`) and the scripts behind `sync` (retains lines in the mirror), `lines` (sweep, commit, compact, verify), `build` (reads them), `check`, `forget` and `mine`; `pack` is the one-shot that converts a plain mirror |
+| `bin/` | The runner (`duck`) and the scripts behind `sync` (retains lines in the mirror), `lines` (sweep, commit, compact, verify), `build` (reads them), `check`, `forget` and `mine` |
 | `justfile` | `sync`, `build`, `check`, `forget`, `mine`, `review`, `interventions`, `stats`, `sql`, `lint`, `test`, `disk` |
 
 `mise install` provisions the pinned `duckdb`, `just` and `yq` from `mise.toml`. A `duckdb` or `yq` on `PATH` is used only when it reports the pinned version. A runtime with a `replace` set (opencode) also needs `zstd` and `sqlite3` on `PATH`.
