@@ -500,7 +500,6 @@ test:
       got="$(wal_rows)"
       if [ "$got" != "main-1,wal-1,wal-2" ]; then echo "FAIL: rows held only in the -wal did not read back, got: $got" >&2; fail=1; fi
       if [ "$(wal_sums)" != "$sums0" ]; then echo "FAIL: reading the live copy changed the mirror: before [$sums0] after [$(wal_sums)]" >&2; fail=1; fi
-      echo "  mirror after read: $(ls "$w/mirror/oc" | tr '\n' ' ')" >&2
 
       touch "$w/release"; wait "$holder" || true
       if [ -s "$w/src/store.db-wal" ]; then echo "FAIL: a clean close left data in the source -wal" >&2; fail=1; fi
