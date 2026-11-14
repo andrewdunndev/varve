@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
-# bin/sync: grow-only compressed copy, allow-list, forgotten sessions, replace set.
+# bin/sync: allow-list, forgotten sessions, the replace set that moves a database
+# and its journal together, and nothing copied from outside the source root.
+# Retention of line files is tests/retain.sh.
 set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tmp="$(mktemp -d -t varve_sync.XXXXXX)"
 trap 'rm -rf "$tmp"' EXIT
 export VARVE_DATA="$tmp/data" VARVE_LOCK="$tmp/lock"
-unset VARVE_MIRROR VARVE_SYNC_NICED
+unset VARVE_MIRROR VARVE_SYNC_NICED VARVE_LOCK_PID
 sync="$repo/bin/sync"
 src="$tmp/src"
 fail=0
 zd() { zstd -dc "$1"; }
 mtn() { if stat --version >/dev/null 2>&1; then stat -c %.9Y "$1"; else stat -f %Fm "$1"; fi; }
+# rels MIRROR: the retained source files, comma separated.
+rels() { "$repo/bin/duck" rels -noheader -list -c "SELECT coalesce(string_agg(rel_path, ',' ORDER BY rel_path), '') FROM read_parquet('$1/manifest.parquet');"; }
 
 want() {
   if [ "$2" != "$3" ]; then echo "FAIL: $1: want '$2', got '$3'" >&2; fail=1; else echo "  ok: $1" >&2; fi
@@ -31,22 +35,11 @@ printf 'aaaa\n' > "$src/proj/one.jsonl"
 printf 'secret\n' > "$src/proj/.credentials.json"
 printf 'db1\n' > "$src/store.db"; printf 'wal-long\n' > "$src/store.db-wal"
 "$sync" 2>/dev/null
-want "copied, retained as a frame" "aaaa" "$(zd "$m/proj/one.jsonl.zst")"
-want "the frame holds no plain twin" "no" "$([ -e "$m/proj/one.jsonl" ] && echo yes || echo no)"
-want "the frame carries the source mtime" "$(mtn "$src/proj/one.jsonl")" "$(mtn "$m/proj/one.jsonl.zst")"
+want "a line file is retained as lines" "proj/one.jsonl" "$(rels "$m")"
+want "no plain copy and no frame of a line file" "no" "$([ -e "$m/proj/one.jsonl" ] || [ -e "$m/proj/one.jsonl.zst" ] && echo yes || echo no)"
 want "sibling not copied" "no" "$([ -e "$m/proj/.credentials.json" ] && echo yes || echo no)"
 want "replace pair copied" "db1 wal-long" "$(zd "$m/store.db.zst") $(zd "$m/store.db-wal.zst")"
-
-printf 'aa\n' > "$src/proj/one.jsonl"
-"$sync" 2>"$tmp/err"
-want "shorter source is loud" "yes" "$(grep -q "shorter than its retained copy" "$tmp/err" && echo yes || echo no)"
-want "shorter source counted" "yes" "$(grep -q "skipped 1 shorter" "$tmp/err" && echo yes || echo no)"
-want "shorter source kept" "aaaa" "$(zd "$m/proj/one.jsonl.zst")" "aaaa" "$(zd "$m/proj/one.jsonl.zst")"
-
-printf 'aaaaaaaa\n' > "$src/proj/one.jsonl"
-"$sync" 2>/dev/null
-want "longer source recompressed" "aaaaaaaa" "$(zd "$m/proj/one.jsonl.zst")"
-want "longer source frame is whole" "yes" "$(cmp -s "$src/proj/one.jsonl" <(zd "$m/proj/one.jsonl.zst") && echo yes || echo no)"
+want "the replace set stays out of the lines" "proj/one.jsonl" "$(rels "$m")"
 
 printf 'w\n' > "$src/store.db-wal"
 "$sync" 2>/dev/null
@@ -60,12 +53,10 @@ runtime = "alpha"
 at = "2026-01-01"
 T
 "$sync" 2>/dev/null
-want "forgotten not copied" "no" "$([ -e "$m/proj/gone-session-9.jsonl.zst" ] && echo yes || echo no)"
+want "forgotten not retained" "proj/one.jsonl" "$(rels "$m")"
 
-
-# Shims on PATH: a zstd shim
-# runs the real one, logs each compress, and can grow the watched source after
-# the compress has read it.
+# Shims on PATH: a zstd shim runs the real one, logs each compress, and can grow
+# the watched source after the compress has read it.
 realzstd="$(command -v zstd)"
 shim="$tmp/shim"; mkdir -p "$shim"
 cat > "$shim/zstd" <<S
@@ -84,29 +75,15 @@ chmod +x "$shim/zstd"
 export SHIM_LOG="$tmp/zlog" SHIM_TIMES="$tmp/times"
 : > "$SHIM_LOG"; echo 0 > "$SHIM_TIMES"
 
-# Equal mtime spawns no compress and no second look at a frame.
+# Equal mtime spawns no compress.
 : > "$SHIM_LOG"
 PATH="$shim:$PATH" "$sync" 2>/dev/null
 want "equal mtime spawns nothing" "0" "$(wc -l < "$SHIM_LOG" | tr -d ' ')"
 
-# A source that changes mid-compress is retried, then kept.
-printf 'cccccccccccc\n' > "$src/proj/one.jsonl"
-export SHIM_TRIG="$src/proj/one.jsonl"
-echo 99 > "$SHIM_TIMES"; : > "$SHIM_LOG"
-PATH="$shim:$PATH" "$sync" 2>"$tmp/err"
-want "unstable file keeps the old frame" "aaaaaaaa" "$(zd "$m/proj/one.jsonl.zst")"
-want "unstable file is logged" "yes" "$(grep -q 'kept 1 unstable' "$tmp/err" && echo yes || echo no)"
-want "unstable file tried three times" "3" "$(grep -c -- "$src/proj/one.jsonl" "$SHIM_LOG" | tr -d ' ')"
-echo 1 > "$SHIM_TIMES"
-PATH="$shim:$PATH" "$sync" 2>/dev/null
-want "unstable file ships once it settles" "yes" "$(cmp -s "$src/proj/one.jsonl" <(zd "$m/proj/one.jsonl.zst") && echo yes || echo no)"
-unset SHIM_TRIG
-
-# A source deleted after sync leaves its frame.
+# A source deleted after sync leaves its lines.
 rm -f "$src/proj/one.jsonl"
 "$sync" 2>/dev/null
-want "deleted source keeps its frame" "yes" "$([ -s "$m/proj/one.jsonl.zst" ] && echo yes || echo no)"
-printf 'aaaaaaaa\n' > "$src/proj/one.jsonl"; touch -r "$m/proj/one.jsonl.zst" "$src/proj/one.jsonl"
+want "deleted source keeps its lines" "proj/one.jsonl" "$(rels "$m")"
 
 # A replace pair that changes mid-compress ships as neither file.
 export SHIM_TRIG="$src/store.db-wal"
@@ -143,16 +120,8 @@ rm -f "$src/store.db-wal"; printf 'db5\n' > "$src/store.db"
 want "vanished journal: new db shipped" "db5" "$(zd "$m/store.db.zst")"
 want "vanished journal: mirror journal removed" "no" "$([ -e "$m/store.db-wal.zst" ] && echo yes || echo no)"
 
-# A source rewritten shorter, newer mtime: the frame stays, the run says so.
-zd "$m/proj/one.jsonl.zst" > "$tmp/before"
-printf 'bb\n' > "$src/proj/one.jsonl"
-"$sync" 2>"$tmp/err"
-want "rewritten-shorter keeps the frame" "yes" "$(cmp -s "$tmp/before" <(zd "$m/proj/one.jsonl.zst") && echo yes || echo no)"
-want "rewritten-shorter is named" "yes" "$(grep -q 'proj/one.jsonl is shorter than its retained copy' "$tmp/err" && echo yes || echo no)"
-want "no temp left behind" "0" "$(find "$m" -name '*.tmp.*' | wc -l | tr -d ' ')"
-
 # A temp stranded by a killed run is swept at the next sync.
-printf junk > "$m/proj/one.jsonl.zst.tmp.4242"
+printf junk > "$m/store.db.zst.tmp.4242"
 "$sync" 2>/dev/null
 want "stranded temp swept" "0" "$(find "$m" -name '*.tmp.*' | wc -l | tr -d ' ')"
 
@@ -175,8 +144,7 @@ replace = ["store.db", "linkdir/secret.db"]
 T
 "$sync" 2>/dev/null
 b="$VARVE_DATA/mirror/beta"
-want "real file copied" "inside" "$(zd "$b/real/in.jsonl.zst")"
-want "symlinked file not copied" "no" "$([ -e "$b/real/link.jsonl.zst" ] && echo yes || echo no)"
+want "only the real file is retained" "real/in.jsonl" "$(rels "$b")"
 want "symlinked dir not followed" "no" "$([ -e "$b/linkdir" ] && echo yes || echo no)"
 want "symlinked replace entry not copied" "no" "$([ -e "$b/store.db.zst" ] && echo yes || echo no)"
 

@@ -10,10 +10,11 @@
 --
 -- Depends on sql/prelude.sql (run first): _attr_rules, _pricing, varve_harness(),
 -- varve_campaign(). Variable set by the build:
---   mirror_dir : this runtime's mirror folder (no trailing slash)
+--   mirror_dir : this runtime's mirror folder (no trailing slash); its lines/
+--                tables hold (rel_path, line_no, line): one line of a source file
 --
 -- Source shape (pi v3 spec):
---   * Path: <dir-encoded-cwd>/<timestamp>_<id>.jsonl (the mirror stores it as .jsonl.zst, ADR-0011).
+--   * Path: <dir-encoded-cwd>/<timestamp>_<id>.jsonl (retained as lines, ADR-0011).
 --   * Line 1 header: {"type":"session","version":3,"id":<uuid>,
 --     "timestamp":<ISO>,"cwd":<path>}. The session id + cwd live ONLY here;
 --     entries carry no sessionId, so entries link to their session by FILENAME.
@@ -36,22 +37,12 @@
 -- the message JSON, so struct-inference casing cannot silently miss them.
 
 CREATE OR REPLACE TABLE _pi_raw AS
-SELECT * FROM read_json(
-  getvariable('mirror_dir') || '/**/*.jsonl.zst',
-  format              = 'newline_delimited',
-  records             = true,
-  ignore_errors       = true,
-  filename            = true,
-  maximum_object_size = 100000000,
-  columns = {
-    type:      'VARCHAR',
-    id:        'VARCHAR',
-    parentId:  'VARCHAR',
-    timestamp: 'TIMESTAMP',
-    version:   'VARCHAR',
-    cwd:       'VARCHAR',
-    message:   'JSON'
-  }
+SELECT rel_path AS filename, unnest(j)
+FROM (
+  SELECT rel_path,
+         json_transform(line, '{"type":"VARCHAR","id":"VARCHAR","parentId":"VARCHAR","timestamp":"TIMESTAMP","version":"VARCHAR","cwd":"VARCHAR","message":"JSON"}') AS j
+  FROM read_parquet(getvariable('mirror_dir') || '/lines/*/*.parquet')
+  WHERE json_valid(line)
 );
 
 -- Header line per file: the only place carrying session id + cwd + version.

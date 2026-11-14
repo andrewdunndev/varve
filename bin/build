@@ -2,10 +2,12 @@
 # Rebuild the lake from the mirror, one process per runtime, then swap.
 # Run it as: bin/duck locked bin/build
 #
-#   1. each runtime's adapter writes its four tables into lake.new. The mirror
-#      holds NAME.zst frames (ADR-0011): an adapter streams *.jsonl.zst in place;
-#      a runtime with a `replace` set (a SQLite file cannot be read compressed)
-#      is decompressed to state/unpack.PID/NAME for the length of its run
+#   1. each runtime's adapter writes its four tables into lake.new. A runtime
+#      without a `replace` set is read from its retained line tables (ADR-0011,
+#      bin/lines): orphaned files are swept first, then the adapter reads
+#      lines/*/*.parquet in place. A runtime with a `replace` set (a SQLite file
+#      cannot be read compressed) is decompressed from its NAME.zst frames to
+#      state/unpack.PID/NAME for the length of its run
 #   2. a runtime that built owns its partitions, empty tables included. A runtime
 #      that was not built keeps its last good partitions: one whose adapter
 #      failed, one with an empty mirror (unless every session it published is
@@ -57,7 +59,17 @@ rows="$("$yq" -p toml -o=tsv '(.row // [])[] | [.name, .adapter, ((.replace // [
 while IFS=$'\t' read -r name adapter replace; do
   [ -n "$name" ] || continue
   dir="$mirror/$name"
-  if [ ! -d "$dir" ] || [ -z "$(find "$dir" -type f -print -quit)" ]; then
+  empty=0
+  if [ ! -d "$dir" ]; then empty=1
+  elif [ -z "$replace" ]; then
+    if [ ! -f "$dir/manifest.parquet" ]; then empty=1
+    else
+      "$repo/bin/lines" sweep "$dir" > /dev/null
+      [ "$("$repo/bin/duck" "build $name" -noheader -list -c "SELECT count(*) FROM read_parquet('$dir/manifest.parquet');")" != 0 ] || empty=1
+    fi
+  elif [ -z "$(find "$dir" -type f -print -quit)" ]; then empty=1
+  fi
+  if [ "$empty" = 1 ]; then
     left=1
     if [ -d "$lake/sessions" ]; then
       left="$(VARVE_LAKE="$lake" "$repo/bin/duck" "build $name" -noheader -list \

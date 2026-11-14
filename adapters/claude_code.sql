@@ -1,18 +1,18 @@
--- varve Claude Code adapter. Near-pure SQL, per ADR-0002. Reads the mirrored
--- Claude Code JSONL (kept as .jsonl.zst frames, ADR-0011) and derives the four normalized tables stg_sessions,
--- stg_messages, stg_api_calls and stg_tool_calls; the build copies them to the
--- lake.
+-- varve Claude Code adapter. Near-pure SQL, per ADR-0002. Reads the retained
+-- Claude Code JSONL, a Parquet table of its lines (ADR-0011), and derives the
+-- four normalized tables stg_sessions, stg_messages, stg_api_calls and
+-- stg_tool_calls; the build copies them to the lake.
 --
 -- Depends on sql/prelude.sql (run first): _attr_rules, _pricing, varve_harness(),
 -- varve_campaign(). Variable set by the build:
---   mirror_dir : this runtime's mirror folder (no trailing slash)
+--   mirror_dir : this runtime's mirror folder (no trailing slash); its lines/
+--                tables hold (rel_path, line_no, line): one line of a source file
 --
 -- Source shape (Claude Code v2.1.x):
 --   * ~/.claude/projects/<dashed-cwd>/<session_id>.jsonl  = main session
 --   * .../<session_id>/subagents/agent-*.jsonl            = subagent (sidechain)
---     (the mirror stores each of these as <name>.jsonl.zst)
 --     traffic; these carry the SAME sessionId as the parent, isSidechain=true.
---     The glob therefore MUST recurse (projects/**/*.jsonl.zst) or subagent api
+--     The path filter therefore MUST admit subagents/ or subagent api
 --     calls are silently lost.
 --   * message.usage = {input_tokens, output_tokens, cache_read_input_tokens,
 --     cache_creation_input_tokens} -- exactly the ccusage UsageEntry grain.
@@ -24,39 +24,20 @@
 --   * model '<synthetic>' rows (zero tokens) are excluded, matching ccusage.
 
 -- ---------------------------------------------------------------------------
--- Raw read with an explicit schema: inference over the whole corpus collapses
--- to a single MAP column once rare top-level keys accumulate. Only main session
--- files (<project>/<id>.jsonl.zst) and subagent transcripts are read; other JSONL
--- (workflow journals, tool output) is skipped. Values that do not fit the
--- schema read as NULL (ignore_errors).
+-- Raw read of the retained lines, each parsed with an explicit schema: inference
+-- over the whole corpus collapses to a single MAP column once rare top-level
+-- keys accumulate. Only main session files (<project>/<id>.jsonl) and subagent
+-- transcripts are read; other JSONL (workflow journals, tool output) is skipped,
+-- and so is a line that is not valid JSON. Values that do not fit the schema
+-- read as NULL.
 CREATE OR REPLACE VIEW _cc_raw AS
-SELECT * FROM read_json(
-  getvariable('mirror_dir') || '/**/*.jsonl.zst',
-  format              = 'newline_delimited',
-  records             = true,
-  ignore_errors       = true,
-  filename            = true,
-  maximum_object_size = 100000000,
-  columns = {
-    sessionId:   'VARCHAR',
-    cwd:         'VARCHAR',
-    timestamp:   'TIMESTAMP',
-    version:     'VARCHAR',
-    uuid:        'VARCHAR',
-    parentUuid:  'VARCHAR',
-    isSidechain: 'BOOLEAN',
-    isMeta:      'BOOLEAN',
-    type:        'VARCHAR',
-    requestId:   'VARCHAR',
-    message:     'STRUCT(role VARCHAR, id VARCHAR, model VARCHAR, content JSON,
-                  usage STRUCT(input_tokens BIGINT, output_tokens BIGINT,
-                               cache_read_input_tokens BIGINT,
-                               cache_creation_input_tokens BIGINT))'
-  }
-)
-WHERE regexp_matches(
-  ltrim(filename[length(getvariable('mirror_dir')) + 1:], '/'),
-  '^[^/]+/[^/]+\.jsonl\.zst$|^[^/]+/[^/]+/subagents/(.+/)?agent-[^/]+\.jsonl\.zst$'
+SELECT rel_path AS filename, unnest(j)
+FROM (
+  SELECT rel_path,
+         json_transform(line, '{"sessionId":"VARCHAR","cwd":"VARCHAR","timestamp":"TIMESTAMP","version":"VARCHAR","uuid":"VARCHAR","parentUuid":"VARCHAR","isSidechain":"BOOLEAN","isMeta":"BOOLEAN","type":"VARCHAR","requestId":"VARCHAR","message":{"role":"VARCHAR","id":"VARCHAR","model":"VARCHAR","content":"JSON","usage":{"input_tokens":"BIGINT","output_tokens":"BIGINT","cache_read_input_tokens":"BIGINT","cache_creation_input_tokens":"BIGINT"}}}') AS j
+  FROM read_parquet(getvariable('mirror_dir') || '/lines/*/*.parquet')
+  WHERE regexp_matches(rel_path, '^[^/]+/[^/]+\.jsonl$|^[^/]+/[^/]+/subagents/(.+/)?agent-[^/]+\.jsonl$')
+    AND json_valid(line)
 );
 
 -- ---------------------------------------------------------------------------
@@ -254,6 +235,15 @@ JOIN stg_sessions ss  ON d.session_id = ss.session_id;
 -- payload in a result is never copied out. A json_extract per field copies the
 -- payload once per field, and a run of image blocks then fills memory_limit
 -- with transient vectors that cannot spill.
+-- Tool blocks come from their own narrow parse of only the lines that carry one;
+-- parsing every line wide here fills memory_limit with image payloads.
+CREATE OR REPLACE VIEW _cc_traw AS
+SELECT rel_path AS filename, unnest(j)
+FROM (SELECT rel_path, json_transform(line, '{"sessionId":"VARCHAR","timestamp":"TIMESTAMP","uuid":"VARCHAR","type":"VARCHAR","message":{"content":"JSON"}}') AS j
+      FROM read_parquet(getvariable('mirror_dir') || '/lines/*/*.parquet')
+      WHERE (contains(line, '"tool_use"') OR contains(line, '"tool_result"')) AND json_valid(line)
+        AND regexp_matches(rel_path, '^[^/]+/[^/]+\.jsonl$|^[^/]+/[^/]+/subagents/(.+/)?agent-[^/]+\.jsonl$'));
+
 CREATE OR REPLACE TABLE _cc_tool AS
 SELECT session_id, message_id, timestamp, i, bt,
        CASE WHEN bt = 'tool_use' THEN h.id ELSE h.tool_use_id END                            AS tool_use_id,
@@ -278,7 +268,7 @@ FROM (SELECT session_id, message_id, timestamp, record_type, i, blk, h.type AS b
                                type AS record_type, blocks,
                                unnest(generate_series(1, len(blocks))) AS i
                         FROM (SELECT *, try_cast(message.content::json AS json[]) AS blocks
-                              FROM _cc_raw
+                              FROM _cc_traw
                               WHERE type IN ('user','assistant') AND uuid IS NOT NULL
                                 AND json_type(message.content::json) = 'ARRAY')))))
 WHERE (bt = 'tool_use' AND record_type = 'assistant') OR bt = 'tool_result';
