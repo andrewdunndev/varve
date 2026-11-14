@@ -1,6 +1,6 @@
 # ADR-0008: File mirror and whole build
 
-- **Status:** accepted; partly superseded by ADR-0011 (the mirror stores compressed files)
+- **Status:** accepted; partly superseded by ADR-0011 (the mirror stores Parquet line tables and compressed replace sets)
 - **Date:** 2026-11-06
 - **Deciders:** maintainer
 
@@ -14,7 +14,7 @@
 ## Decision
 
 - The lake is f(mirror, operator data, repo).
-- `sync` compresses allowed files into frames (ADR-0011), parses nothing, and is the only scheduled step.
+- `sync` retains allowed files (ADR-0011), parses no JSON, and is the only scheduled step.
 - `build` runs one process per runtime into `lake.new`, then checks, then swaps. Mines run after the swap.
 - A runtime that fails keeps its last good partitions. A runtime that built owns its partitions.
 - Nothing shrinks except by `just forget` and the replace set (see Consequences).

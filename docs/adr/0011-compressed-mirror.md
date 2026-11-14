@@ -1,76 +1,73 @@
-# ADR-0011: Compressed mirror
+# ADR-0011: Retained mirror as Parquet line tables
 
 - **Status:** accepted
-- **Supersedes:** the plain-copy parts of ADR-0008 (`cp -p`, never-shorter on mirror file bytes, `build` reading the mirrored database in place)
-- **Date:** 2026-11-11
-- **Deciders:** maintainer. The per-file zstd 19 choice (about 5.2G, over the 3G target) is recorded as ruled; the operator's explicit acceptance of 5.2G is unconfirmed here.
+- **Supersedes:** the plain-copy parts of ADR-0008 (`cp -p`, never-shorter on mirror file bytes, `build` reading the mirrored files and database in place)
+- **Date:** 2026-11-13
+- **Deciders:** maintainer. The operator chose raw Parquet over per-file zstd (measured: 3.5x to 4.2x against 4.2x to 4.4x, and the adapters read frames of files).
 
 ## Context
 
-- The data home is 17G: mirror 15.7G (claude-code 14.9G in 22633 `*.jsonl`, opencode 0.85G database, pi 4K), lake 1.0G. The mirror is a plain copy.
-- Ruling: a highly compressed lake, not a copy. APFS clones do not count: a clone stops sharing space when Claude Code's cleanup deletes the source.
-- The lake cannot rebuild itself (the claude-code adapter no longer materializes content), so the retained form keeps every source byte.
-- Measured on real mirror files, nice 19, 2 threads. Sample 1: 1135 files, 1.065G, every 20th file by size plus the 3 largest. Sample 2: 2308 files, 0.787G, 8 whole project directories. Ratio is raw / compressed.
+- varve keeps a highly compressed data lake, not a copy. The data home is 17G: mirror 15.7G (claude-code 14.9G in 22633 `*.jsonl`, opencode 0.85G database, pi 4K), lake 1.0G.
+- The lake cannot rebuild itself, so the retained form keeps every source byte. APFS clones do not count: a clone stops sharing space when the source is deleted.
+- The JSONL runtimes only append. Claude Code's cleanup deletes whole sessions at the source.
+- Measured at nice 19, 2 threads, on a copy of 2308 real files (755MB), line table `(rel_path, line_no, line)`:
 
-| Form | Sample 1 | Sample 2 | Wall, sample 2 |
-|------|----------|----------|----------------|
-| per-file zstd 3 | 3.50 | 3.19 | 16s |
-| per-file zstd 9 | 3.76 | 3.35 | 20s |
-| per-file zstd 19 | 3.54 (269MB subset) | 3.45 | 118s |
-| per-file zstd 19 `--long=27` | 3.64 (subset) | 3.45 | 127s |
-| line table in Parquet, zstd 9, 100k-row groups | 4.13 | 4.15 | 5s |
-| line table in Parquet, zstd 19 | 4.28 | 4.37 | 98s |
-| one solid stream, zstd 9 `--long=27` | n/a | 4.62 | n/a |
-| one solid stream, zstd 19 `--long=27` | n/a | 4.86 | n/a |
-| per-file gzip 9 | n/a | 2.74 | 20s |
+| Form | Size | Ratio | Wall |
+|------|------|-------|------|
+| per-file zstd 19 | 3.45x | | 118s |
+| Parquet zstd 9 | 189.6MB | 4.15x | 4s |
+| Parquet zstd 15 | 186.6MB | 4.21x | 42s |
+| Parquet zstd 19 | 179.4MB | 4.38x | 59s |
 
-- Sample 1 stratified to the 14.9G population (<10K, 10K-1M, 1M-20M, >20M by size): per-file zstd 9 lands at 4.3G, zstd 19 at about 4.2G. Parquet saves 9% to 21% against per-file, the solid stream 29%.
-- Base64 image blocks are 21% of raw bytes in sample 1 and 16% in sample 2, and 43% and 31% of compressed bytes. Identical lines are 2.5% and 0.4% of bytes. Nothing lossless takes the claude-code mirror under about 3G.
-- The opencode database is 848MB. Its first 400MB compresses 9.8x at zstd 9 and 10.9x at zstd 19, so the file is about 80MB.
-- DuckDB 1.5.6 reads `*.jsonl.zst` through `read_json` and the adapter's own call (schema, `filename`, `maximum_object_size`), including a file of two concatenated frames. A build over sample 1 gave identical row counts and an identical cost hash from `.jsonl` and `.jsonl.zst`: 8.5s and 9.7s. It cannot open a compressed SQLite file.
-- `zstd -lv` reads a frame's decompressed size from its header, without decoding, when the frame was made from a file path (not stdin).
-- A Parquet line table (path, line number, text) rebuilt 3443 files whose md5 equals the source's.
+- Sorting by `(rel_path, line_no)` moves size under 0.1%. Row groups of 5000 rows cost 0.7%. `rel_path` and `line_no` are 0.08% of the file. Nine large files (530MB, up to 122MB each) reach 5.0x at level 9.
+- Base64 images are 16% to 21% of raw bytes and 31% to 43% of compressed bytes. Identical lines are 0.4% to 2.5%.
+- A parquet table read through `read_blob` rebuilt 2308 of 2308 and 9 of 9 files with sha256 equal to the source.
+- Parsing JSON from the `line` column gives the same row counts and fingerprints as `read_json` over files (29 sessions, 173795 messages, 50444 api calls, 59938 tool calls, cost 831.391435; and 9, 67210, 18589, 19013 on the large files), with one tool-block rule: see Decision.
 
 ## Decision
 
-- The mirror holds each included file as `<rel>.zst`: one zstd frame, level 19, `-T2`, no long window (0 to 3% gain). The frame is made from the source file path, so its header carries the size.
-- The `.zst` carries the source's nanosecond mtime (`touch -r`). Equal mtime means unchanged: sync spawns no process for it.
-- A changed source is compared by size with the retained file's decompressed size (`zstd -lv`). A shorter source is skipped and counted: never-shorter now binds decompressed bytes. Otherwise sync recompresses the whole source into a temp name, retries up to 3 times if the source's size or mtime moved while reading, runs `zstd -t`, requires the decompressed size to equal the size read, then renames. Sync never appends a frame: that needs a proof that the retained bytes are a prefix of the source, and a recompress of the largest file costs about 15s.
-- A source deleted after sync leaves its `.zst`. Nothing removes a mirror file except `just forget`.
-- The replace set is staged compressed as a unit, under the stat check of ADR-0008, and renamed together. Names are `<file>.zst`.
-- Adapters read `**/*.jsonl.zst`; the repo's claude-code and pi adapters change their glob and path regexes. A data-home adapter that globs `*.jsonl` reads nothing and must change the same way.
-- For a runtime with a replace set, `build` decompresses the set into `state/unpack.<pid>/<runtime>/`, runs the adapter with that as `mirror_dir`, and removes it when the runtime finishes. The opencode adapter does not change. Stale unpack directories of dead pids go at the next build, as run directories do. The unpack counts against `VARVE_MAX_SPILL` and a 5G disk floor: before unpacking, `build` sums the frame headers' decompressed sizes, and over either bound it keeps that runtime's published partitions and says so on stderr.
-- The lake is written with `COMPRESSION_LEVEL 19`. On sample 2 that cut it 12% (62.4MB to 55.0MB).
-- `zstd` is a system dependency beside `sqlite3`, called from `PATH`; the scripts exit 2 with a one-line message when it is missing.
-- The plain mirror goes by `bin/pack`, a one-shot: it writes `NAME.zst` beside each plain file and never touches the plain file; `bin/pack --verify` checks each pair by decompress-and-hash. `pack` skips a frame only when it passes `zstd -t` and carries the plain file's mtime, so a plain file that grew is recompressed. `--verify` lists only mismatches and prints a count on success. Only after `--verify` exits 0 does the operator remove plain files, and only those that have a frame: `find mirror -name '*.jsonl' | while read -r f; do [ -f "$f.zst" ] && rm "$f"; done`. Later syncs find equal mtimes and copy nothing. Delete `bin/pack` once the migration is done.
+- A runtime without a `replace` set is retained as Parquet under `mirror/<runtime>/`, ZSTD:
+  - `manifest.parquet`: one row per source file: `rel_path, bucket, bytes, lines, tail, sha256, src_size, src_mtime, status`. Its key-value metadata holds `gen`, the committed generation.
+  - `lines/bucket=<b>/c-<gen>.parquet` and `d-<gen>-<n>.parquet`: rows `(rel_path, line_no, line)`. `line` is VARCHAR, one complete line without its newline. A file is the lines each followed by `\n`, then `tail`.
+- `bucket` is the ISO week of the source mtime at first retention, with a `.k` shard when the week passes 512MB of source bytes. A file never changes bucket. About 30 buckets cover the corpus.
+- `sha256` is over every retained byte. `bytes = sum(len(line)+1) + len(tail)`.
+- **Sync.** One scan lists size and nanosecond mtime. A file equal to its manifest row is skipped without being opened. For a changed file, one pass hashes the whole source and checks that its first `bytes` bytes hash to the manifest `sha256`. Then the lines from the last complete-line boundary (the old `tail` is re-read) become a delta; the new `tail` is the bytes after the last newline.
+  - A prefix mismatch (rewritten or shorter source) keeps the retained copy, sets `status = diverged`, and is named loudly. The new source bytes are not retained.
+  - A partial last line is never a line. It lives in `tail` until the next sync completes it.
+  - A file that is not UTF-8 is left unretained, counted, and retried next sync.
+  - A file that changed between the two passes is `unstable` and retried next sync.
+  - A file over `VARVE_MAX_FILE` (160MB) is skipped and named: the pass costs about 14 times a file's size in memory.
+- **Commit.** Sync works in batches of at most 256MB of source bytes. A batch writes its deltas under `lines.tmp/`, reads them back and checks per file the row count and byte count, renames the delta files into place, then renames the new manifest with `gen + 1`. The manifest is the only commit. A file in `lines/` whose gen is above the manifest's, or that a newer `c-` file replaced, is garbage; every sync, build and forget sweeps it first. A crash at any point leaves the previous manifest and its files valid.
+- **Compaction.** When a bucket holds 8 deltas, or on `--compact`, sync rewrites that bucket as one `c-<gen>.parquet` sorted by `(rel_path, line_no)` at level 19, from the old `c-` and its deltas. Before the manifest rename it checks that the row count and `sum(hash(rel_path, line_no, line))` equal the inputs and that every file's line count equals the manifest. Memory is the sort of one bucket.
+- **Levels.** Deltas are level 9 (a 755MB sync takes 14s against 110s at level 19; 5% larger); compacted buckets level 19; row groups 20000 rows or 64MB.
+- **Exact check.** `bin/sync --verify` rebuilds each file from its lines in batches of 256MB and compares its sha256 with the manifest. `bin/pack --verify` also compares it with the plain file.
+- **Build.** The claude-code and pi adapters read `lines/*/*.parquet` and parse JSON from `line` with `json_transform` and `json_valid`; `rel_path` is the old `filename`. Tool blocks come from their own narrow parse of only the lines that contain `"tool_use"` or `"tool_result"`; parsing every line wide ran out of the 3GB limit on image payloads.
+- **forget.** A session's files are found in the manifest by `contains(rel_path, id)`. Each affected bucket is compacted without them, verified as above, and committed with their rows gone. Other buckets are untouched.
+- **opencode.** The replace set stays a verified `.db.zst` frame pair unpacked per build (zstd 19 gives 15.5x, 848MB to 55MB); a Parquet form of rows would add a lossless-round-trip proof for no saving.
+- `sync` opens the engine only through `bin/duck`, so it shares the lock and the caps of ADR-0010; it and `build` never overlap.
+- The plain mirror goes by `bin/pack`, a one-shot: it retains the plain `*.jsonl` of each such runtime in place with the sync code, writes `.zst` beside the replace set, and `--verify` checks every file by sha256 against the plain file and prints counts. The operator deletes the plain files only after it passes.
 
 **Rejected**
-- gzip: 2.74x against 3.45x, 26% larger, but no new dependency. zstd gives 1.2G less on the full mirror.
-- Parquet line table or one solid stream: 9% to 29% smaller (measured floor: claude-code about 3G, data home about 4G; the operator ruled per-file zstd 19 at about 5.2G), but adapters would read a table instead of files, an appended session needs part files and compaction, and ADR-0008's files primitive goes.
-- Frame append: see above.
-- zstd dictionaries: DuckDB's reader cannot use them.
-- Decompress the whole mirror to scratch each build: 15G written per build, against streaming reads at +14% build time.
+- Per-file zstd 19 (ruled earlier): 3.45x to 4.2x, and adapters stay on files. The operator chose the table.
+- One Parquet file per source file: tens of thousands of tiny files. One table rewritten per sync: 1.7GB per week rewritten nightly.
+- `read_csv` for lines: `max_line_size` allocates gigabytes. Dedup of identical lines: 0.4% to 2.5%.
+- Hash joins between `todo` and `read_blob`: DuckDB buffered the blob side, 4.2GB peak against 3.0GB with the parameters in maps.
 
 ## Consequences
 
 **Positive**
-- Mirror 15.7G to about 4.3G; data home 17G to about 5.2G (claude-code 4.2G, opencode 0.08G, lake 0.88G), 31% of today.
-- Adapters stay files and SQL. Sync still never opens DuckDB.
-- Routine sync costs one stat pair per file. A changed file costs about 8.5MB/s of CPU at nice 19.
-- Proofs: a session deleted at source stays queryable from its `.zst`; the lake rebuilds from the mirror alone, with no source and no plain file.
+- Mirror 15.7G to about 3.5G; data home 17G to about 4.5G (claude-code 3.4G to 3.5G, opencode 0.06G to 0.08G, lake 0.9G to 1.0G), 26% of today.
+- A session deleted at its source stays queryable in SQL straight from the retained lines; the lake rebuilds from them alone.
+- Routine sync: 22633 stats in 0.26s; a no-change run under 1s; 100 grown files (34MB) in 0.4s.
 
 **Negative**
-- A target of under 3G is not met: lossless retention floors near 5G. Base64 images are 31% to 43% of the compressed mirror. Dropping them breaks ADR-0003 and still leaves about 3.5G to 4G; it needs the operator.
-- First conversion: about 26 to 37 min of CPU at zstd 19 on one process, about 15 to 19 min on two; opencode adds 40s.
-- A corrupt frame fails its runtime's build, which keeps its published partitions. Sync tests each frame before the rename.
-- Rebuild of the full corpus: about 2.0 min plain, 2.3 min from `.zst` (linear from sample 1), plus 0.85G written once for opencode.
-- A rewound source that later outgrows the retained length overwrites it, as in ADR-0008.
-- Data-home adapters break once.
-
-**Neutral**
-- Level 19 gains 3% over level 9 for 5x the time; one constant in `bin/sync`.
-- A solid stream stays the next lever if the operator wants about 1G more.
+- `sync` needs the engine; ADR-0010's "sync never opens DuckDB" is amended.
+- First conversion about 27 min at nice 19 on 2 threads: deltas at level 9 about 5 min, compaction at level 19 about 20 min, verify about 3 min, opencode about 1 min. Extrapolated from the 755MB sample.
+- Build is slower and larger than over plain files: 7.6s and 2.6GB peak resident against 4.6s and 1.6GB on the sample; 4.6s against 1.5s on the large files. Full corpus about 2.5 to 3.5 min against 2.0.
+- Peak resident is about 3GB in sync at 2 threads with a 122MB file. A file whose pass would not fit is skipped and named.
+- A source rewritten in place stops being followed; the retained copy is the old bytes.
+- A data-home adapter that reads files breaks once.
 
 ## References
 
-- Supersedes parts of ADR-0008. ADR-0003, ADR-0009 and ADR-0010 hold.
+- Supersedes parts of ADR-0008. Amends ADR-0010 (`sync` runs through `bin/duck`). ADR-0003 and ADR-0009 hold.
