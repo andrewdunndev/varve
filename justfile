@@ -438,7 +438,7 @@ test:
     fi
     mv "$tmp/opencode-mirror" "$VARVE_MIRROR/opencode"
 
-    # Retention proofs (ADR-0011) over a source tree: a session deleted at the source stays queryable from its lines, the lake rebuilds from the retained lines alone, and forget removes a session's lines by id.
+    # Retention proofs over a source tree: a session deleted at the source stays queryable from its lines, the lake rebuilds from the retained lines alone, and forget removes a session's lines by id.
     echo "varve test: retention (source deleted, lake rebuilt from lines alone, forget removes a session)" >&2
     pr="$tmp/proof"; mkdir -p "$pr/data" "$pr/src/testproj"
     for f in attribution pricing; do cp "{{repo}}/adapters/$f.example.toml" "$pr/data/$f.toml"; done

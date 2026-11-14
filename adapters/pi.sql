@@ -14,7 +14,7 @@
 --                tables hold (rel_path, line_no, line): one line of a source file
 --
 -- Source shape (pi v3 spec):
---   * Path: <dir-encoded-cwd>/<timestamp>_<id>.jsonl (retained as lines, ADR-0011).
+--   * Path: <dir-encoded-cwd>/<timestamp>_<id>.jsonl (retained as lines).
 --   * Line 1 header: {"type":"session","version":3,"id":<uuid>,
 --     "timestamp":<ISO>,"cwd":<path>}. The session id + cwd live ONLY here;
 --     entries carry no sessionId, so entries link to their session by FILENAME.
