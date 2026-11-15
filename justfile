@@ -451,6 +451,19 @@ test:
     pr_env {{repo}}/bin/sync 2>/dev/null
     if ! pr_env {{repo}}/bin/duck locked {{repo}}/bin/build 2>"$tmp/proof.err"; then echo "FAIL: the retention proof build failed" >&2; tail -5 "$tmp/proof.err" >&2; fail=1; fi
     c0="$(pr_counts)"
+
+    # A uuid-shaped session id is the first forgotten row, so the view sniffs UUID; the build and its checks must still compare it to VARCHAR ids.
+    uid="3f2b8c1e-5d4a-4e7b-9c6a-1a2b3c4d5e6f"
+    sed "s/test-session-2023/$uid/g" "{{repo}}/tests/fixtures/source/claude-code/testproj/session-2023.jsonl" > "$pr/src/testproj/$uid.jsonl"
+    pr_env {{repo}}/bin/sync 2>/dev/null
+    if ! pr_env {{repo}}/bin/duck locked {{repo}}/bin/build 2>"$tmp/proof.err"; then echo "FAIL: the uuid session build failed" >&2; tail -5 "$tmp/proof.err" >&2; fail=1; fi
+    n="$(pr_env {{repo}}/bin/duck prc -noheader -list -c "SELECT count(*) FROM sessions WHERE session_id = '$uid';")"
+    if [ "$n" = "0" ]; then echo "FAIL: the uuid session never reached the lake" >&2; fail=1; fi
+    if ! pr_env {{repo}}/bin/duck locked {{repo}}/bin/forget "$uid" 2>"$tmp/proof.err"; then echo "FAIL: forgetting a uuid session id failed" >&2; tail -5 "$tmp/proof.err" >&2; fail=1; fi
+    n="$(pr_env {{repo}}/bin/duck prc -noheader -list -c "SELECT count(*) FROM sessions WHERE session_id = '$uid';")"
+    if [ "$n" != "0" ]; then echo "FAIL: the forgotten uuid session is still in the lake: $n" >&2; fail=1; fi
+    if [ "$(pr_counts)" != "$c0" ]; then echo "FAIL: forgetting the uuid session changed the counts to $(pr_counts), want $c0" >&2; fail=1; fi
+    rm -f "$pr/src/testproj/$uid.jsonl"
     rm -rf "$pr/src"
     pr_env {{repo}}/bin/sync 2>/dev/null
     if [ -n "$(find "$pr/data/mirror" -name '*.jsonl' -print -quit)" ]; then echo "FAIL: the mirror holds a plain file" >&2; fail=1; fi
