@@ -19,7 +19,7 @@
 - `just lint` fails on DuckDB anywhere else. `just test` goes through the wrapper.
 - Defaults live in the wrapper and are unmeasured. Env overrides them.
 - On a bound: the process dies, `lake.new` goes, the published lake is untouched, exit 1, and one line names the next action.
-- `sync` never opens DuckDB. It runs at low priority, one at a time, and ships only after the wrapper.
+- `sync` opens DuckDB only through the wrapper (ADR-0011), so it shares the lock and the caps and never overlaps a build. It runs at low priority and ships only after the wrapper.
 - `tests/caps.sh` forces each cap in CI and proves it stops. The lab run on a shared machine has not happened.
 - Build runs on a host with headroom.
 

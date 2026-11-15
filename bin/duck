@@ -8,7 +8,8 @@
 # VARVE_MAX_SPILL 20GB, VARVE_WALL_SECONDS 7200, VARVE_MAX_RSS_MB 6144,
 # VARVE_NICE 19, VARVE_WATCH_SECONDS 2. Exit 0 ok, 1 bound hit, 2 other failure.
 # Views are generated at startup: one per data-home *.toml ([[row]] tables),
-# one per data-home *.jsonl, one per lake folder holding parquet.
+# one per data-home *.jsonl, one per lake folder holding parquet, and manifests over the retained
+# runtimes' manifest.parquet files.
 # bash 3.2 safe: no mapfile, no wait -n, no flock.
 set -euo pipefail
 
@@ -124,6 +125,13 @@ for d in "$lake"/*/; do
   [ -n "$(find "$d" -name '*.parquet' -print -quit)" ] || continue
   echo "CREATE VIEW $(qi "$(basename "$d")") AS SELECT * FROM read_parquet('$(qs "$d")/**/*.parquet', hive_partitioning=true, union_by_name=true);" >> "$init"
 done
+
+# The retained runtimes' manifests, when any exist, are the view manifests, with
+# filename the manifest's path.
+mirror="${VARVE_MIRROR:-$data/mirror}"
+if [ -n "$(find "$mirror" -maxdepth 2 -name manifest.parquet -print -quit 2>/dev/null)" ]; then
+  echo "CREATE VIEW manifests AS SELECT * FROM read_parquet('$(qs "$mirror")/*/manifest.parquet', filename=true, union_by_name=true);" >> "$init"
+fi
 
 # VARVE_PUBLISHED names the lake a build is about to replace: its core tables
 # appear as published_<table>, so a check can compare the two.

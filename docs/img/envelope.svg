@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 736" width="720" height="736" role="img" aria-labelledby="env-t env-d">
   <title id="env-t">Every SQL run passes through bin/duck, which caps it and reports one failure line</title>
-  <desc id="env-d">Callers (bin/build, bin/check, bin/mine, bin/forget, just sql) invoke bin/duck with a label and arguments. bin/duck takes the lock, writes init.sql with the memory, thread and spill limits and the generated views, starts the engine under nice, and watches wall-clock time and resident memory. A tripped bound stops the process and prints one line naming the bound and the variable to raise. Exit 0 is success, 1 is a bound hit or a held lock, 2 is any other failure. bin/sync sits outside the boundary and never opens the engine.</desc>
+  <desc id="env-d">Callers (bin/build, bin/check, bin/mine, bin/forget, just sql) invoke bin/duck with a label and arguments. bin/duck takes the lock, writes init.sql with the memory, thread and spill limits and the generated views, starts the engine under nice, and watches wall-clock time and resident memory. A tripped bound stops the process and prints one line naming the bound and the variable to raise. Exit 0 is success, 1 is a bound hit or a held lock, 2 is any other failure. bin/sync runs under bin/duck locked and opens the engine only through bin/duck, so it shares the lock and the bounds.</desc>
   <style>
     svg { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
     .box { fill: #f4f4f4; stroke: #c4c4c4; stroke-width: 1; }
@@ -44,8 +44,8 @@
   <!-- sync, outside -->
   <rect class="box" x="20" y="20" width="150" height="70" rx="6"/>
   <text class="nm" x="95" y="42" text-anchor="middle">bin/sync</text>
-  <text class="sub" x="95" y="59" text-anchor="middle">outside the boundary</text>
-  <text class="sub" x="95" y="74" text-anchor="middle">never opens the engine</text>
+  <text class="sub" x="95" y="59" text-anchor="middle">under bin/duck locked</text>
+  <text class="sub" x="95" y="74" text-anchor="middle">engine via bin/duck</text>
 
   <!-- callers -->
   <rect class="box" x="206" y="20" width="490" height="44" rx="6"/>

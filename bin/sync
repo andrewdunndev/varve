@@ -1,37 +1,74 @@
 #!/usr/bin/env bash
-# Copy runtime sources into the mirror. No SQL. A copy only ever grows: a
-# shorter source is skipped and counted, so an eroded source never shrinks the
-# mirror. Files named in a runtime's `replace` are exempt, because a stale
-# database/journal pair corrupts; they are copied as a stable pair or not at all.
+# Retain runtime sources in the mirror (ADR-0011).
+#
+#   bin/sync [--compact] [--verify]
+#
+# A runtime without a `replace` set is kept as Parquet line tables: one manifest
+# row per source file (size, mtime, sha256 of every retained byte, the partial
+# last line as `tail`) and the lines each file has gained, in lines/. A file
+# equal to its manifest row is never opened. A rewritten or shorter source keeps
+# its retained bytes and is named `diverged`. A runtime with a `replace` set (a
+# SQLite file cannot be read in pieces) is kept as NAME.zst frames, compressed
+# as a stable set or not at all. See bin/lines for the layout.
+#   --compact       also rewrite every bucket that holds deltas
+#   --verify        rebuild every retained file from its lines and compare sha256;
+#                   exit 1 on any mismatch
 # Config: $VARVE_DATA/runtimes.toml (see runtimes.example.toml). Sessions listed
-# in forgotten.toml are never copied.
+# in forgotten.toml are never retained. Runs under bin/duck locked, niced.
 set -euo pipefail
 
 if [ -z "${VARVE_SYNC_NICED:-}" ]; then VARVE_SYNC_NICED=1 exec nice -n "${VARVE_NICE:-19}" "$0" "$@"; fi
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -z "${VARVE_LOCK_PID:-}" ]; then exec "$repo/bin/duck" locked "$0" "$@"; fi
+
 data="${VARVE_DATA:-$HOME/.local/share/varve}"
 mirror="${VARVE_MIRROR:-$data/mirror}"
-lock="${VARVE_LOCK:-${TMPDIR:-/tmp}/varve-duck.lock}.sync"
 die() { echo "varve: sync: $*" >&2; exit 2; }
+qs() { printf '%s' "$1" | sed "s/'/''/g"; }
+
+compact=0; verify=0
+for a in "$@"; do
+  case "$a" in
+    --compact) compact=1 ;;
+    --verify) verify=1 ;;
+    *) die "unknown argument $a" ;;
+  esac
+done
+
+export VARVE_THREADS="${VARVE_THREADS:-2}" VARVE_MEMORY_LIMIT="${VARVE_MEMORY_LIMIT:-3GB}"
+maxfile="${VARVE_MAX_FILE:-160000000}"
+batchcap=256000000
+compactat="${VARVE_COMPACT_DELTAS:-8}"
 
 yq="$("$repo/bin/tool" yq)" || exit 2
 [ -f "$data/runtimes.toml" ] || die "no $data/runtimes.toml (copy runtimes.example.toml there)"
 
-# st: size and whole-second mtime, to compare a source with its copy. stn: size and
-# nanosecond mtime, to tell whether a source changed while it was being read.
-if stat --version >/dev/null 2>&1; then statfmt=(-c '%s %Y'); nsfmt=(-c '%s %.9Y'); else statfmt=(-f '%z %m'); nsfmt=(-f '%z %Fm'); fi
-st() { stat "${statfmt[@]}" "$1"; }
-stn() { stat "${nsfmt[@]}" "$1"; }
+zstd=""
+need_zstd() { [ -n "$zstd" ] || zstd="$(command -v zstd)" || { echo "varve: zstd is not on PATH (install zstd)" >&2; exit 2; }; }
 
-while ! mkdir "$lock" 2>/dev/null; do
-  holder="$(cat "$lock/pid" 2>/dev/null || true)"
-  if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then echo "varve: sync blocked: lock held by pid $holder" >&2; exit 1; fi
-  if [ -z "$holder" ]; then sleep 1; [ -n "$(cat "$lock/pid" 2>/dev/null || true)" ] && continue; fi
-  rm -rf "$lock"
+# stn: size and nanosecond mtime, to tell whether a source changed while it was
+# being read. mtn: nanosecond mtime alone, to compare a source with its frame.
+# scanfmt: path, size and mtime for the scan.
+if stat --version >/dev/null 2>&1; then
+  nsfmt=(-c '%s %.9Y'); mtfmt=(-c '%.9Y'); scanfmt=(-c $'%n\t%s\t%.9Y')
+else
+  nsfmt=(-f '%z %Fm'); mtfmt=(-f '%Fm'); scanfmt=(-f $'%N\t%z\t%Fm')
+fi
+stn() { stat "${nsfmt[@]}" "$1"; }
+mtn() { stat "${mtfmt[@]}" "$1"; }
+
+# A SIGKILL skips the EXIT trap; the lock is held, so a work dir of a dead pid is leftover.
+mkdir -p "$data/state"
+for d in "$data"/state/sync.*; do
+  [ -d "$d" ] || continue
+  pid="${d##*/sync.}"
+  case "$pid" in ''|*[!0-9]*) continue ;; esac
+  kill -0 "$pid" 2>/dev/null || rm -rf "$d"
 done
-echo "$$" > "$lock/pid"
-trap 'rm -rf "$lock"' EXIT
+work="${data:?}/state/sync.$$"
+mkdir -p "$work"
+trap 'rm -rf "${work:?}"' EXIT
 
 # Temp copies stranded by a killed run; the lock is held, so none is live.
 if [ -d "$mirror" ]; then find "$mirror" -type f -name '*.tmp.[0-9]*' -exec rm -f {} +; fi
@@ -40,51 +77,38 @@ forgotten=""
 if [ -f "$data/forgotten.toml" ]; then
   forgotten="$("$yq" -p toml -o=tsv '(.row // [])[] | .session_id' "$data/forgotten.toml")"
 fi
-
-is_forgotten() {
-  local id
-  [ -n "$forgotten" ] || return 1
-  while IFS= read -r id; do
-    [ -n "$id" ] || continue
-    case "$1" in *"$id"*) return 0 ;; esac
-  done <<< "$forgotten"
-  return 1
-}
+printf '%s\n' "$forgotten" | grep -v '^$' > "$work/forgotten" || true
 
 in_list() { case ",$2," in *",$1,"*) return 0 ;; *) return 1 ;; esac; }
 
-# put SRC DEST: copy to a temp name, then rename. Returns 1, leaving DEST, when
-# the copy came out shorter than DEST; a source rewritten mid-copy cannot shrink
-# the mirror.
-put() {
-  local t="$2.tmp.$$" tsize dsize
-  mkdir -p "$(dirname "$2")"
-  cp -p "$1" "$t" || { rm -f "$t"; return 2; }
-  if [ -f "$2" ]; then
-    read -r tsize _ <<< "$(st "$t")"
-    read -r dsize _ <<< "$(st "$2")"
-    if [ "$tsize" -lt "$dsize" ]; then rm -f "$t"; return 1; fi
-  fi
-  mv "$t" "$2" || return 2
-}
+# zsize FRAME: the decompressed size in the frame's header, read without decoding.
+zsize() { "$zstd" -lv -- "$1" 2>/dev/null | sed -n 's/^Decompressed Size:.*(\([0-9]*\) B)$/\1/p'; }
 
-# stage_set: copy every file of $todo (relative to $src) to its temp name in the
-# mirror, succeeding only when none of them changed between before the first
-# copy and after the last. Three tries; a failure leaves the temps for the caller.
+# stage_set: compress every file of $todo (relative to $src) to its temp name in
+# the mirror, succeeding only when none of them changed between before the first
+# read and after the last. Three tries; a failure leaves the temps for the caller.
 stage_set() {
-  local try r i ok before=()
+  local try r i t ok before=()
   for try in 1 2 3; do
     before=()
     for r in "${todo[@]}"; do before+=("$(stn "$src/$r")"); done
     ok=1
     for r in "${todo[@]}"; do
       mkdir -p "$(dirname "$mirror/$name/$r")"
-      cp -p "$src/$r" "$mirror/$name/$r.tmp.$$" || { ok=0; break; }
+      "$zstd" -q -19 -T2 -f -c -- "$src/$r" > "$mirror/$name/$r.zst.tmp.$$" || { ok=0; break; }
     done
     if [ "$ok" = 1 ]; then
       i=0
       for r in "${todo[@]}"; do
         if [ "$(stn "$src/$r")" != "${before[$i]}" ]; then ok=0; fi
+        i=$((i + 1))
+      done
+    fi
+    if [ "$ok" = 1 ]; then
+      i=0
+      for r in "${todo[@]}"; do
+        t="$mirror/$name/$r.zst.tmp.$$"
+        "$zstd" -q -t -- "$t" && [ "$(zsize "$t")" = "${before[$i]%% *}" ] && touch -r "$src/$r" "$t" && [ "$(stn "$src/$r")" = "${before[$i]}" ] || ok=0
         i=$((i + 1))
       done
     fi
@@ -111,46 +135,108 @@ inside() {
   return 1
 }
 
+# scan_files: one line per source file, REL TAB size TAB mtime, sorted: the
+# line globs, less the replace set, forgotten sessions and names holding a tab
+# or newline.
+scan_files() {
+  local expr=() p n=()
+  for p in "${linepats[@]}"; do expr+=(-o -name "$p"); done
+  expr=("${expr[@]:1}")
+  for p in ${reps[@]+"${reps[@]}"}; do n+=(! -name "$(basename "$p")"); done
+  find "$src" -type f \( "${expr[@]}" \) ${n[@]+"${n[@]}"} ! -name $'*\t*' ! -name $'*\n*' -exec stat "${scanfmt[@]}" {} + |
+    awk -F'\t' -v n=$((${#src} + 2)) 'BEGIN { OFS = "\t" } { $1 = substr($1, n); print }' |
+    LC_ALL=C sort |
+    if [ -s "$work/forgotten" ]; then
+      awk -F'\t' 'NR == FNR { ids[++k] = $0; next } { for (i = 1; i <= k; i++) if (index($1, ids[i])) next; print }' "$work/forgotten" -
+    else cat; fi
+}
+
+# retain_lines: the line-table path for one runtime. Sets $stats.
+retain_lines() {
+  local mdir="$mirror/$name" scan="$work/scan" cand="$work/cand" b g gen k v n out
+  local batches=() buckets=() args=()
+  local new=0 grown=0 diverged=0 unretained=0 unstable=0 toolarge=0 committed=0
+  mkdir -p "$mdir"
+  scan_files > "$scan"
+  if [ -f "$mdir/seen.tsv" ]; then LC_ALL=C sort "$mdir/seen.tsv" | LC_ALL=C comm -23 "$scan" - > "$cand"; else cp "$scan" "$cand"; fi
+
+  rm -f "${work:?}"/batch.* "${work:?}/toolarge"
+  awk -F'\t' -v max="$maxfile" -v cap="$batchcap" -v dir="$work" '
+    BEGIN { n = 0; cum = 0 }
+    $2 > max { print $1 "\t" $2 > (dir "/toolarge"); next }
+    { if (cum > 0 && cum + $2 > cap) { n++; cum = 0 }; cum += $2; print > (dir "/batch." n) }' "$cand"
+  if [ -s "$work/toolarge" ]; then
+    toolarge="$(wc -l < "$work/toolarge" | tr -d ' ')"
+    toolfail=1
+    while IFS=$'\t' read -r k v; do echo "varve: sync $name: $k is $v bytes, over VARVE_MAX_FILE, not retained" >&2; done < "$work/toolarge"
+  fi
+  for b in "$work"/batch.*; do [ -e "$b" ] && batches+=("$b"); done
+
+  if [ "${#batches[@]}" -gt 0 ]; then
+    gen="$("$repo/bin/lines" sweep "$mdir" | sed -n 's/^gen //p')"
+    for b in "${batches[@]}"; do
+      g=$((gen + 1))
+      rm -rf "${mdir:?}/lines.tmp"; mkdir -p "$mdir/lines.tmp"
+      sed -e "s/@GEN@/$g/g" -e "s|^-- @RACE@\$|${VARVE_RACE:+.shell $VARVE_RACE}|" "$repo/sql/retain.sql" > "$work/retain.sql"
+      args=(-c "SET VARIABLE scan='$(qs "$b")'; SET VARIABLE src='$(qs "$src")/'; SET VARIABLE out='$(qs "$mdir/lines.tmp")'; SET VARIABLE mdir='$(qs "$mdir")';" -f "$repo/sql/manifest.sql")
+      if [ -f "$mdir/manifest.parquet" ]; then args+=(-c "INSERT INTO m SELECT * FROM read_parquet('$(qs "$mdir/manifest.parquet")');"); fi
+      out="$("$repo/bin/duck" "sync $name" -noheader -list "${args[@]}" -f "$work/retain.sql")" || { rm -rf "${mdir:?}/lines.tmp"; die "$name: retention failed"; }
+      while IFS='|' read -r k v; do
+        case "$k" in new) new=$((new + v)) ;; grown) grown=$((grown + v)) ;; diverged) diverged=$((diverged + v)) ;; unretained) unretained=$((unretained + v)) ;; unstable) unstable=$((unstable + v)) ;; esac
+      done <<< "$out"
+      "$repo/bin/lines" commit "$mdir"
+      gen="$g"; committed=1
+    done
+  fi
+
+  if [ "$committed" = 1 ] || [ "$compact" = 1 ]; then
+    n="$compactat"; if [ "$compact" = 1 ]; then n=1; fi
+    while IFS=' ' read -r k b v; do
+      [ "$k" = deltas ] || continue
+      if [ "$v" -ge "$n" ]; then buckets+=("$b"); fi
+    done < <("$repo/bin/lines" sweep "$mdir")
+    if [ "${#buckets[@]}" -gt 0 ]; then "$repo/bin/lines" compact "$mdir" "${buckets[@]}"; fi
+  fi
+  stats="new $new, grown $grown, diverged $diverged, unretained $unretained, unstable $unstable, too_large $toolarge"
+  if [ "${#buckets[@]}" -gt 0 ]; then stats="$stats, compacted ${#buckets[@]} buckets"; fi
+  if [ "$diverged" -gt 0 ]; then echo "varve: sync $name: $diverged retained file(s) diverged from their source (rewritten or shorter); the retained bytes were kept" >&2; fi
+}
+
+# check_lines: --verify for one runtime; a mismatch fails the run.
+check_lines() {
+  local mdir="$mirror/$name" r k ok bad
+  r="$("$repo/bin/lines" verify "$mdir")"
+  read -r k ok bad <<< "$r"
+  echo "varve: sync $name: verify $ok of $((ok + bad)) match" >&2
+  if [ "$bad" -gt 0 ]; then verifyfail=1; fi
+}
+
 rows="$("$yq" -p toml -o=tsv '(.row // [])[] | [.name, .source, (.include | join(",")), ((.replace // []) | join(","))]' "$data/runtimes.toml")"
 
+verifyfail=0; toolfail=0
 while IFS=$'\t' read -r name source include replace; do
   [ -n "$name" ] || continue
   src="${source/#\~/$HOME}"
+  src="${src%/}"
   if [ ! -d "$src" ]; then echo "varve: sync $name: no source at $src" >&2; continue; fi
-  copied=0; skipped=0; kept=0
   realsrc="$(cd "$src" && pwd -P)"
   entries=()
   IFS=, read -r -a entries <<< "$include,$replace"
   for e in "${entries[@]}"; do
     [ -z "$e" ] || safe_rel "$e" || die "$name: '$e' must be a relative name without '..'"
   done
-  # Regular files first, then the replace set in listed order (database before journal).
-  pats=()
+  pats=(); reps=(); linepats=()
   IFS=, read -r -a pats <<< "$include"
-  for pat in "${pats[@]}"; do
-    while IFS= read -r f; do
-      [ -n "$f" ] || continue
-      rel="${f#"$src"/}"
-      in_list "$(basename "$f")" "$replace" && continue
-      if is_forgotten "$rel"; then continue; fi
-      dest="$mirror/$name/$rel"
-      read -r ssize smtime <<< "$(st "$f")"
-      if [ -f "$dest" ]; then
-        read -r dsize dmtime <<< "$(st "$dest")"
-        if [ "$ssize" -lt "$dsize" ]; then skipped=$((skipped + 1)); continue; fi
-        if [ "$ssize" -eq "$dsize" ] && [ "$smtime" = "$dmtime" ]; then continue; fi
-      fi
-      prc=0; put "$f" "$dest" || prc=$?
-      case "$prc" in
-        0) copied=$((copied + 1)) ;;
-        1) skipped=$((skipped + 1)) ;;
-        *) die "$name: could not copy $f" ;;
-      esac
-    done < <(find "$src" -type f -name "$pat" | LC_ALL=C sort)
-  done
-  reps=()
   if [ -n "$replace" ]; then IFS=, read -r -a reps <<< "$replace"; fi
+  for pat in "${pats[@]}"; do in_list "$pat" "$replace" || linepats+=("$pat"); done
+  stats=""; kept=0; copied=0
+  if [ "${#linepats[@]}" -gt 0 ]; then
+    if [ "$verify" = 1 ]; then check_lines; continue; fi
+    retain_lines
+  fi
+  if [ "$verify" = 1 ]; then continue; fi
   if [ "${#reps[@]}" -gt 0 ]; then
+    need_zstd
     # The replace set ships together or not at all: every file is staged under a
     # temp name, checked unchanged since before the first copy, then all are
     # renamed into place. One unstable file leaves the whole previous set
@@ -159,29 +245,33 @@ while IFS=$'\t' read -r name source include replace; do
     todo=(); changed=0
     for r in "${reps[@]}"; do
       f="$src/$r"
-      dest="$mirror/$name/$r"
+      dest="$mirror/$name/$r.zst"
       if [ ! -f "$f" ]; then
         if [ -s "$dest" ]; then changed=1; fi
         continue
       fi
       if ! inside "$f"; then echo "varve: sync $name: replace entry $r is a symlink or resolves outside the source, skipped" >&2; continue; fi
       todo+=("$r")
-      if [ ! -f "$dest" ] || [ "$(stn "$f")" != "$(stn "$dest")" ]; then changed=1; fi
+      if [ ! -f "$dest" ] || [ "$(mtn "$f")" != "$(mtn "$dest")" ]; then changed=1; fi
     done
     if [ "$changed" = 1 ] && [ "${#todo[@]}" -gt 0 ] && [ "${todo[0]}" = "${reps[0]}" ]; then
       if stage_set; then
         i=0
         for r in "${reps[@]}"; do
-          if [ "$i" -gt 0 ]; then rm -f "$mirror/$name/$r"; fi
+          if [ "$i" -gt 0 ]; then rm -f "${mirror:?}/${name:?}/${r:?}.zst"; fi
           i=$((i + 1))
         done
-        for r in "${todo[@]}"; do mv "$mirror/$name/$r.tmp.$$" "$mirror/$name/$r"; done
+        for r in "${todo[@]}"; do mv "$mirror/$name/$r.zst.tmp.$$" "$mirror/$name/$r.zst"; done
         copied=$((copied + ${#todo[@]}))
       else
-        for r in "${todo[@]}"; do rm -f "$mirror/$name/$r.tmp.$$"; done
+        for r in "${todo[@]}"; do rm -f "${mirror:?}/${name:?}/${r:?}.zst.tmp.$$"; done
         kept=$((kept + ${#todo[@]}))
       fi
     fi
+    stats="${stats:+$stats; }set copied $copied, kept $kept unstable"
   fi
-  echo "varve: sync $name: copied $copied, skipped $skipped shorter, kept $kept unstable" >&2
+  echo "varve: sync $name: $stats" >&2
 done <<< "$rows"
+
+if [ "$toolfail" = 1 ]; then echo "varve: sync: a file over VARVE_MAX_FILE is not retained; exiting 1" >&2; fi
+exit $((verifyfail | toolfail))

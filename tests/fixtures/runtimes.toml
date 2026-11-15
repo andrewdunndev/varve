@@ -1,13 +1,20 @@
-# Test runtimes: the build reads the mirror in place, so no source or include.
+# Test runtimes. @SRC@ becomes the scratch source tree the test copies the fixtures into.
 
 [[row]]
 name = "claude-code"
 adapter = "claude_code.sql"
+source = "@SRC@/claude-code"
+include = ["*.jsonl"]
 
 [[row]]
 name = "pi"
 adapter = "pi.sql"
+source = "@SRC@/pi"
+include = ["*.jsonl"]
 
 [[row]]
 name = "opencode"
 adapter = "opencode.sql"
+source = "@SRC@/opencode"
+include = ["opencode.db", "opencode.db-wal"]
+replace = ["opencode.db", "opencode.db-wal"]

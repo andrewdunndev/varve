@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+# The retained form of a line runtime (ADR-0011): mirror/NAME/manifest.parquet
+# and lines/bucket=B/{c,d}-GEN*.parquet. Run under bin/duck locked.
+#
+#   bin/lines sweep DIR              delete every file the manifest does not name
+#                                    and lines.tmp/; print "gen N" and "deltas BUCKET N"
+#   bin/lines commit DIR             promote lines.tmp/: data files, then the manifest
+#   bin/lines compact DIR [--drop ID] BUCKET...
+#                                    rewrite each bucket as one verified file; --drop
+#                                    leaves out the files whose path contains ID
+#   bin/lines verify DIR            rebuild every file from its lines; sha256 must
+#                                    equal the manifest
+#
+# The manifest is the only commit. For the tests: VARVE_CRASH=delta stops commit
+# after the data files are renamed and before the manifest is; VARVE_CRASH=row makes
+# compact write one line of its output changed.
+set -euo pipefail
+
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+die() { echo "varve: lines: $*" >&2; exit 2; }
+qs() { printf '%s' "$1" | sed "s/'/''/g"; }
+duck() { "$repo/bin/duck" "$@"; }
+
+cmd="${1:-}"; dir="${2:-}"
+[ -n "$cmd" ] && [ -d "$dir" ] || die "usage: bin/lines sweep|commit|compact|verify DIR ..."
+shift 2
+dir="${dir%/}"
+st="$dir/lines.tmp"
+man="$dir/manifest.parquet"
+mdir=(-c "SET VARIABLE mdir='$(qs "$dir")'")
+
+sweep() {
+  local k a b o
+  rm -rf "$st"
+  if [ ! -f "$man" ]; then
+    if [ -n "$(find "$dir/lines" -name '*.parquet' -print -quit 2>/dev/null)" ]; then
+      die "sweep: $dir has lines but no manifest; nothing was deleted"
+    fi
+    rm -rf "$dir/lines"; echo "gen 0"; return
+  fi
+  o="$(duck "sweep $dir" -noheader -list -separator $'\t' "${mdir[@]}" -f "$repo/sql/live.sql" -f "$repo/sql/orphans.sql")" || { [ "$?" = 1 ] && exit 1; die "sweep: the manifest in $dir cannot be read; nothing was deleted"; }
+  while IFS=$'\t' read -r k a b; do
+    case "$k" in
+      gen) echo "gen $a" ;;
+      orphan) case "$a" in "$dir"/lines/*) rm -f "$a" ;; esac ;;
+      deltas) echo "deltas $a $b" ;;
+    esac
+  done <<< "$o"
+  if [ -d "$dir/lines" ]; then find "$dir/lines" -mindepth 1 -type d -empty -delete; fi
+}
+
+commit() {
+  local b
+  [ -f "$st/manifest.parquet" ] || die "commit: nothing staged in $st"
+  for b in "$st"/bucket=*; do
+    [ -d "$b" ] || continue
+    mkdir -p "$dir/lines/$(basename "$b")"
+    mv "$b"/*.parquet "$dir/lines/$(basename "$b")/"
+  done
+  if [ "${VARVE_CRASH:-}" = delta ]; then exit 9; fi
+  mv "$st/manifest.parquet" "$man"
+  mv "$st/seen.tsv" "$dir/seen.tsv"
+  rm -rf "$st"
+}
+
+compact() {
+  local drop="" b gen g out
+  if [ "${1:-}" = --drop ]; then drop="$2"; shift 2; fi
+  [ $# -gt 0 ] || return 0
+  gen="$(sweep | sed -n 's/^gen //p')"
+  for b in "$@"; do
+    g=$((gen + 1))
+    rm -rf "$st"; mkdir -p "$st/bucket=$b"
+    sed "s/@GEN@/$g/g" "$repo/sql/compact.sql" > "$st/run.sql"
+    out="$st/bucket=$b/c-$g.parquet"
+    duck "compact $b" -noheader -list "${mdir[@]}" \
+      -c "SET VARIABLE bucket='$(qs "$b")'; SET VARIABLE drop='$(qs "$drop")'; SET VARIABLE alter='${VARVE_CRASH:-}'; SET VARIABLE out='$(qs "$out")'; SET VARIABLE staging='$(qs "$st")';" \
+      -f "$repo/sql/live.sql" -f "$st/run.sql" >/dev/null || { rm -rf "$st"; die "compact $b: refused, the retained files are unchanged"; }
+    rm "$st/run.sql"
+    commit
+    gen="$g"
+  done
+  sweep > /dev/null
+}
+
+verify() {
+  local b=0 nb=1 ok=0 bad=0 o
+  [ -f "$man" ] || { echo "verify 0 0"; return; }
+  if [ -z "$(find "$dir/lines" -name '*.parquet' -print -quit 2>/dev/null)" ]; then echo "verify 0 0"; return; fi
+  while [ "$b" -lt "$nb" ]; do
+    o="$(duck "verify $dir" -noheader -list -separator ' ' "${mdir[@]}" \
+      -c "SET VARIABLE batch=$b; SET VARIABLE cap=${VARVE_VERIFY_BATCH:-256000000};" \
+      -f "$repo/sql/live.sql" -f "$repo/sql/verify.sql")" || die "verify: the engine failed"
+    set -- $o
+    ok=$((ok + $1)); bad=$((bad + $2)); nb="$3"
+    b=$((b + 1))
+  done
+  echo "verify $ok $bad"
+}
+
+case "$cmd" in
+  sweep) sweep ;;
+  commit) commit ;;
+  compact) compact "$@" ;;
+  verify) verify ;;
+  *) die "unknown command $cmd" ;;
+esac

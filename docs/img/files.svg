@@ -161,7 +161,7 @@
   <text class="pl" x="476" y="598" text-anchor="middle">+</text>
   <rect class="box" x="492" y="550" width="204" height="84" rx="6"/>
   <text class="nm" x="594" y="571" text-anchor="middle">a fixture</text>
-  <text class="sub" x="594" y="590" text-anchor="middle">tests/fixtures/mirror/&lt;name&gt;/</text>
+  <text class="sub" x="594" y="590" text-anchor="middle">tests/fixtures/source/&lt;name&gt;/</text>
   <text class="sub" x="594" y="605" text-anchor="middle">synthetic sessions that</text>
   <text class="sub" x="594" y="620" text-anchor="middle">the build tests run over</text>
   <text class="lbl" x="24" y="664">The adapter and the row can stay in your data home with no change to the repo.</text>

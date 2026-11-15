@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # bin/forget SESSION_ID: drop a session from the mirror and the lake for good.
-# Appends the id to forgotten.toml (sync and the build then skip it), removes
-# its mirror files, and rebuilds. The one way a session leaves the record.
+# Appends the id to forgotten.toml (sync and the build then skip it), compacts
+# each bucket that holds its files without them (verified before the swap, other
+# buckets untouched), and rebuilds. The one way a session leaves the record.
 # Run it as: bin/duck locked bin/forget SESSION_ID
 set -euo pipefail
 
@@ -25,12 +26,14 @@ rt="$("$repo/bin/duck" forget -noheader -list -c "SELECT string_agg(DISTINCT run
 
 old="$IFS"; IFS=,
 for r in $rt; do
-  if [ -d "$mirror/$r" ]; then
-    find "$mirror/$r" -name "*$id*" -prune -exec rm -rf {} +
-  fi
   rep="$("$yq" -p toml -o=tsv ".row[] | select(.name == \"$r\") | (.replace // []) | join(\",\")" "$data/runtimes.toml")"
   if [ -n "$rep" ]; then
     echo "varve: forget: $r keeps $id inside its mirrored database ($rep); the rows leave the lake but not the mirror copy" >&2
+  elif [ -f "$mirror/$r/manifest.parquet" ]; then
+    buckets=()
+    while IFS= read -r b; do [ -n "$b" ] && buckets+=("$b"); done < <("$repo/bin/duck" forget -noheader -list \
+      -c "SELECT DISTINCT bucket FROM read_parquet('$mirror/$r/manifest.parquet') WHERE contains(rel_path, '$id') ORDER BY 1;")
+    if [ "${#buckets[@]}" -gt 0 ]; then "$repo/bin/lines" compact "$mirror/$r" --drop "$id" "${buckets[@]}"; fi
   fi
 done
 IFS="$old"
