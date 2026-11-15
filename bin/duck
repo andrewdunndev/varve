@@ -110,7 +110,13 @@ for f in "$data"/*.toml; do
   "$yq" -p toml -o json -I0 '(.row // [])[]' "$f" > "$run/$stem.jsonl" 2>"$run/yq.err" \
     || die "$label: cannot parse $f: $(head -1 "$run/yq.err")"
   [ -s "$run/$stem.jsonl" ] || continue
-  echo "CREATE VIEW $(qi "$stem") AS SELECT * FROM read_json('$(qs "$run/$stem.jsonl")', format='newline_delimited', sample_size=-1);" >> "$init"
+  # forgotten.toml carries bare uuids, which JSON sniffs as UUID; every check
+  # compares them to VARCHAR contract ids, so recast the column for that view.
+  if [ "$stem" = forgotten ]; then
+    echo "CREATE VIEW $(qi "$stem") AS SELECT * REPLACE (CAST(session_id AS VARCHAR) AS session_id) FROM read_json('$(qs "$run/$stem.jsonl")', format='newline_delimited', sample_size=-1);" >> "$init"
+  else
+    echo "CREATE VIEW $(qi "$stem") AS SELECT * FROM read_json('$(qs "$run/$stem.jsonl")', format='newline_delimited', sample_size=-1);" >> "$init"
+  fi
 done
 
 for f in "$data"/*.jsonl; do
